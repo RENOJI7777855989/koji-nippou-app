@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="theme-color" content="#2b6cb0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="工事日報">
+  <title>工事日報</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="app-header">
+    <h1>工事日報</h1>
+    <p class="app-subtitle">現場ごとに日報を記録・管理します</p>
+  </header>
+
+  <div id="userBar" class="user-bar" hidden>
+    <span id="userBarInfo" class="user-bar-info"></span>
+    <div class="user-bar-actions">
+      <button type="button" id="goToUsersBtn" class="secondary-btn" hidden>ユーザー管理</button>
+      <button type="button" id="userBarGoToHistoryBtn" class="secondary-btn" hidden>変更履歴</button>
+      <button type="button" id="userBarGoToBackupBtn" class="secondary-btn" hidden>バックアップ管理</button>
+      <button type="button" id="logoutBtn" class="secondary-btn">ログアウト</button>
+    </div>
+  </div>
+
+  <main>
+
+    <!-- ログイン／初期セットアップ -->
+    <section class="view" id="view-login" hidden>
+      <h2 id="loginTitle">ログイン</h2>
+      <p id="loginSetupNotice" class="empty-message" hidden>初回起動のため、最初の管理者アカウントを作成してください。</p>
+      <form id="loginForm" novalidate>
+        <label>ユーザー名 <span class="required">必須</span>
+          <input type="text" id="loginUsername" required autocomplete="username">
+        </label>
+        <label>パスワード <span class="required">必須</span>
+          <input type="password" id="loginPassword" required autocomplete="current-password">
+        </label>
+        <label id="loginDisplayNameWrap" hidden>表示名
+          <input type="text" id="loginDisplayName" placeholder="例）山田太郎">
+        </label>
+        <div class="form-actions">
+          <button type="submit" id="loginSubmitBtn">ログイン</button>
+        </div>
+      </form>
+
+      <div id="loginRestoreSection" hidden>
+        <h3>または、バックアップから復元</h3>
+        <p class="app-subtitle">他の端末で作成したバックアップファイルがあれば、ここから復元してユーザーごと引き継げます。</p>
+        <label class="full-width">バックアップファイル（.zip）
+          <input type="file" id="loginRestoreFileInput" accept=".zip">
+        </label>
+      </div>
+    </section>
+
+    <!-- 現場一覧 -->
+    <section class="view" id="view-site-list" hidden>
+      <div class="toolbar">
+        <input type="search" id="siteSearchInput" placeholder="現場名・住所・元請名で検索">
+        <select id="siteSortSelect">
+          <option value="updatedAt">更新日時順</option>
+          <option value="name">現場名順</option>
+          <option value="startDate">開始日順</option>
+        </select>
+        <label class="checkbox-label"><input type="checkbox" id="showArchivedCheckbox"> アーカイブ済みを表示</label>
+      </div>
+      <div class="toolbar">
+        <button type="button" id="newSiteBtn">＋ 新しい現場を作成</button>
+        <button type="button" id="goToReportOutputBtn" class="secondary-btn">帳票出力</button>
+        <button type="button" id="goToReportTemplatesBtn" class="secondary-btn">帳票テンプレート管理</button>
+        <button type="button" id="goToHistoryBtn" class="secondary-btn">変更履歴</button>
+        <button type="button" id="goToBackupBtn" class="secondary-btn">バックアップ管理</button>
+      </div>
+      <p id="siteListEmpty" class="empty-message">現場がまだありません。</p>
+      <ul id="siteList" class="site-list"></ul>
+    </section>
+
+    <!-- 現場フォーム（新規／編集） -->
+    <section class="view" id="view-site-form" hidden>
+      <h2 id="siteFormTitle">新しい現場</h2>
+      <form id="siteForm" novalidate>
+        <div class="field-grid">
+          <label class="full-width">現場名 <span class="required">必須</span>
+            <input type="text" id="siteFormName" required placeholder="例）〇〇マンション新築工事">
+          </label>
+          <label>元請名
+            <input type="text" id="siteFormClientName">
+          </label>
+          <label>住所
+            <input type="text" id="siteFormAddress">
+          </label>
+          <label>着工日
+            <input type="date" id="siteFormStartDate">
+          </label>
+          <label>竣工予定日
+            <input type="date" id="siteFormEndDate">
+          </label>
+          <label class="full-width">メモ
+            <textarea id="siteFormMemo" rows="3"></textarea>
+          </label>
+          <label class="full-width" id="siteFormAssignedWrap" hidden>担当ユーザー（監督）
+            <select id="siteFormAssignedUsers" multiple size="4"></select>
+          </label>
+        </div>
+        <div class="form-actions">
+          <button type="submit" id="siteFormSaveBtn">保存</button>
+          <button type="button" id="siteFormCancelBtn" class="secondary-btn">キャンセル</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- 現場詳細 -->
+    <section class="view" id="view-site-detail" hidden>
+      <button type="button" id="backToSiteListBtn" class="link-btn">← 現場一覧に戻る</button>
+      <div class="site-detail-header">
+        <h2 id="siteDetailName"></h2>
+        <span id="siteDetailStatusBadge" class="status-badge"></span>
+      </div>
+      <dl class="site-detail-info">
+        <dt>元請名</dt><dd id="siteDetailClientName"></dd>
+        <dt>住所</dt><dd id="siteDetailAddress"></dd>
+        <dt>着工日〜竣工予定日</dt><dd id="siteDetailPeriod"></dd>
+        <dt>メモ</dt><dd id="siteDetailMemo"></dd>
+      </dl>
+      <div class="toolbar">
+        <button type="button" id="editSiteBtn" class="secondary-btn">現場情報を編集</button>
+        <button type="button" id="copySiteBtn" class="secondary-btn">この現場をコピー</button>
+        <button type="button" id="toggleArchiveBtn" class="secondary-btn"></button>
+      </div>
+
+      <h2>工事日報</h2>
+      <button type="button" id="newReportBtn">＋ 新しい日報を作成</button>
+      <p id="reportListEmpty" class="empty-message">まだ日報がありません。</p>
+      <ul id="reportList" class="report-list"></ul>
+    </section>
+
+    <!-- 日報フォーム -->
+    <section class="view" id="view-report-form" hidden>
+      <button type="button" id="backToSiteDetailBtn" class="link-btn">← 現場詳細に戻る</button>
+      <h2 id="reportFormTitle">日報を作成</h2>
+      <form id="reportForm" novalidate>
+        <div class="field-grid">
+          <label>日付 <span class="required">必須</span>
+            <input type="date" id="date" required>
+          </label>
+          <label>天気
+            <select id="weather">
+              <option value="晴れ">晴れ</option>
+              <option value="曇り">曇り</option>
+              <option value="雨">雨</option>
+              <option value="雪">雪</option>
+            </select>
+          </label>
+          <label>気温（℃）
+            <input type="number" id="temperature" placeholder="例）28">
+          </label>
+          <label>作業人数（合計・自動計算）
+            <input type="number" id="workerCountTotal" min="0" readonly>
+          </label>
+        </div>
+
+        <h3>業者ごとの作業内容・職長サイン</h3>
+        <div id="companiesContainer"></div>
+        <button type="button" id="addCompanyBtn">＋ 業者を追加</button>
+
+        <label>明日の予定
+          <textarea id="tomorrowPlan" rows="3"></textarea>
+        </label>
+        <label>備考
+          <textarea id="remarks" rows="3"></textarea>
+        </label>
+
+        <h3>巡回点検記録</h3>
+        <label>巡回者
+          <input type="text" id="patrolInspectorName" placeholder="例）山田太郎">
+        </label>
+        <div id="patrolChecklistContainer"></div>
+        <label>巡回点検項目に対する是正指示（コメント）
+          <textarea id="patrolComment" rows="3"></textarea>
+        </label>
+
+        <h3>写真</h3>
+        <label class="full-width" id="photoInputLabel">写真を追加（複数選択可）
+          <input type="file" id="photoInput" accept="image/*" multiple capture="environment">
+        </label>
+        <div id="photoGrid" class="photo-grid"></div>
+
+        <div class="form-actions">
+          <button type="submit" id="reportSaveBtn">保存</button>
+          <button type="button" id="reportCancelBtn" class="secondary-btn">キャンセル</button>
+        </div>
+      </form>
+      <button type="button" id="goToReportOutputFromReportBtn" class="secondary-btn" hidden>この日報を帳票出力</button>
+      <button type="button" id="deleteReportBtn" class="deleteReportBtn">この日報を削除</button>
+    </section>
+
+    <!-- 帳票出力 -->
+    <section class="view" id="view-report-output" hidden>
+      <button type="button" id="backFromReportOutputBtn" class="link-btn">← 現場一覧に戻る</button>
+      <h2>帳票出力</h2>
+
+      <div class="field-grid">
+        <label>出力対象現場 <span class="required">必須</span>
+          <select id="outputSiteSelect"></select>
+        </label>
+        <label>出力対象日（日報） <span class="required">必須</span>
+          <select id="outputReportSelect"></select>
+        </label>
+      </div>
+      <p id="outputNoReportMessage" class="empty-message" hidden>この現場にはまだ日報がありません。</p>
+
+      <div id="outputSiteConfirm" class="output-confirm-box" hidden></div>
+
+      <div class="field-grid">
+        <label>出力形式
+          <select id="outputFormatSelect">
+            <option value="excel">Excel（会社指定様式）</option>
+            <option value="pdf">PDF／印刷</option>
+          </select>
+        </label>
+        <label id="outputTemplateWrap">Excel／PDFテンプレート
+          <select id="outputTemplateSelect"></select>
+        </label>
+      </div>
+
+      <fieldset id="outputPdfVariantWrap" class="pdf-variant-fieldset" hidden>
+        <legend>PDFの種類</legend>
+        <label class="checkbox-label">
+          <input type="radio" name="pdfVariant" id="pdfVariantCompany" value="company" checked>
+          会社指定PDF（Excel様式をレイアウトそのままPDF化・提出用）
+        </label>
+        <label class="checkbox-label">
+          <input type="radio" name="pdfVariant" id="pdfVariantOriginal" value="original">
+          オリジナルPDF（アプリ独自の見やすいレイアウト）
+        </label>
+      </fieldset>
+
+      <div class="toolbar">
+        <button type="button" id="outputPreviewBtn" class="secondary-btn">プレビュー</button>
+        <button type="button" id="outputGenerateBtn">出力する</button>
+        <button type="button" id="outputPrintBtn" class="secondary-btn" hidden>印刷する</button>
+      </div>
+
+      <div id="outputPreviewArea" hidden>
+        <h3>プレビュー</h3>
+        <pre id="outputPreviewText" class="output-preview-text" hidden></pre>
+        <iframe id="outputPreviewFrame" class="output-preview-frame" title="PDF出力プレビュー" hidden></iframe>
+      </div>
+    </section>
+
+    <!-- 帳票テンプレート管理 -->
+    <section class="view" id="view-report-templates" hidden>
+      <button type="button" id="backToSiteListFromTemplatesBtn" class="link-btn">← 現場一覧に戻る</button>
+      <h2>帳票テンプレート管理</h2>
+      <p class="app-subtitle">提出先の元請会社ごとに、Excel(.xlsx)・PDFの様式ファイルを登録しておけます。（データの自動差し込みは今後対応予定です）</p>
+      <div class="toolbar">
+        <button type="button" id="addReportTemplateBtn">＋ テンプレートを追加</button>
+      </div>
+      <p id="reportTemplateListEmpty" class="empty-message">テンプレートがまだありません。</p>
+      <ul id="reportTemplateList" class="report-template-list"></ul>
+    </section>
+
+    <!-- ユーザー管理（管理者のみ） -->
+    <section class="view" id="view-users" hidden>
+      <button type="button" id="backToSiteListFromUsersBtn" class="link-btn">← 現場一覧に戻る</button>
+      <h2>ユーザー管理</h2>
+      <div class="toolbar">
+        <button type="button" id="addUserBtn">＋ ユーザーを追加</button>
+      </div>
+      <p id="userListEmpty" class="empty-message">ユーザーがいません。</p>
+      <ul id="userList" class="user-list"></ul>
+    </section>
+
+    <!-- 変更履歴（管理者のみ） -->
+    <section class="view" id="view-history" hidden>
+      <button type="button" id="backToSiteListFromHistoryBtn" class="link-btn">← 現場一覧に戻る</button>
+      <h2>変更履歴</h2>
+      <div class="toolbar">
+        <select id="historyEntityTypeSelect">
+          <option value="">すべて</option>
+          <option value="site">現場</option>
+          <option value="report">日報</option>
+          <option value="reportTemplate">帳票テンプレート</option>
+          <option value="user">ユーザー</option>
+          <option value="backup">バックアップ</option>
+        </select>
+      </div>
+      <p id="historyListEmpty" class="empty-message">履歴がありません。</p>
+      <ul id="historyList" class="history-list"></ul>
+    </section>
+
+    <!-- バックアップ管理（管理者のみ） -->
+    <section class="view" id="view-backup" hidden>
+      <button type="button" id="backToSiteListFromBackupBtn" class="link-btn">← 現場一覧に戻る</button>
+      <h2>バックアップ管理</h2>
+      <p class="app-subtitle">サーバーを持たないため、この端末でアプリを開いている間だけ動く手動バックアップです。他の端末とは共有されません。</p>
+      <p id="backupReminder" class="empty-message" hidden></p>
+      <div class="toolbar">
+        <button type="button" id="exportBackupBtn">フルバックアップを作成してダウンロード</button>
+      </div>
+      <label class="full-width">バックアップから復元
+        <input type="file" id="restoreFileInput" accept=".zip">
+      </label>
+
+      <div id="folderHandleSection" hidden>
+        <h3>共有フォルダとの連携（同じWi-Fi/LANの端末間で手動同期する場合）</h3>
+        <p class="app-subtitle">共有フォルダを一度選択しておくと、次回からバックアップの保存・読み込みをそこへ直接行えます。この端末のブラウザにのみ記憶され、他の端末とは共有されません。</p>
+        <p id="folderHandleStatus" class="empty-message">共有フォルダは設定されていません。</p>
+        <div class="toolbar">
+          <button type="button" id="chooseFolderHandleBtn" class="secondary-btn">共有フォルダを選択</button>
+          <button type="button" id="clearFolderHandleBtn" class="secondary-btn" hidden>共有フォルダの記憶を解除</button>
+          <button type="button" id="restoreFromFolderBtn" class="secondary-btn" hidden>共有フォルダの最新バックアップから復元</button>
+        </div>
+      </div>
+
+      <h3>バックアップ履歴</h3>
+      <p id="backupHistoryEmpty" class="empty-message">まだバックアップがありません。</p>
+      <ul id="backupHistoryList" class="backup-history-list"></ul>
+    </section>
+
+  </main>
+
+  <p id="message" role="status"></p>
+
+  <!-- バックアップ復元 競合確認モーダル -->
+  <dialog id="backupConflictDialog">
+    <h3>復元による上書きの確認</h3>
+    <p class="app-subtitle">バックアップより新しいローカルデータが見つかりました。チェックした項目だけバックアップの内容で上書きします（チェックしなければローカルの内容を残します）。</p>
+    <div class="toolbar">
+      <button type="button" id="conflictKeepAllLocalBtn" class="secondary-btn">すべてローカルを残す</button>
+      <button type="button" id="conflictOverwriteAllBtn" class="secondary-btn">すべてバックアップで上書き</button>
+    </div>
+    <ul id="backupConflictList" class="backup-conflict-list"></ul>
+    <div class="form-actions">
+      <button type="button" id="backupConflictApplyBtn">選択内容で復元を実行</button>
+      <button type="button" id="backupConflictCancelBtn" class="secondary-btn">キャンセル</button>
+    </div>
+  </dialog>
+
+  <!-- 現場コピー用モーダル -->
+  <dialog id="copySiteDialog">
+    <form id="copySiteForm">
+      <h3>現場をコピー</h3>
+      <label>新しい現場名
+        <input type="text" id="copySiteNewName">
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="copySiteReportsCheckbox"> 工事日報もコピーする（写真・署名は除く）
+      </label>
+      <div class="form-actions">
+        <button type="submit" id="copySiteConfirmBtn">コピーを作成</button>
+        <button type="button" id="copySiteCancelBtn" class="secondary-btn">キャンセル</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 帳票テンプレート登録・編集モーダル -->
+  <dialog id="reportTemplateFormDialog">
+    <form id="reportTemplateForm">
+      <h3 id="reportTemplateFormTitle">テンプレートを追加</h3>
+      <label>会社
+        <select id="reportTemplateCompanySelect">
+          <option value="__new__">＋ 新しい会社を追加</option>
+        </select>
+      </label>
+      <label id="reportTemplateNewCompanyWrap">新しい会社名
+        <input type="text" id="reportTemplateNewCompanyName" placeholder="例）〇〇建設株式会社">
+      </label>
+      <label>テンプレート名 <span class="required">必須</span>
+        <input type="text" id="reportTemplateName" required placeholder="例）月次工事日報様式">
+      </label>
+      <label>ファイル（.xlsx / .pdf） <span class="required" id="reportTemplateFileRequiredMark">必須</span>
+        <input type="file" id="reportTemplateFile" accept=".xlsx,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf">
+      </label>
+      <p id="reportTemplateFileInfo" class="empty-message"></p>
+      <div class="form-actions">
+        <button type="submit" id="reportTemplateSaveBtn">保存</button>
+        <button type="button" id="reportTemplateCancelBtn" class="secondary-btn">キャンセル</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ユーザー登録・編集モーダル -->
+  <dialog id="userFormDialog">
+    <form id="userForm">
+      <h3 id="userFormTitle">ユーザーを追加</h3>
+      <label>ユーザー名 <span class="required" id="userUsernameRequiredMark">必須</span>
+        <input type="text" id="userUsernameInput" autocomplete="off">
+      </label>
+      <label>表示名
+        <input type="text" id="userDisplayNameInput" placeholder="例）山田太郎">
+      </label>
+      <label>ロール
+        <select id="userRoleSelect">
+          <option value="admin">管理者</option>
+          <option value="supervisor">監督</option>
+          <option value="viewer">閲覧のみ</option>
+        </select>
+      </label>
+      <label id="userPasswordWrap">パスワード <span class="required" id="userPasswordRequiredMark">必須</span>
+        <input type="password" id="userPasswordInput" placeholder="4文字以上" autocomplete="new-password">
+      </label>
+      <div class="form-actions">
+        <button type="submit" id="userSaveBtn">保存</button>
+        <button type="button" id="userCancelBtn" class="secondary-btn">キャンセル</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

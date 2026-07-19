@@ -1,0 +1,12 @@
+{
+  "name": "construction-site-management",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "node tests/scenario.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.54.1"
+  }
+}

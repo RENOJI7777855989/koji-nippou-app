@@ -1,0 +1,809 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  background-color: #f5f5f5;
+  margin: 0;
+  padding: 20px;
+  color: #222;
+}
+
+.app-header {
+  max-width: 700px;
+  margin: 0 auto 20px;
+  text-align: center;
+}
+
+h1 {
+  font-size: 22px;
+  margin: 0 0 4px;
+}
+
+.app-subtitle {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+
+h2 {
+  font-size: 18px;
+  margin-top: 24px;
+}
+
+h3 {
+  font-size: 16px;
+  margin-top: 20px;
+}
+
+h4 {
+  font-size: 14px;
+  margin: 16px 0 6px;
+  color: #2b6cb0;
+}
+
+main {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.view {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+form {
+  margin: 0;
+}
+
+label {
+  display: block;
+  margin-bottom: 16px;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.required {
+  color: #b02b2b;
+  font-size: 12px;
+  font-weight: normal;
+  margin-left: 4px;
+}
+
+input, select, textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 16px;
+  padding: 10px;
+  margin-top: 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: #2b6cb0;
+  box-shadow: 0 0 0 3px rgba(43, 108, 176, 0.2);
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+button {
+  min-height: 44px;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: bold;
+  color: white;
+  background-color: #2b6cb0;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button:active {
+  background-color: #1a4e8a;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.form-actions button {
+  flex: 1;
+  width: auto;
+}
+
+.secondary-btn {
+  color: #555 !important;
+  background-color: white !important;
+  border: 1px solid #ccc !important;
+}
+
+.link-btn {
+  display: inline-block;
+  min-height: auto;
+  padding: 6px 0;
+  color: #2b6cb0;
+  background: none;
+  border: none;
+  font-weight: normal;
+  margin-bottom: 8px;
+}
+
+/* ---------- チェックボックス（一覧の絞り込み・モーダル用） ---------- */
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: normal;
+  font-size: 14px;
+}
+
+.checkbox-label input[type="checkbox"] {
+  display: inline-block;
+  width: auto;
+  margin-top: 0;
+}
+
+/* ---------- ツールバー（検索・並び替え・操作ボタン列） ---------- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.toolbar input,
+.toolbar select {
+  width: auto;
+  flex: 1 1 160px;
+  margin-top: 0;
+}
+
+.toolbar button {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+/* ---------- 業者行 ---------- */
+
+.company-row {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #fafafa;
+}
+
+.company-row h3 {
+  margin-top: 0;
+  font-size: 15px;
+  color: #2b6cb0;
+}
+
+#addCompanyBtn {
+  width: 100%;
+  color: #2b6cb0;
+  background-color: white;
+  border: 2px dashed #2b6cb0;
+  margin-bottom: 20px;
+}
+
+.removeCompanyBtn {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px;
+  font-size: 14px;
+  color: #b02b2b;
+  background-color: white;
+  border: 1px solid #b02b2b;
+  margin-top: 8px;
+}
+
+/* ---------- 業者行内の職長サイン ---------- */
+
+.foreman-signature-block {
+  border-top: 1px dashed #ccc;
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+.foreman-signature-block h4 {
+  margin-top: 0;
+}
+
+/* ---------- 巡回点検記録 ---------- */
+
+.patrol-category {
+  font-size: 14px;
+  color: #2b6cb0;
+  margin: 16px 0 4px;
+}
+
+.patrol-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.patrol-item-label {
+  font-size: 14px;
+  flex: 1;
+}
+
+.patrol-item-status {
+  width: auto;
+  flex: 0 0 auto;
+  margin-top: 0;
+  min-width: 110px;
+}
+
+#message {
+  min-height: 20px;
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 16px;
+  font-weight: bold;
+  color: #2b6cb0;
+  max-width: 700px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+#message.error {
+  color: #b02b2b;
+}
+
+.empty-message {
+  color: #888;
+  font-size: 14px;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: bold;
+  background: #e2f0ff;
+  color: #2b6cb0;
+}
+
+.status-badge.status-archived {
+  background: #eee;
+  color: #777;
+}
+
+.status-badge.status-default {
+  background: #dcf5e0;
+  color: #1a7a34;
+}
+
+/* ---------- 現場一覧 ---------- */
+
+.site-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.site-card {
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 14px 16px;
+  cursor: pointer;
+  position: relative;
+}
+
+.site-card:active {
+  background: #f0f0f0;
+}
+
+.site-card-name {
+  font-weight: bold;
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.site-card-meta {
+  margin: 0 0 2px;
+  font-size: 13px;
+  color: #666;
+}
+
+.site-card .status-badge {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+}
+
+/* ---------- 現場詳細 ---------- */
+
+.site-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.site-detail-info {
+  margin: 12px 0 0;
+}
+
+.site-detail-info dt {
+  font-size: 12px;
+  color: #888;
+  margin-top: 10px;
+}
+
+.site-detail-info dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+
+/* ---------- 日報一覧（現場詳細内） ---------- */
+
+.report-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.report-card {
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+.report-card:active {
+  background: #f0f0f0;
+}
+
+.report-card-date {
+  font-weight: bold;
+  color: #2b6cb0;
+  margin: 0 0 2px;
+}
+
+.report-card-meta {
+  margin: 0;
+  font-size: 13px;
+  color: #666;
+}
+
+.deleteReportBtn {
+  width: 100%;
+  min-height: 40px;
+  margin-top: 16px;
+  font-size: 14px;
+  color: #b02b2b;
+  background-color: white;
+  border: 1px solid #b02b2b;
+}
+
+/* ---------- 写真 ---------- */
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+  margin: 12px 0 20px;
+}
+
+.photo-tile {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #eee;
+}
+
+.photo-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.removePhotoBtn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-height: auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  line-height: 1;
+  font-size: 14px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+/* ---------- 署名 ---------- */
+
+.signature-pad-wrap {
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  margin-top: 8px;
+}
+
+.signature-canvas {
+  display: block;
+  width: 100%;
+  height: 180px;
+  touch-action: none;
+}
+
+.signature-signed-at {
+  font-size: 13px;
+  color: #666;
+  align-self: center;
+}
+
+/* ---------- 帳票テンプレート管理 ---------- */
+
+.report-template-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.report-template-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+}
+
+.report-template-name {
+  font-weight: bold;
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.report-template-meta {
+  margin: 0 0 2px;
+  font-size: 13px;
+  color: #666;
+}
+
+.report-template-meta .status-badge {
+  margin-left: 6px;
+}
+
+.report-template-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.report-template-actions button {
+  width: auto;
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+/* ---------- モーダル(dialog) ---------- */
+
+dialog {
+  border: none;
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 90vw;
+  width: 420px;
+}
+
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+dialog h3 {
+  margin-top: 0;
+}
+
+/* ---------- タブレット・PC（iPad／Windows）向けレイアウト ---------- */
+
+@media (min-width: 700px) {
+  .field-grid {
+    grid-template-columns: 1fr 1fr;
+    column-gap: 16px;
+  }
+
+  .company-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 16px;
+  }
+
+  .company-row h3,
+  .company-row .full-row,
+  .removeCompanyBtn {
+    grid-column: 1 / -1;
+  }
+
+  .site-list {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (min-width: 900px) {
+  main, .app-header, #message, .user-bar {
+    max-width: 860px;
+  }
+
+  .site-list {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+/* ---------- ユーザーバー（ヘッダー直下） ---------- */
+
+.user-bar {
+  max-width: 700px;
+  margin: 0 auto 16px;
+  padding: 10px 14px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.user-bar[hidden] {
+  display: none;
+}
+
+.user-bar-info {
+  font-size: 13px;
+  color: #555;
+  font-weight: bold;
+}
+
+.user-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.user-bar-actions button {
+  width: auto;
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+/* ---------- ユーザー管理 ---------- */
+
+.user-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.user-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+}
+
+.user-item-name {
+  font-weight: bold;
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.user-item-meta {
+  margin: 0;
+  font-size: 13px;
+  color: #666;
+}
+
+.user-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.user-item-actions button {
+  width: auto;
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+/* ---------- 変更履歴 ---------- */
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.history-item {
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+}
+
+.history-item-summary {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.history-item-summary .status-badge {
+  margin-right: 6px;
+}
+
+.history-item-meta {
+  margin: 0;
+  font-size: 12px;
+  color: #888;
+}
+
+/* ---------- バックアップ管理 ---------- */
+
+.backup-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.backup-history-item {
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+}
+
+.backup-history-name {
+  margin: 0 0 4px;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.backup-history-meta {
+  margin: 0;
+  font-size: 12px;
+  color: #888;
+}
+
+.backup-conflict-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.backup-conflict-item {
+  background: #fff7e6;
+  border: 1px solid #f0d9a0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+}
+
+/* ---------- 日報フォームの閲覧専用モード ---------- */
+
+.read-only-form .removeCompanyBtn,
+.read-only-form .clearSignatureBtn,
+.read-only-form .removePhotoBtn,
+.read-only-form #addCompanyBtn,
+.read-only-form #photoInputLabel {
+  display: none;
+}
+
+.read-only-form .signatureCanvas {
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.read-only-form input:disabled,
+.read-only-form select:disabled,
+.read-only-form textarea:disabled {
+  background: #f5f5f5;
+  color: #444;
+  opacity: 1;
+}
+
+/* ---------- 帳票出力 ---------- */
+
+.output-confirm-box {
+  background: #eef6ff;
+  border: 1px solid #cfe3f7;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 12px 0;
+}
+
+.output-confirm-box p {
+  margin: 4px 0;
+  font-size: 14px;
+}
+
+.pdf-variant-fieldset {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin: 12px 0;
+}
+
+.pdf-variant-fieldset legend {
+  font-weight: bold;
+  padding: 0 6px;
+}
+
+.pdf-variant-fieldset .checkbox-label {
+  display: block;
+  margin: 6px 0;
+}
+
+.output-preview-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.output-preview-frame {
+  width: 100%;
+  height: 70vh;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background: white;
+}
