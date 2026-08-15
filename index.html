@@ -137,6 +137,9 @@
       <button type="button" id="newReportBtn">＋ 新しい日報を作成</button>
       <p id="reportListEmpty" class="empty-message">まだ日報がありません。</p>
       <ul id="reportList" class="report-list"></ul>
+
+      <h2>積算</h2>
+      <button type="button" id="goToEstimateListBtn" class="secondary-btn">📐 積算内訳を見る</button>
     </section>
 
     <!-- 日報フォーム -->
@@ -263,6 +266,87 @@
       </div>
       <p id="reportTemplateListEmpty" class="empty-message">テンプレートがまだありません。</p>
       <ul id="reportTemplateList" class="report-template-list"></ul>
+    </section>
+
+    <!-- 積算内訳一覧 -->
+    <section class="view" id="view-estimate-list" hidden>
+      <button type="button" id="backToSiteFromEstimateListBtn" class="link-btn">← 現場詳細に戻る</button>
+      <h2>積算内訳<span id="estimateListSiteName"></span></h2>
+
+      <div class="toolbar">
+        <input type="search" id="estimateSearchInput" placeholder="工種・項目・仕様で検索">
+        <select id="estimateCategoryFilter">
+          <option value="">工種すべて</option>
+        </select>
+        <select id="estimateBatchFilter">
+          <option value="">すべての取込</option>
+        </select>
+      </div>
+      <div class="toolbar">
+        <button type="button" id="goToEstimateImportBtn">＋ Excelを取り込む</button>
+        <button type="button" id="deleteEstimateBatchBtn" class="secondary-btn" hidden>選択中の取込データを削除</button>
+      </div>
+
+      <p id="estimateSummaryLine" class="app-subtitle"></p>
+      <p id="estimateListEmpty" class="empty-message">積算データがまだありません。まずはExcelを取り込んでください。</p>
+      <div class="table-scroll" id="estimateTableWrap" hidden>
+        <table class="estimate-table">
+          <thead>
+            <tr>
+              <th>工種</th><th>項目</th><th>仕様</th><th>数量</th><th>単位</th><th>単価</th><th>金額</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="estimateTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 積算Excel取込 -->
+    <section class="view" id="view-estimate-import" hidden>
+      <button type="button" id="backToEstimateListBtn" class="link-btn">← 積算内訳に戻る</button>
+      <h2>積算Excelの取込</h2>
+      <p class="app-subtitle">積算書（.xlsx）をアップロードし、列の対応付けを確認してから取り込みます。</p>
+
+      <label class="full-width">積算書ファイル（.xlsx）
+        <input type="file" id="estimateFileInput" accept=".xlsx">
+      </label>
+
+      <div id="estimateImportSheetSection" hidden>
+        <label>シートを選択
+          <select id="estimateSheetSelect"></select>
+        </label>
+      </div>
+
+      <div id="estimateImportMappingSection" hidden>
+        <h3>列の対応付け</h3>
+        <p class="app-subtitle">プレビューを見ながら、各項目に対応する列とデータ開始行を指定してください。</p>
+        <div class="field-grid" id="estimateMappingFields"></div>
+        <label>データ開始行
+          <input type="number" id="estimateDataStartRow" min="1" value="2">
+        </label>
+
+        <h3>プレビュー（先頭数行）</h3>
+        <div class="table-scroll">
+          <table class="estimate-table" id="estimatePreviewTable"></table>
+        </div>
+
+        <div class="toolbar">
+          <button type="button" id="estimateConvertBtn" class="secondary-btn">変換プレビュー</button>
+        </div>
+      </div>
+
+      <div id="estimateImportResultSection" hidden>
+        <h3>取込結果プレビュー</h3>
+        <p id="estimateResultSummary" class="app-subtitle"></p>
+        <p id="estimateResultWarning" class="empty-message" hidden></p>
+        <div class="table-scroll">
+          <table class="estimate-table" id="estimateResultTable"></table>
+        </div>
+        <div class="form-actions">
+          <button type="button" id="estimateCommitBtn">この内容で保存</button>
+          <button type="button" id="estimateImportCancelBtn" class="secondary-btn">キャンセル</button>
+        </div>
+      </div>
     </section>
 
     <!-- ユーザー管理（管理者のみ） -->

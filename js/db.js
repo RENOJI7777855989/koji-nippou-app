@@ -5,7 +5,7 @@
    ========================================================== */
 
 const DB_NAME = "constructionReportsDB";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let dbPromise = null;
 
@@ -79,6 +79,21 @@ export function openDb() {
       if (!db.objectStoreNames.contains("backupHistory")) {
         const store = db.createObjectStore("backupHistory", { keyPath: "id" });
         store.createIndex("by_createdAt", "createdAt");
+      }
+
+      // 積算モジュール（現場管理OS拡張 Phase1）。sites/reports等の既存ストアとは
+      // 独立し、siteIdのみで紐付ける。1回の取込＝1バッチとしてestimateBatchesに
+      // 記録し、再取込しても過去データを消さず履歴として残す。
+      if (!db.objectStoreNames.contains("estimateBatches")) {
+        const store = db.createObjectStore("estimateBatches", { keyPath: "id" });
+        store.createIndex("by_siteId", "siteId");
+      }
+
+      if (!db.objectStoreNames.contains("estimateItems")) {
+        const store = db.createObjectStore("estimateItems", { keyPath: "id" });
+        store.createIndex("by_siteId", "siteId");
+        store.createIndex("by_estimateBatchId", "estimateBatchId");
+        store.createIndex("by_siteId_category", ["siteId", "category"]);
       }
     };
 

@@ -21,6 +21,8 @@ import { initReportTemplateListView } from "./ui/report-template-view.js";
 import { initAuditLogView } from "./ui/audit-log-view.js";
 import { initBackupView } from "./ui/backup-view.js";
 import { initReportOutputView } from "./ui/report-output-view.js";
+import { initEstimateListView } from "./ui/estimate-list-view.js";
+import { initEstimateImportView } from "./ui/estimate-import-view.js";
 
 async function bootstrap() {
   await runMigration();
@@ -35,6 +37,8 @@ async function bootstrap() {
   registerRoute("/sites/:id/edit", (params) => initSiteFormViewEdit(params));
   registerRoute("/sites/:id/report/new", (params) => initReportFormViewNew(params));
   registerRoute("/sites/:id/report/:reportId", (params) => initReportFormViewEdit(params));
+  registerRoute("/sites/:id/estimates/import", (params) => initEstimateImportView(params));
+  registerRoute("/sites/:id/estimates", (params) => initEstimateListView(params));
   registerRoute("/sites/:id", (params) => initSiteDetailView(params));
 
   startRouter();

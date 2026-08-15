@@ -807,3 +807,46 @@ dialog h3 {
   border-radius: 8px;
   background: white;
 }
+
+/* ---------- 積算内訳・取込 ---------- */
+
+.status-badge.status-warning {
+  background: #fff1cf;
+  color: #8a5a00;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.estimate-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 640px;
+  font-size: 13px;
+}
+
+.estimate-table th,
+.estimate-table td {
+  border: 1px solid #e0e0e0;
+  padding: 6px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.estimate-table thead th {
+  background: #f5f7fa;
+  position: sticky;
+  top: 0;
+}
+
+.estimate-table td.num,
+.estimate-table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.estimate-row-warning td {
+  background: #fffaf0;
+}

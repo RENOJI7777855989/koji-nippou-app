@@ -23,6 +23,7 @@ const backBtn = document.getElementById("backToSiteListBtn");
 const newReportBtn = document.getElementById("newReportBtn");
 const reportListEl = document.getElementById("reportList");
 const reportListEmptyEl = document.getElementById("reportListEmpty");
+const goToEstimateListBtn = document.getElementById("goToEstimateListBtn");
 
 const copyDialog = document.getElementById("copySiteDialog");
 const copyForm = document.getElementById("copySiteForm");
@@ -63,6 +64,7 @@ reportListEl.addEventListener("click", (e) => {
 editBtn.addEventListener("click", () => navigate(`/sites/${currentSite.id}/edit`));
 backBtn.addEventListener("click", () => navigate("/sites"));
 newReportBtn.addEventListener("click", () => navigate(`/sites/${currentSite.id}/report/new`));
+goToEstimateListBtn.addEventListener("click", () => navigate(`/sites/${currentSite.id}/estimates`));
 
 copyBtn.addEventListener("click", () => {
   copyNewNameInput.value = `${currentSite.name}のコピー`;
