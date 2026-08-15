@@ -86,7 +86,10 @@ function renderFilterOptions() {
   batchFilter.innerHTML =
     `<option value="">すべての取込</option>` +
     allBatches
-      .map((b) => `<option value="${b.id}">${escapeHtml(b.sourceFileName)}（${(b.importedAt || "").slice(0, 10)}／${b.itemCount}件）</option>`)
+      .map((b) => {
+        const icon = b.sourceFileType === "pdf" ? "📕" : "📄";
+        return `<option value="${b.id}">${icon} ${escapeHtml(b.sourceFileName)}（${(b.importedAt || "").slice(0, 10)}／${b.itemCount}件）</option>`;
+      })
       .join("");
   batchFilter.value = allBatches.some((b) => b.id === currentBatch) ? currentBatch : "";
 }

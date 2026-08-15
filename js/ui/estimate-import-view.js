@@ -1,14 +1,15 @@
 /* ==========================================================
-   積算Excel取込画面
-   ファイル選択→シート選択→列の対応付け（プレビュー確認しながら
+   積算Excel/PDF取込画面
+   ファイル選択→シート(ページ)選択→列の対応付け（プレビュー確認しながら
    ユーザーが指定）→変換プレビュー→保存確定、の一連の流れを扱う。
-   Excel解析はjs/estimate/（readWorkbook/buildPreviewRows/
-   extractEstimateRows）に委譲し、この画面はDOM操作のみを担う。
+   Excel/PDFいずれもjs/estimate/のreadEstimateFile()が同じ
+   {sheetNames, readSheet}形状に変換してくれるため、この画面は
+   ファイル形式を意識せずDOM操作のみを担う。
    ========================================================== */
 
 import { getSite } from "../sites.js";
 import {
-  readWorkbook,
+  readEstimateFile,
   MAPPING_FIELDS,
   buildPreviewRows,
   extractEstimateRows,
@@ -38,6 +39,7 @@ const cancelBtn = document.getElementById("estimateImportCancelBtn");
 
 let currentSite = null;
 let workbook = null;
+let currentSourceFileType = "excel";
 let currentSheetName = "";
 let currentLayout = null;
 let lastMapping = {}; // フィールドkey→列文字（同一セッション内でシートを切り替えても引き継ぐ）
@@ -139,20 +141,31 @@ fileInput.addEventListener("change", async () => {
   if (!file) return;
   resetImportState();
   try {
-    const buffer = await file.arrayBuffer();
-    workbook = await readWorkbook(buffer);
+    workbook = await readEstimateFile(file);
   } catch (err) {
-    showMessage(err.message || "Excelファイルの読み込みに失敗しました。", true);
+    showMessage(err.message || "ファイルの読み込みに失敗しました。", true);
     fileInput.value = "";
+    resetImportState();
     return;
   }
 
+  currentSourceFileType = workbook.sourceFileType;
   sheetSelect.innerHTML = workbook.sheetNames.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("");
   sheetSection.hidden = workbook.sheetNames.length <= 1;
-  await loadSheet(workbook.sheetNames[0]);
+  try {
+    await loadSheet(workbook.sheetNames[0]);
+  } catch (err) {
+    showMessage(err.message || "このページの読み込みに失敗しました。別のページを選択してください。", true);
+  }
 });
 
-sheetSelect.addEventListener("change", () => loadSheet(sheetSelect.value));
+sheetSelect.addEventListener("change", async () => {
+  try {
+    await loadSheet(sheetSelect.value);
+  } catch (err) {
+    showMessage(err.message || "このページの読み込みに失敗しました。別のページを選択してください。", true);
+  }
+});
 
 convertBtn.addEventListener("click", () => {
   const mapping = readMappingFromForm();
@@ -184,6 +197,7 @@ commitBtn.addEventListener("click", async () => {
     const batch = await createEstimateBatch({
       siteId: currentSite.id,
       sourceFileName,
+      sourceFileType: currentSourceFileType,
       sheetName: currentSheetName,
       columnMapping: mapping,
       headerRow: Number(dataStartRowInput.value) || 1,

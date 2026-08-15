@@ -283,7 +283,7 @@
         </select>
       </div>
       <div class="toolbar">
-        <button type="button" id="goToEstimateImportBtn">＋ Excelを取り込む</button>
+        <button type="button" id="goToEstimateImportBtn">＋ 積算書を取り込む</button>
         <button type="button" id="deleteEstimateBatchBtn" class="secondary-btn" hidden>選択中の取込データを削除</button>
       </div>
 
@@ -304,15 +304,15 @@
     <!-- 積算Excel取込 -->
     <section class="view" id="view-estimate-import" hidden>
       <button type="button" id="backToEstimateListBtn" class="link-btn">← 積算内訳に戻る</button>
-      <h2>積算Excelの取込</h2>
-      <p class="app-subtitle">積算書（.xlsx）をアップロードし、列の対応付けを確認してから取り込みます。</p>
+      <h2>積算書の取込</h2>
+      <p class="app-subtitle">積算書（Excel/.xlsx または PDF）をアップロードし、列の対応付けを確認してから取り込みます。</p>
 
-      <label class="full-width">積算書ファイル（.xlsx）
-        <input type="file" id="estimateFileInput" accept=".xlsx">
+      <label class="full-width">積算書ファイル（.xlsx または .pdf）
+        <input type="file" id="estimateFileInput" accept=".xlsx,.pdf">
       </label>
 
       <div id="estimateImportSheetSection" hidden>
-        <label>シートを選択
+        <label>シート／ページを選択
           <select id="estimateSheetSelect"></select>
         </label>
       </div>

@@ -18,10 +18,11 @@ export async function getEstimateBatch(id) {
   return dbGet("estimateBatches", id);
 }
 
-export async function createEstimateBatch({ siteId, sourceFileName, sheetName, columnMapping, headerRow, itemCount, memo = "" }) {
+export async function createEstimateBatch({ siteId, sourceFileName, sourceFileType = "excel", sheetName, columnMapping, headerRow, itemCount, memo = "" }) {
   const batch = stampNew({
     siteId,
     sourceFileName,
+    sourceFileType, // "excel" | "pdf"
     sheetName,
     columnMapping,
     headerRow,
