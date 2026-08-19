@@ -1,0 +1,323 @@
+/* ==========================================================
+   Service Worker（PWAオフライン対応）
+   ルート直下に配置している理由: Service Workerは自分がいる階層
+   以下しか制御できない仕様のため、js/配下やicons/配下を含む
+   アプリ全体をキャッシュ対象にするにはルート配置が必須。
+
+   更新方法:
+   ファイルを変更してリリースするたびに、下のCACHE_NAMEの
+   バージョン番号（v1, v2, ...）を1つ増やすこと。新しいバージョン名の
+   キャッシュが作られ、有効化時に古いバージョンのキャッシュは
+   自動削除される。バージョン番号を変えないと、ブラウザは
+   sw.js自体の変更しか検知できず、PRECACHE_URLSの中身を更新しても
+   反映されない。
+
+   js/配下に新しいファイルを追加した場合は、PRECACHE_URLSにも
+   そのパスを追加すること（ビルド工程が無い方針のため手動管理）。
+   ========================================================== */
+
+const CACHE_NAME = "koji-nippou-v3";
+
+const PRECACHE_URLS = [
+  "./",
+  "./index.html",
+  "./style.css",
+  "./manifest.json",
+  "./icons/icon-32.png",
+  "./icons/icon-180.png",
+  "./icons/icon-192.png",
+  "./icons/icon-256.png",
+  "./icons/icon-512.png",
+  "./js/main.js",
+  "./js/pwaRegister.js",
+  "./js/router.js",
+  "./js/db.js",
+  "./js/migrate.js",
+  "./js/utils.js",
+  "./js/currentUser.js",
+  "./js/auth.js",
+  "./js/auditLog.js",
+  "./js/backup.js",
+  "./js/zipUtil.js",
+  "./js/patrolChecklist.js",
+  "./js/photos.js",
+  "./js/reports.js",
+  "./js/signature-pad.js",
+  "./js/signatures.js",
+  "./js/sites.js",
+  "./js/ui/app-shell.js",
+  "./js/ui/audit-log-view.js",
+  "./js/ui/backup-view.js",
+  "./js/ui/common.js",
+  "./js/ui/login-view.js",
+  "./js/ui/report-form-view.js",
+  "./js/ui/report-output-view.js",
+  "./js/ui/report-template-view.js",
+  "./js/ui/site-detail-view.js",
+  "./js/ui/site-form-view.js",
+  "./js/ui/site-list-view.js",
+  "./js/ui/user-management-view.js",
+  "./js/report-output/cellGrid.js",
+  "./js/report-output/companyProfiles.js",
+  "./js/report-output/fieldPath.js",
+  "./js/report-output/generateReportOutput.js",
+  "./js/report-output/imageUtils.js",
+  "./js/report-output/index.js",
+  "./js/report-output/rendererRegistry.js",
+  "./js/report-output/reportDataAdapter.js",
+  "./js/report-output/reportTemplates.js",
+  "./js/report-output/xlsxCellPlan.js",
+  "./js/report-output/xlsxSheetReader.js",
+  "./js/report-output/xlsxTemplateEngine.js",
+  "./js/report-output/renderers/companyPdfFromXlsx.js",
+  "./js/report-output/renderers/excelDefault.js",
+  "./js/report-output/renderers/excelXlsxTemplate.js",
+  "./js/report-output/renderers/index.js",
+  "./js/report-output/renderers/pdfDefault.js",
+  "./js/report-output/renderers/mappings/anzenEiseiUchiawaseNisshi.js",
+  "./js/estimate/estimateAssistant.js",
+  "./js/estimate/estimateBatches.js",
+  "./js/estimate/estimateItems.js",
+  "./js/estimate/excelEstimateParser.js",
+  "./js/estimate/excelWorkbookReader.js",
+  "./js/estimate/index.js",
+  "./js/estimate/kangxiRadicalNormalize.js",
+  "./js/estimate/pdfWorkbookReader.js",
+  "./js/ui/estimate-ask-view.js",
+  "./js/ui/estimate-import-view.js",
+  "./js/ui/estimate-list-view.js",
+  "./js/vendor/pdfjs/pdf.min.mjs",
+  "./js/vendor/pdfjs/pdf.worker.min.mjs",
+  "./js/vendor/pdfjs/cmaps/78-EUC-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/78-EUC-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/78-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/78-RKSJ-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/78-RKSJ-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/78-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/78ms-RKSJ-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/78ms-RKSJ-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/83pv-RKSJ-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/90ms-RKSJ-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/90ms-RKSJ-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/90msp-RKSJ-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/90msp-RKSJ-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/90pv-RKSJ-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/90pv-RKSJ-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/Add-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/Add-RKSJ-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/Add-RKSJ-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/Add-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-CNS1-0.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-CNS1-1.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-CNS1-2.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-CNS1-3.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-CNS1-4.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-CNS1-5.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-CNS1-6.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-CNS1-UCS2.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-GB1-0.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-GB1-1.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-GB1-2.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-GB1-3.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-GB1-4.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-GB1-5.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-GB1-UCS2.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-Japan1-0.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-Japan1-1.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-Japan1-2.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-Japan1-3.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-Japan1-4.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-Japan1-5.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-Japan1-6.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-Japan1-UCS2.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-Korea1-0.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-Korea1-1.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-Korea1-2.bcmap",
+  "./js/vendor/pdfjs/cmaps/Adobe-Korea1-UCS2.bcmap",
+  "./js/vendor/pdfjs/cmaps/B5-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/B5-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/B5pc-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/B5pc-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/CNS-EUC-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/CNS-EUC-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/CNS1-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/CNS1-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/CNS2-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/CNS2-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/ETHK-B5-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/ETHK-B5-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/ETen-B5-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/ETen-B5-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/ETenms-B5-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/ETenms-B5-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/EUC-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/EUC-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/Ext-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/Ext-RKSJ-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/Ext-RKSJ-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/Ext-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/GB-EUC-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/GB-EUC-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/GB-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/GB-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/GBK-EUC-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/GBK-EUC-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/GBK2K-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/GBK2K-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/GBKp-EUC-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/GBKp-EUC-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/GBT-EUC-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/GBT-EUC-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/GBT-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/GBT-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/GBTpc-EUC-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/GBTpc-EUC-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/GBpc-EUC-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/GBpc-EUC-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/H.bcmap",
+  "./js/vendor/pdfjs/cmaps/HKdla-B5-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/HKdla-B5-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/HKdlb-B5-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/HKdlb-B5-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/HKgccs-B5-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/HKgccs-B5-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/HKm314-B5-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/HKm314-B5-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/HKm471-B5-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/HKm471-B5-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/HKscs-B5-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/HKscs-B5-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/Hankaku.bcmap",
+  "./js/vendor/pdfjs/cmaps/Hiragana.bcmap",
+  "./js/vendor/pdfjs/cmaps/KSC-EUC-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/KSC-EUC-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/KSC-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/KSC-Johab-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/KSC-Johab-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/KSC-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/KSCms-UHC-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/KSCms-UHC-HW-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/KSCms-UHC-HW-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/KSCms-UHC-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/KSCpc-EUC-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/KSCpc-EUC-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/Katakana.bcmap",
+  "./js/vendor/pdfjs/cmaps/LICENSE",
+  "./js/vendor/pdfjs/cmaps/NWP-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/NWP-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/RKSJ-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/RKSJ-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/Roman.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniCNS-UCS2-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniCNS-UCS2-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniCNS-UTF16-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniCNS-UTF16-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniCNS-UTF32-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniCNS-UTF32-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniCNS-UTF8-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniCNS-UTF8-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniGB-UCS2-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniGB-UCS2-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniGB-UTF16-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniGB-UTF16-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniGB-UTF32-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniGB-UTF32-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniGB-UTF8-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniGB-UTF8-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJIS-UCS2-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJIS-UCS2-HW-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJIS-UCS2-HW-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJIS-UCS2-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJIS-UTF16-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJIS-UTF16-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJIS-UTF32-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJIS-UTF32-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJIS-UTF8-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJIS-UTF8-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJIS2004-UTF16-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJIS2004-UTF16-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJIS2004-UTF32-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJIS2004-UTF32-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJIS2004-UTF8-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJIS2004-UTF8-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJISPro-UCS2-HW-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJISPro-UCS2-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJISPro-UTF8-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJISX0213-UTF32-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJISX0213-UTF32-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJISX02132004-UTF32-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniJISX02132004-UTF32-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniKS-UCS2-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniKS-UCS2-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniKS-UTF16-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniKS-UTF16-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniKS-UTF32-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniKS-UTF32-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniKS-UTF8-H.bcmap",
+  "./js/vendor/pdfjs/cmaps/UniKS-UTF8-V.bcmap",
+  "./js/vendor/pdfjs/cmaps/V.bcmap",
+  "./js/vendor/pdfjs/standard_fonts/FoxitDingbats.pfb",
+  "./js/vendor/pdfjs/standard_fonts/FoxitFixed.pfb",
+  "./js/vendor/pdfjs/standard_fonts/FoxitFixedBold.pfb",
+  "./js/vendor/pdfjs/standard_fonts/FoxitFixedBoldItalic.pfb",
+  "./js/vendor/pdfjs/standard_fonts/FoxitFixedItalic.pfb",
+  "./js/vendor/pdfjs/standard_fonts/FoxitSerif.pfb",
+  "./js/vendor/pdfjs/standard_fonts/FoxitSerifBold.pfb",
+  "./js/vendor/pdfjs/standard_fonts/FoxitSerifBoldItalic.pfb",
+  "./js/vendor/pdfjs/standard_fonts/FoxitSerifItalic.pfb",
+  "./js/vendor/pdfjs/standard_fonts/FoxitSymbol.pfb",
+  "./js/vendor/pdfjs/standard_fonts/LICENSE_FOXIT",
+  "./js/vendor/pdfjs/standard_fonts/LiberationSans-Bold.ttf",
+  "./js/vendor/pdfjs/standard_fonts/LiberationSans-BoldItalic.ttf",
+  "./js/vendor/pdfjs/standard_fonts/LiberationSans-Italic.ttf",
+  "./js/vendor/pdfjs/standard_fonts/LiberationSans-Regular.ttf",
+  "./js/estimate/estimateSourceViewer.js",
+];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((names) => Promise.all(names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))))
+      .then(() => self.clients.claim())
+  );
+});
+
+// 同一オリジンのGETリクエストのみ対象。「キャッシュ優先、無ければ
+// ネットワーク取得してキャッシュへ保存」方式。precache漏れがあっても
+// 一度オンラインで開けば自動的に補完される。
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+
+  event.respondWith(
+    caches.match(req).then((cached) => {
+      if (cached) return cached;
+      return fetch(req)
+        .then((res) => {
+          if (res && res.ok) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
+          }
+          return res;
+        })
+        .catch(() => {
+          // オフラインかつキャッシュも無い場合のみ発生（通常はprecacheで防げる想定）。
+          // ナビゲーション（画面遷移）リクエストならindex.htmlへフォールバックする。
+          if (req.mode === "navigate") return caches.match("./index.html");
+          return new Response("", { status: 504, statusText: "Offline" });
+        });
+    })
+  );
+});

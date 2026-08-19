@@ -12,6 +12,7 @@
    ========================================================== */
 
 import { runMigration } from "./migrate.js";
+import { registerServiceWorker } from "./pwaRegister.js";
 import { registerRoute, startRouter } from "./router.js";
 import { initSiteListView } from "./ui/site-list-view.js";
 import { initSiteFormViewNew, initSiteFormViewEdit } from "./ui/site-form-view.js";
@@ -23,8 +24,10 @@ import { initBackupView } from "./ui/backup-view.js";
 import { initReportOutputView } from "./ui/report-output-view.js";
 import { initEstimateListView } from "./ui/estimate-list-view.js";
 import { initEstimateImportView } from "./ui/estimate-import-view.js";
+import { initEstimateAskView } from "./ui/estimate-ask-view.js";
 
 async function bootstrap() {
+  registerServiceWorker();
   await runMigration();
 
   // 具体的なパターンを先に、汎用的な":id"パターンを後に登録する
@@ -38,6 +41,7 @@ async function bootstrap() {
   registerRoute("/sites/:id/report/new", (params) => initReportFormViewNew(params));
   registerRoute("/sites/:id/report/:reportId", (params) => initReportFormViewEdit(params));
   registerRoute("/sites/:id/estimates/import", (params) => initEstimateImportView(params));
+  registerRoute("/sites/:id/estimates/ask", (params) => initEstimateAskView(params));
   registerRoute("/sites/:id/estimates", (params) => initEstimateListView(params));
   registerRoute("/sites/:id", (params) => initSiteDetailView(params));
 

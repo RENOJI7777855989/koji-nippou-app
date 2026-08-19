@@ -8,10 +8,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="工事日報">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
   <title>工事日報</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+  <p id="offlineBanner" hidden>オフラインモードです</p>
 
   <header class="app-header">
     <h1>工事日報</h1>
@@ -284,6 +290,7 @@
       </div>
       <div class="toolbar">
         <button type="button" id="goToEstimateImportBtn">＋ 積算書を取り込む</button>
+        <button type="button" id="goToEstimateAskBtn" class="secondary-btn">💬 質問する</button>
         <button type="button" id="deleteEstimateBatchBtn" class="secondary-btn" hidden>選択中の取込データを削除</button>
       </div>
 
@@ -346,6 +353,38 @@
           <button type="button" id="estimateCommitBtn">この内容で保存</button>
           <button type="button" id="estimateImportCancelBtn" class="secondary-btn">キャンセル</button>
         </div>
+      </div>
+    </section>
+
+    <!-- 積算データへの質問 -->
+    <section class="view" id="view-estimate-ask" hidden>
+      <button type="button" id="backToEstimateListFromAskBtn" class="link-btn">← 積算内訳に戻る</button>
+      <h2>積算データに質問する<span id="estimateAskSiteName"></span></h2>
+
+      <div id="estimateAskSetupSection" hidden>
+        <p class="app-subtitle">
+          この機能はAnthropic（Claude）のAPIを使用します。ご自身のAPIキーをこの端末のブラウザ内にのみ保存し、質問のたびにAnthropicへ直接送信します。それ以外に外部へ送信することはありません。共有端末では使用しないでください。利用にはAnthropic側の料金が発生します。
+        </p>
+        <label class="full-width">Anthropic APIキー
+          <input type="password" id="estimateAskApiKeyInput" placeholder="sk-ant-...">
+        </label>
+        <div class="form-actions">
+          <button type="button" id="estimateAskSaveKeyBtn">保存する</button>
+        </div>
+      </div>
+
+      <div id="estimateAskMainSection" hidden>
+        <button type="button" id="estimateAskChangeKeyBtn" class="link-btn">APIキーを変更／削除</button>
+        <form id="estimateAskForm" novalidate>
+          <label class="full-width">質問
+            <textarea id="estimateAskQuestionInput" rows="2" placeholder="例）タイル張替えの積算数量は？"></textarea>
+          </label>
+          <div class="form-actions">
+            <button type="submit" id="estimateAskSubmitBtn">質問する</button>
+          </div>
+        </form>
+        <p id="estimateAskLoading" class="app-subtitle" hidden>回答を取得しています…</p>
+        <ul id="estimateAskHistory" class="estimate-ask-history"></ul>
       </div>
     </section>
 
@@ -494,6 +533,16 @@
         <button type="button" id="userCancelBtn" class="secondary-btn">キャンセル</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- 積算項目の出典（元データ）確認モーダル -->
+  <dialog id="estimateSourceDialog">
+    <h3>元データを確認</h3>
+    <p id="estimateSourceMeta" class="app-subtitle"></p>
+    <div id="estimateSourceBody"></div>
+    <div class="form-actions">
+      <button type="button" id="estimateSourceCloseBtn" class="secondary-btn">閉じる</button>
+    </div>
   </dialog>
 
   <script type="module" src="js/main.js"></script>

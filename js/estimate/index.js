@@ -10,6 +10,8 @@ import { readPdf } from "./pdfWorkbookReader.js";
 export { MAPPING_FIELDS, buildPreviewRows, extractEstimateRows } from "./excelEstimateParser.js";
 export { listEstimateBatchesBySite, getEstimateBatch, createEstimateBatch, deleteEstimateBatch } from "./estimateBatches.js";
 export { listEstimateItemsBySite, listEstimateItemsByBatch, getEstimateItem, createEstimateItems } from "./estimateItems.js";
+export { getApiKey, setApiKey, clearApiKey, askEstimateQuestion } from "./estimateAssistant.js";
+export { getItemSourcePreview } from "./estimateSourceViewer.js";
 
 /**
  * アップロードされたファイル(.xlsx/.pdf)の拡張子を見て、Excel/PDFいずれかの

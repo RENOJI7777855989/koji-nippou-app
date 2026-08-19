@@ -193,11 +193,15 @@ commitBtn.addEventListener("click", async () => {
   commitBtn.disabled = true;
   try {
     const mapping = readMappingFromForm();
-    const sourceFileName = fileInput.files[0]?.name || "";
+    const selectedFile = fileInput.files[0] || null;
+    const sourceFileName = selectedFile?.name || "";
     const batch = await createEstimateBatch({
       siteId: currentSite.id,
       sourceFileName,
       sourceFileType: currentSourceFileType,
+      // 出典ページ表示（Phase5）のため、アップロードされた元ファイルをそのまま保存する
+      sourceFileBlob: selectedFile,
+      sourceFileMimeType: selectedFile?.type || "",
       sheetName: currentSheetName,
       columnMapping: mapping,
       headerRow: Number(dataStartRowInput.value) || 1,

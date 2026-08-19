@@ -14,7 +14,8 @@ import { normalizeKangxiRadicals } from "./kangxiRadicalNormalize.js";
 
 let pdfjsPromise = null;
 
-function loadPdfjs() {
+/** pdf.js本体を遅延ロードする。estimateSourceViewer.js（元ページの画像描画）とも共有する */
+export function loadPdfjs() {
   if (!pdfjsPromise) {
     pdfjsPromise = import("../vendor/pdfjs/pdf.min.mjs").then((pdfjsLib) => {
       pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("../vendor/pdfjs/pdf.worker.min.mjs", import.meta.url).href;
@@ -123,17 +124,21 @@ function buildLayoutFromTextContent(items) {
   return { maxRow: lines.length, maxCol: bands.length, cells };
 }
 
+/** pdf.jsでPDFドキュメントを開く。日本語CMap・標準フォントの解決先は常に同じなので一箇所にまとめる */
+async function openPdfDocument(arrayBuffer) {
+  const pdfjsLib = await loadPdfjs();
+  const cMapUrl = new URL("../vendor/pdfjs/cmaps/", import.meta.url).href;
+  const standardFontDataUrl = new URL("../vendor/pdfjs/standard_fonts/", import.meta.url).href;
+  return pdfjsLib.getDocument({ data: arrayBuffer, cMapUrl, cMapPacked: true, standardFontDataUrl }).promise;
+}
+
 /**
  * PDFのArrayBufferを解析し、ページ一覧と、指定ページのセルレイアウトを
  * 読み取れるハンドルを返す（excelWorkbookReader.jsのreadWorkbook()と同じ形状）。
  * @returns {{ sheetNames: string[], readSheet: (pageLabel: string) => Promise<object> }}
  */
 export async function readPdf(arrayBuffer) {
-  const pdfjsLib = await loadPdfjs();
-  const cMapUrl = new URL("../vendor/pdfjs/cmaps/", import.meta.url).href;
-  const standardFontDataUrl = new URL("../vendor/pdfjs/standard_fonts/", import.meta.url).href;
-
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, cMapUrl, cMapPacked: true, standardFontDataUrl }).promise;
+  const pdf = await openPdfDocument(arrayBuffer);
   const sheetNames = Array.from({ length: pdf.numPages }, (_, i) => `${i + 1}ページ`);
 
   return {
@@ -145,4 +150,24 @@ export async function readPdf(arrayBuffer) {
       return buildLayoutFromTextContent(textContent.items);
     }
   };
+}
+
+/**
+ * PDFの指定ページ（"1ページ"等、readPdf()のsheetNamesと同じ形式のラベル）を
+ * canvasに描画し、PNGのdata URLとして返す。Phase5の出典ページ表示で使用する。
+ */
+export async function renderPdfPageImage(blob, pageLabel, scale = 1.5) {
+  const arrayBuffer = await blob.arrayBuffer();
+  const pdf = await openPdfDocument(arrayBuffer);
+  const requestedPage = parseInt(String(pageLabel).replace(/[^0-9]/g, ""), 10) || 1;
+  const pageNumber = Math.max(1, Math.min(pdf.numPages, requestedPage));
+
+  const page = await pdf.getPage(pageNumber);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext("2d");
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return canvas.toDataURL("image/png");
 }

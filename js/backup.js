@@ -15,7 +15,18 @@ import { loadZip, readZipEntryBytes, readZipEntryText, buildZip } from "./zipUti
 import { stampNew } from "./utils.js";
 import { recordChange } from "./auditLog.js";
 
-const DATA_STORES = ["sites", "reports", "photos", "signatures", "companyProfiles", "reportTemplates", "users", "auditLog"];
+const DATA_STORES = [
+  "sites",
+  "reports",
+  "photos",
+  "signatures",
+  "companyProfiles",
+  "reportTemplates",
+  "users",
+  "auditLog",
+  "estimateBatches",
+  "estimateItems"
+];
 
 // 復元時の競合一覧に表示するための、ストアごとの見出しラベルと代表フィールド
 const STORE_LABELS = {
@@ -26,14 +37,18 @@ const STORE_LABELS = {
   companyProfiles: "会社プロフィール",
   reportTemplates: "帳票テンプレート",
   users: "ユーザー",
-  auditLog: "変更履歴"
+  auditLog: "変更履歴",
+  estimateBatches: "積算取込",
+  estimateItems: "積算項目"
 };
 const RECORD_LABEL_FIELDS = {
   sites: "name",
   reports: "date",
   companyProfiles: "name",
   reportTemplates: "name",
-  users: "username"
+  users: "username",
+  estimateBatches: "sourceFileName",
+  estimateItems: "itemName"
 };
 
 // ストアごとに、Blobを含むフィールド一覧（バックアップ時は別ファイルへ退避する）
@@ -44,7 +59,8 @@ const BLOB_FIELDS = {
     { field: "logoBlob", mimeField: "logoMimeType" },
     { field: "hankoBlob", mimeField: "hankoMimeType" }
   ],
-  reportTemplates: [{ field: "sourceFileBlob", mimeField: "sourceFileMimeType" }]
+  reportTemplates: [{ field: "sourceFileBlob", mimeField: "sourceFileMimeType" }],
+  estimateBatches: [{ field: "sourceFileBlob", mimeField: "sourceFileMimeType" }]
 };
 
 export async function exportFullBackup() {

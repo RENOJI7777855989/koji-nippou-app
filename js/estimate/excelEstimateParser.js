@@ -39,13 +39,18 @@ function parseNumericText(text) {
   return { value: n, failed: false };
 }
 
-/** プレビュー表示用: 先頭N行を「列文字→テキスト」のマップとして返す */
-export function buildPreviewRows(layout, maxRows = 15, maxCols = 20) {
+/**
+ * プレビュー表示用: 指定行から最大maxRows行分を「列文字→テキスト」のマップとして返す。
+ * startRowを省略すると先頭行からになる（取込時の列マッピングUI向け既定動作）。
+ * 出典データの該当行を前後数行だけ見せたい場合はstartRowを指定する。
+ */
+export function buildPreviewRows(layout, maxRows = 15, maxCols = 20, startRow = 1) {
   const lastCol = Math.min(layout.maxCol, maxCols);
-  const lastRow = Math.min(layout.maxRow, maxRows);
+  const firstRow = Math.max(1, startRow);
+  const lastRow = Math.min(layout.maxRow, firstRow + maxRows - 1);
   const colLetters = Array.from({ length: lastCol }, (_, i) => colIndexToLetters(i + 1));
   const rows = [];
-  for (let r = 1; r <= lastRow; r++) {
+  for (let r = firstRow; r <= lastRow; r++) {
     const cells = {};
     colLetters.forEach((letter) => {
       cells[letter] = cellText(layout, letter, r);

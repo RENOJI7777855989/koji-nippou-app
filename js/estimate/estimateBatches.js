@@ -18,11 +18,26 @@ export async function getEstimateBatch(id) {
   return dbGet("estimateBatches", id);
 }
 
-export async function createEstimateBatch({ siteId, sourceFileName, sourceFileType = "excel", sheetName, columnMapping, headerRow, itemCount, memo = "" }) {
+export async function createEstimateBatch({
+  siteId,
+  sourceFileName,
+  sourceFileType = "excel",
+  sourceFileBlob = null,
+  sourceFileMimeType = "",
+  sheetName,
+  columnMapping,
+  headerRow,
+  itemCount,
+  memo = ""
+}) {
   const batch = stampNew({
     siteId,
     sourceFileName,
     sourceFileType, // "excel" | "pdf"
+    // 出典ページ表示（Phase5）のため、アップロードされた元ファイルをそのまま保持する。
+    // 本機能追加前に取り込んだ既存バッチにはこのフィールドが無く、閲覧時はその旨を案内する。
+    sourceFileBlob,
+    sourceFileMimeType,
     sheetName,
     columnMapping,
     headerRow,
