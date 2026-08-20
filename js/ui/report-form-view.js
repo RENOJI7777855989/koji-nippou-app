@@ -64,8 +64,12 @@ function renderPatrolChecklistTemplate() {
 }
 renderPatrolChecklistTemplate();
 
+// 新規日報作成時は、全項目を「良」で初期化する（実際には大半が良好であることが
+// 多く、否・該当なしの項目だけを選び直す方が入力の手間が少ないため）。
+// 既存日報の編集時（loadPatrolChecklist）は、保存済みの値をそのまま復元するため
+// この既定値の影響は受けない。
 function resetPatrolChecklist() {
-  patrolChecklistContainer.querySelectorAll("select").forEach((select) => (select.value = ""));
+  patrolChecklistContainer.querySelectorAll("select").forEach((select) => (select.value = "good"));
 }
 
 function loadPatrolChecklist(patrolChecklist = {}) {

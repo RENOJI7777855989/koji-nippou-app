@@ -7,6 +7,13 @@
    現場情報・工事日報・人員一覧（協力会社ごと）・写真・職長サイン・
    巡回点検記録・安全確認事項をすべて1枚のHTMLに反映する。
    写真は大きめのカード表示で見やすさを優先する。
+
+   「常にA4用紙1枚に収める」という要件のため、内容量（協力会社数・
+   写真枚数等）によって自然な高さが変わっても必ず1ページに収まる
+   よう、印刷時に内容全体をJavaScriptで実測してCSS transform:scale
+   で縮小する（Excelの「シートを1ページに収める」に相当する処理を
+   HTML側で行っている）。写真も含めて縮小されるため、内容が少ない
+   ときほど写真は大きく、内容が多いときは縮小されて1枚に収まる。
    ========================================================== */
 
 import { registerPdfRenderer } from "../rendererRegistry.js";
@@ -19,6 +26,13 @@ export const DEFAULT_PDF_MAPPING = {
   showLogo: true,
   showHanko: true
 };
+
+// @page { size: A4; margin: 12mm; } の印刷可能領域を96dpi換算pxにしたもの。
+// 縮小率計算(fitToOnePage)は、この値を目標サイズとして使う。
+const A4_MARGIN_MM = 12;
+const MM_TO_PX = 96 / 25.4;
+const A4_CONTENT_WIDTH_PX = Math.round((210 - A4_MARGIN_MM * 2) * MM_TO_PX);
+const A4_CONTENT_HEIGHT_PX = Math.round((297 - A4_MARGIN_MM * 2) * MM_TO_PX);
 
 const PATROL_STATUS_LABEL = Object.fromEntries(PATROL_STATUS_OPTIONS.map((o) => [o.value, o.label]));
 
@@ -72,7 +86,8 @@ async function render(model, mapping, companyProfile) {
 <style>
   @page { size: A4; margin: 12mm; }
   * { box-sizing: border-box; }
-  body { font-family: "Hiragino Sans", "Yu Gothic", sans-serif; margin: 0; padding: 16px; color: #222; }
+  body { font-family: "Hiragino Sans", "Yu Gothic", sans-serif; margin: 0; padding: 0; color: #222; }
+  #page-content { padding: 16px; }
   header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 3px solid #2b6cb0; padding-bottom: 8px; }
   header img { max-height: 56px; }
   h1 { font-size: 22px; margin: 0; color: #1a4971; }
@@ -110,10 +125,19 @@ async function render(model, mapping, companyProfile) {
 
   .signature-area { margin-top: 20px; display: flex; align-items: flex-end; justify-content: flex-end; gap: 16px; }
   .signature-area img { max-height: 80px; }
-  @media print { body { padding: 0; } }
+
+  /* 内容全体を常にA4用紙1枚に収めるための縮小コンテナ。
+     #page-outerの高さをJSで実測結果に合わせるため、初期状態では
+     高さ非表示(overflow:hidden, height:0)にしておき、縮小率が
+     決まった瞬間に正しい高さへ切り替える（縮小前の一瞬だけ
+     はみ出した状態が見えてしまうのを防ぐ）。 */
+  #page-outer { overflow: hidden; }
+  #page-content { transform-origin: top left; }
 </style>
 </head>
 <body>
+  <div id="page-outer">
+  <div id="page-content">
   <header>
     <h1>${escapeHtml(opts.title)}</h1>
     ${logoDataUrl ? `<img src="${logoDataUrl}" alt="会社ロゴ">` : ""}
@@ -159,6 +183,33 @@ async function render(model, mapping, companyProfile) {
   ` : ""}
 
   ${hankoDataUrl ? `<div class="signature-area"><img src="${hankoDataUrl}" alt="印影"></div>` : ""}
+  </div>
+  </div>
+  <script>
+  (function () {
+    // A4縦・余白12mmでの印刷可能領域（96dpi換算px）。@pageの設定と対応させている。
+    var TARGET_WIDTH_PX = ${A4_CONTENT_WIDTH_PX};
+    var TARGET_HEIGHT_PX = ${A4_CONTENT_HEIGHT_PX};
+
+    function fitToOnePage() {
+      var content = document.getElementById("page-content");
+      var outer = document.getElementById("page-outer");
+      if (!content || !outer) return;
+      content.style.transform = "none";
+      content.style.width = TARGET_WIDTH_PX + "px";
+      var naturalHeight = content.scrollHeight;
+      var scale = Math.min(1, TARGET_HEIGHT_PX / naturalHeight);
+      content.style.transform = "scale(" + scale + ")";
+      outer.style.width = TARGET_WIDTH_PX + "px";
+      outer.style.height = Math.ceil(naturalHeight * scale) + "px";
+    }
+
+    window.addEventListener("load", fitToOnePage);
+    window.addEventListener("beforeprint", fitToOnePage);
+    window.addEventListener("resize", fitToOnePage);
+    if (document.readyState === "complete") fitToOnePage();
+  })();
+  </script>
 </body>
 </html>`;
 
