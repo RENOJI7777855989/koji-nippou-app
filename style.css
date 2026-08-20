@@ -923,3 +923,117 @@ dialog h3 {
 .estimate-ask-answer.error {
   color: #b02b2b;
 }
+
+/* ---------- 業者見積・見積積算比較 ---------- */
+
+.info-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 16px;
+  background: #f4f8fc;
+  border: 1px solid #cfe3f7;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 12px 0;
+}
+
+.info-panel-grid dt {
+  font-size: 12px;
+  color: #667;
+  margin: 0;
+}
+
+.info-panel-grid dd {
+  font-size: 15px;
+  font-weight: bold;
+  margin: 2px 0 0;
+}
+
+.comparison-summary-panel {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.comparison-summary-box {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.comparison-summary-box dt {
+  font-size: 12px;
+  color: #667;
+  margin: 0;
+}
+
+.comparison-summary-box dd {
+  font-size: 16px;
+  font-weight: bold;
+  margin: 2px 0 0;
+}
+
+.comparison-summary-attention {
+  background: #fff1cf;
+  border-color: #e6c477;
+}
+
+.comparison-table th,
+.comparison-table td {
+  white-space: normal;
+  vertical-align: top;
+}
+
+.comparison-item-name {
+  margin: 0 0 2px;
+  font-size: 12px;
+}
+
+.comparison-note {
+  font-size: 12px;
+  color: #555;
+  min-width: 200px;
+}
+
+.comparison-decision-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.comparison-decision-actions button {
+  width: auto;
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.comparison-type-estimate-only td,
+.comparison-type-vendor-only td {
+  background: #fdecec;
+}
+
+.comparison-type-duplicate-possible td {
+  background: #ececfa;
+}
+
+.comparison-type-needs-review td {
+  background: #fafafa;
+}
+
+.comparison-type-diff td {
+  background: #fffaf0;
+}
+
+@media (min-width: 700px) {
+  .comparison-summary-panel {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 900px) {
+  .comparison-summary-panel {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}

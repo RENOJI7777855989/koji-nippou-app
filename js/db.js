@@ -5,7 +5,7 @@
    ========================================================== */
 
 const DB_NAME = "constructionReportsDB";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 let dbPromise = null;
 
@@ -94,6 +94,28 @@ export function openDb() {
         store.createIndex("by_siteId", "siteId");
         store.createIndex("by_estimateBatchId", "estimateBatchId");
         store.createIndex("by_siteId_category", ["siteId", "category"]);
+      }
+
+      // 業者見積・積算比較機能。estimateBatches/estimateItemsと同じ考え方で
+      // siteIdのみで紐付ける独立ストア。既存の積算ストアには一切変更を加えない。
+      if (!db.objectStoreNames.contains("vendorQuoteBatches")) {
+        const store = db.createObjectStore("vendorQuoteBatches", { keyPath: "id" });
+        store.createIndex("by_siteId", "siteId");
+      }
+
+      if (!db.objectStoreNames.contains("vendorQuoteItems")) {
+        const store = db.createObjectStore("vendorQuoteItems", { keyPath: "id" });
+        store.createIndex("by_siteId", "siteId");
+        store.createIndex("by_vendorQuoteBatchId", "vendorQuoteBatchId");
+      }
+
+      // ユーザーが比較画面で確定させた「同一項目／別項目」の対応関係。
+      // レコードIDではなく正規化した項目名文字列をキーにするため、
+      // 再取込後の新しいバッチにも自動適用できる。
+      if (!db.objectStoreNames.contains("itemMatchOverrides")) {
+        const store = db.createObjectStore("itemMatchOverrides", { keyPath: "id" });
+        store.createIndex("by_siteId", "siteId");
+        store.createIndex("by_siteId_estimateItemKey", ["siteId", "estimateItemKey"]);
       }
     };
 

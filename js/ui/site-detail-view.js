@@ -24,6 +24,8 @@ const newReportBtn = document.getElementById("newReportBtn");
 const reportListEl = document.getElementById("reportList");
 const reportListEmptyEl = document.getElementById("reportListEmpty");
 const goToEstimateListBtn = document.getElementById("goToEstimateListBtn");
+const goToVendorQuoteImportFromSiteBtn = document.getElementById("goToVendorQuoteImportFromSiteBtn");
+const goToComparisonFromSiteBtn = document.getElementById("goToComparisonFromSiteBtn");
 
 const copyDialog = document.getElementById("copySiteDialog");
 const copyForm = document.getElementById("copySiteForm");
@@ -65,6 +67,8 @@ editBtn.addEventListener("click", () => navigate(`/sites/${currentSite.id}/edit`
 backBtn.addEventListener("click", () => navigate("/sites"));
 newReportBtn.addEventListener("click", () => navigate(`/sites/${currentSite.id}/report/new`));
 goToEstimateListBtn.addEventListener("click", () => navigate(`/sites/${currentSite.id}/estimates`));
+goToVendorQuoteImportFromSiteBtn.addEventListener("click", () => navigate(`/sites/${currentSite.id}/vendor-quotes/import`));
+goToComparisonFromSiteBtn.addEventListener("click", () => navigate(`/sites/${currentSite.id}/vendor-quotes/compare`));
 
 copyBtn.addEventListener("click", () => {
   copyNewNameInput.value = `${currentSite.name}のコピー`;

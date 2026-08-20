@@ -25,6 +25,9 @@ import { initReportOutputView } from "./ui/report-output-view.js";
 import { initEstimateListView } from "./ui/estimate-list-view.js";
 import { initEstimateImportView } from "./ui/estimate-import-view.js";
 import { initEstimateAskView } from "./ui/estimate-ask-view.js";
+import { initVendorQuoteListView } from "./ui/vendor-quote-list-view.js";
+import { initVendorQuoteImportView } from "./ui/vendor-quote-import-view.js";
+import { initComparisonView } from "./ui/comparison-view.js";
 
 async function bootstrap() {
   registerServiceWorker();
@@ -43,6 +46,9 @@ async function bootstrap() {
   registerRoute("/sites/:id/estimates/import", (params) => initEstimateImportView(params));
   registerRoute("/sites/:id/estimates/ask", (params) => initEstimateAskView(params));
   registerRoute("/sites/:id/estimates", (params) => initEstimateListView(params));
+  registerRoute("/sites/:id/vendor-quotes/import", (params) => initVendorQuoteImportView(params));
+  registerRoute("/sites/:id/vendor-quotes/compare", (params) => initComparisonView(params));
+  registerRoute("/sites/:id/vendor-quotes", (params) => initVendorQuoteListView(params));
   registerRoute("/sites/:id", (params) => initSiteDetailView(params));
 
   startRouter();

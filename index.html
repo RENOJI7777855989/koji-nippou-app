@@ -146,6 +146,12 @@
 
       <h2>積算</h2>
       <button type="button" id="goToEstimateListBtn" class="secondary-btn">📐 積算内訳を見る</button>
+
+      <h2>🏢 業者見積</h2>
+      <div class="toolbar">
+        <button type="button" id="goToVendorQuoteImportFromSiteBtn" class="secondary-btn">＋ 業者見積を取り込む</button>
+        <button type="button" id="goToComparisonFromSiteBtn" class="secondary-btn">🔍 見積・積算比較</button>
+      </div>
     </section>
 
     <!-- 日報フォーム -->
@@ -385,6 +391,170 @@
         </form>
         <p id="estimateAskLoading" class="app-subtitle" hidden>回答を取得しています…</p>
         <ul id="estimateAskHistory" class="estimate-ask-history"></ul>
+      </div>
+    </section>
+
+    <!-- 業者見積一覧 -->
+    <section class="view" id="view-vendor-quote-list" hidden>
+      <button type="button" id="backToSiteFromVendorQuoteListBtn" class="link-btn">← 現場詳細に戻る</button>
+      <h2>業者見積<span id="vendorQuoteListSiteName"></span></h2>
+
+      <div class="toolbar">
+        <input type="search" id="vendorQuoteSearchInput" placeholder="工種・項目・仕様で検索">
+        <select id="vendorQuoteCategoryFilter">
+          <option value="">工種すべて</option>
+        </select>
+        <select id="vendorQuoteBatchFilter">
+          <option value="">すべての取込</option>
+        </select>
+      </div>
+      <div class="toolbar">
+        <button type="button" id="goToVendorQuoteImportBtn">＋ 業者見積を取り込む</button>
+        <button type="button" id="goToComparisonFromListBtn" class="secondary-btn" hidden>🔍 見積・積算比較</button>
+        <button type="button" id="deleteVendorQuoteBatchBtn" class="secondary-btn" hidden>選択中の取込データを削除</button>
+      </div>
+
+      <p id="vendorQuoteSummaryLine" class="app-subtitle"></p>
+      <p id="vendorQuoteListEmpty" class="empty-message">業者見積データがまだありません。まずは見積書を取り込んでください。</p>
+      <div class="table-scroll" id="vendorQuoteTableWrap" hidden>
+        <table class="estimate-table">
+          <thead>
+            <tr>
+              <th>工種</th><th>項目</th><th>仕様</th><th>数量</th><th>単位</th><th>単価</th><th>金額</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="vendorQuoteTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 業者見積の取込 -->
+    <section class="view" id="view-vendor-quote-import" hidden>
+      <button type="button" id="backToVendorQuoteListBtn" class="link-btn">← 業者見積一覧に戻る</button>
+      <h2>業者見積の取込</h2>
+      <p class="app-subtitle">業者見積書（Excel/.xlsx、PDF、またはCSV）をアップロードし、列の対応付けを確認してから取り込みます。</p>
+
+      <div class="field-grid">
+        <label>業者名
+          <input type="text" id="vendorQuoteVendorName" placeholder="例）〇〇建設株式会社">
+        </label>
+        <label>見積番号
+          <input type="text" id="vendorQuoteNumber" placeholder="任意">
+        </label>
+        <label>見積日
+          <input type="date" id="vendorQuoteDate">
+        </label>
+      </div>
+
+      <label class="full-width">業者見積ファイル（.xlsx / .pdf / .csv）
+        <input type="file" id="vendorQuoteFileInput" accept=".xlsx,.pdf,.csv">
+      </label>
+
+      <div id="vendorQuoteImportSheetSection" hidden>
+        <label>シート／ページを選択
+          <select id="vendorQuoteSheetSelect"></select>
+        </label>
+      </div>
+
+      <div id="vendorQuoteImportMappingSection" hidden>
+        <h3>列の対応付け</h3>
+        <p class="app-subtitle">プレビューを見ながら、各項目に対応する列とデータ開始行を指定してください。</p>
+        <div class="field-grid" id="vendorQuoteMappingFields"></div>
+        <label>データ開始行
+          <input type="number" id="vendorQuoteDataStartRow" min="1" value="2">
+        </label>
+
+        <h3>プレビュー（先頭数行）</h3>
+        <div class="table-scroll">
+          <table class="estimate-table" id="vendorQuotePreviewTable"></table>
+        </div>
+
+        <div class="toolbar">
+          <button type="button" id="vendorQuoteConvertBtn" class="secondary-btn">変換プレビュー</button>
+        </div>
+      </div>
+
+      <div id="vendorQuoteImportResultSection" hidden>
+        <h3>取込結果プレビュー</h3>
+        <p id="vendorQuoteResultSummary" class="app-subtitle"></p>
+        <p id="vendorQuoteResultWarning" class="empty-message" hidden></p>
+        <div class="table-scroll">
+          <table class="estimate-table" id="vendorQuoteResultTable"></table>
+        </div>
+        <div class="form-actions">
+          <button type="button" id="vendorQuoteCommitBtn">この内容で保存</button>
+          <button type="button" id="vendorQuoteImportCancelBtn" class="secondary-btn">キャンセル</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 見積・積算比較 -->
+    <section class="view" id="view-comparison" hidden>
+      <button type="button" id="backToVendorQuoteListFromComparisonBtn" class="link-btn">← 業者見積一覧に戻る</button>
+      <h2>見積・積算比較<span id="comparisonSiteName"></span></h2>
+
+      <label>比較する業者見積
+        <select id="comparisonVendorSelect"></select>
+      </label>
+      <p id="comparisonNoBatchMessage" class="empty-message">業者見積がまだ取り込まれていません。先に業者見積を取り込んでください。</p>
+
+      <div id="comparisonMainArea" hidden>
+        <dl class="info-panel-grid" id="comparisonHeaderInfo"></dl>
+
+        <fieldset class="pdf-variant-fieldset">
+          <legend>許容差設定（この範囲内は「一致」とみなします）</legend>
+          <div class="field-grid">
+            <label>数量差 注意（%）
+              <input type="number" id="toleranceQuantityWarn" min="0" step="0.5">
+            </label>
+            <label>数量差 警告（%）
+              <input type="number" id="toleranceQuantityAlert" min="0" step="0.5">
+            </label>
+            <label>単価差 注意（%）
+              <input type="number" id="tolerancePriceWarn" min="0" step="0.5">
+            </label>
+            <label>単価差 警告（%）
+              <input type="number" id="tolerancePriceAlert" min="0" step="0.5">
+            </label>
+          </div>
+          <div class="toolbar">
+            <button type="button" id="toleranceApplyBtn" class="secondary-btn">この設定で再計算</button>
+          </div>
+        </fieldset>
+
+        <dl class="comparison-summary-panel" id="comparisonSummaryPanel"></dl>
+
+        <div class="toolbar">
+          <select id="comparisonFilterSelect">
+            <option value="">すべての判定</option>
+            <option value="match">一致</option>
+            <option value="diff">差あり</option>
+            <option value="needs_review">要確認</option>
+            <option value="estimate_only">見積漏れの可能性</option>
+            <option value="vendor_only">積算漏れの可能性</option>
+            <option value="duplicate_possible">重複の可能性</option>
+          </select>
+          <input type="search" id="comparisonSearchInput" placeholder="工種・項目・仕様で検索">
+        </div>
+
+        <div class="toolbar">
+          <button type="button" id="comparisonExportCsvBtn" class="secondary-btn">Excel(CSV)で出力</button>
+          <button type="button" id="comparisonExportPdfBtn" class="secondary-btn">PDF出力用プレビュー</button>
+          <button type="button" id="comparisonPrintBtn" class="secondary-btn" hidden>印刷する</button>
+        </div>
+
+        <p id="comparisonEmpty" class="empty-message">比較結果がありません。</p>
+        <div class="table-scroll" id="comparisonTableWrap" hidden>
+          <table class="estimate-table comparison-table">
+            <thead>
+              <tr>
+                <th>判定</th><th>工種</th><th>項目名（積算／見積）</th><th>数量（積算／見積）</th><th>単価（積算／見積）</th><th>金額（積算／見積）</th><th>備考・操作</th>
+              </tr>
+            </thead>
+            <tbody id="comparisonTableBody"></tbody>
+          </table>
+        </div>
+        <iframe id="comparisonPdfPreviewFrame" class="output-preview-frame" title="比較結果PDF出力プレビュー" hidden></iframe>
       </div>
     </section>
 

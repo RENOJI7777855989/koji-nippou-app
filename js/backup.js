@@ -25,7 +25,10 @@ const DATA_STORES = [
   "users",
   "auditLog",
   "estimateBatches",
-  "estimateItems"
+  "estimateItems",
+  "vendorQuoteBatches",
+  "vendorQuoteItems",
+  "itemMatchOverrides"
 ];
 
 // 復元時の競合一覧に表示するための、ストアごとの見出しラベルと代表フィールド
@@ -39,7 +42,10 @@ const STORE_LABELS = {
   users: "ユーザー",
   auditLog: "変更履歴",
   estimateBatches: "積算取込",
-  estimateItems: "積算項目"
+  estimateItems: "積算項目",
+  vendorQuoteBatches: "業者見積取込",
+  vendorQuoteItems: "業者見積項目",
+  itemMatchOverrides: "項目対応関係"
 };
 const RECORD_LABEL_FIELDS = {
   sites: "name",
@@ -48,7 +54,9 @@ const RECORD_LABEL_FIELDS = {
   reportTemplates: "name",
   users: "username",
   estimateBatches: "sourceFileName",
-  estimateItems: "itemName"
+  estimateItems: "itemName",
+  vendorQuoteBatches: "sourceFileName",
+  vendorQuoteItems: "itemName"
 };
 
 // ストアごとに、Blobを含むフィールド一覧（バックアップ時は別ファイルへ退避する）
@@ -60,7 +68,8 @@ const BLOB_FIELDS = {
     { field: "hankoBlob", mimeField: "hankoMimeType" }
   ],
   reportTemplates: [{ field: "sourceFileBlob", mimeField: "sourceFileMimeType" }],
-  estimateBatches: [{ field: "sourceFileBlob", mimeField: "sourceFileMimeType" }]
+  estimateBatches: [{ field: "sourceFileBlob", mimeField: "sourceFileMimeType" }],
+  vendorQuoteBatches: [{ field: "sourceFileBlob", mimeField: "sourceFileMimeType" }]
 };
 
 export async function exportFullBackup() {
