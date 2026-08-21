@@ -1,14 +1,17 @@
 /* ==========================================================
-   見積・積算比較画面
+   見積・積算比較画面（積算チェックシステム）
    積算資料（現場の全estimateItemsをそのまま再利用）と、選択した
    業者見積バッチ（vendorQuoteItems）を、js/vendorQuote/
    compareEstimateToQuote.js（純粋関数・文字列類似度のみ・
-   ネットワーク不要）で比較し、一致/数量差/単価差/金額差/
-   見積漏れの可能性/積算漏れの可能性/重複の可能性/要確認 に
-   分類して一覧表示する。「要確認」項目はその場で「同一項目」
-   「別項目」を選択でき、選択内容はitemMatchOverridesに保存され
-   次回以降の比較に自動適用される。比較結果自体は保存しない
-   （開くたびに再計算する）。
+   ネットワーク不要）で比較する。この画面の最優先の目的は
+   「見積比較」ではなく「見積落としの発見」であり、比較結果を
+   js/vendorQuote/omissionCheck.jsでリスク判定（高/中/低/要確認）
+   付きの「見積落とし候補」に組み替えて最上部に表示する。
+   ユーザーの最終判断（見積落とし／別項目に含む／一式に含む／
+   対象外／問題なし／要確認）はomissionDispositionsに保存し、
+   次回以降の比較に自動適用される。「要確認」項目（あいまい一致）
+   はその場で「同一項目」「別項目」も選択でき、itemMatchOverrides
+   に保存される。比較結果自体は保存しない（開くたびに再計算する）。
    ========================================================== */
 
 import { getSite } from "../sites.js";
@@ -21,6 +24,10 @@ import {
   compareEstimateToQuote,
   summarizeComparison,
   DEFAULT_TOLERANCE,
+  checkOmissions,
+  listOmissionDispositionsByBatch,
+  setOmissionDisposition,
+  buildItemKey,
   exportComparisonCsv,
   buildComparisonPrintHtml
 } from "../vendorQuote/index.js";
@@ -51,6 +58,20 @@ const tableWrap = document.getElementById("comparisonTableWrap");
 const tableBody = document.getElementById("comparisonTableBody");
 const emptyEl = document.getElementById("comparisonEmpty");
 
+const omissionOverallPanel = document.getElementById("omissionOverallPanel");
+const omissionCandidatesEmpty = document.getElementById("omissionCandidatesEmpty");
+const omissionCandidatesTableWrap = document.getElementById("omissionCandidatesTableWrap");
+const omissionCandidatesTableBody = document.getElementById("omissionCandidatesTableBody");
+const reverseCandidatesEmpty = document.getElementById("reverseCandidatesEmpty");
+const reverseCandidatesTableWrap = document.getElementById("reverseCandidatesTableWrap");
+const reverseCandidatesTableBody = document.getElementById("reverseCandidatesTableBody");
+const resolvedEstimateEmpty = document.getElementById("resolvedEstimateEmpty");
+const resolvedEstimateTableWrap = document.getElementById("resolvedEstimateTableWrap");
+const resolvedEstimateTableBody = document.getElementById("resolvedEstimateTableBody");
+const resolvedVendorEmpty = document.getElementById("resolvedVendorEmpty");
+const resolvedVendorTableWrap = document.getElementById("resolvedVendorTableWrap");
+const resolvedVendorTableBody = document.getElementById("resolvedVendorTableBody");
+
 const exportCsvBtn = document.getElementById("comparisonExportCsvBtn");
 const exportPdfBtn = document.getElementById("comparisonExportPdfBtn");
 const printBtn = document.getElementById("comparisonPrintBtn");
@@ -62,9 +83,13 @@ let currentBatch = null;
 let estimateItems = [];
 let vendorItems = [];
 let overrides = [];
+let dispositions = [];
 let currentResults = [];
 let currentSummary = null;
+let omissionResult = null;
 let tolerance = { ...DEFAULT_TOLERANCE };
+// 「別項目に含む」「一式に含む」選択時、対応するvendor項目を選ぶまでの一時状態
+let pendingPick = null; // { idx, disposition }
 
 const TYPE_LABEL = {
   match: "一致",
@@ -75,11 +100,33 @@ const TYPE_LABEL = {
   duplicate_possible: "重複の可能性"
 };
 
+const ESTIMATE_ACTIONS = [
+  { action: "omission_confirmed", label: "見積落とし" },
+  { action: "included_in_other_item", label: "別項目に含む" },
+  { action: "included_in_lump_sum", label: "一式に含む" },
+  { action: "not_applicable", label: "対象外" },
+  { action: "ok", label: "問題なし" },
+  { action: "needs_review", label: "要確認" }
+];
+const VENDOR_ACTIONS = [
+  { action: "additional_work", label: "追加工事" },
+  { action: "separate_contract", label: "別途工事" },
+  { action: "out_of_scope", label: "積算対象外" },
+  { action: "possible_duplicate", label: "二重計上の可能性" },
+  { action: "ok", label: "問題なし" },
+  { action: "needs_review", label: "要確認" }
+];
+const LINK_PICKER_ACTIONS = new Set(["included_in_other_item", "included_in_lump_sum"]);
+
 function fmt(n) {
   return n == null ? "" : n.toLocaleString("ja-JP");
 }
 function fmtPct(n) {
   return n == null ? "-" : `${n.toFixed(1)}%`;
+}
+function vendorItemLabel(key) {
+  const v = vendorItems.find((item) => buildItemKey(item) === key);
+  return v ? `${v.itemName}${v.spec ? `（${v.spec}）` : ""}` : "";
 }
 
 function readToleranceFromForm() {
@@ -101,10 +148,15 @@ function writeToleranceToForm() {
   toleranceInputs.priceAlertPercent.value = tolerance.priceAlertPercent;
 }
 
-function runComparison() {
+function recomputeAll() {
   currentResults = compareEstimateToQuote({ estimateItems, vendorItems, overrides, tolerance });
   currentSummary = summarizeComparison({ estimateItems, vendorItems, results: currentResults });
+  omissionResult = checkOmissions({ compareResults: currentResults, vendorItems, dispositions });
   renderSummary();
+  renderOmissionOverall();
+  renderOmissionCandidates();
+  renderReverseCandidates();
+  renderResolvedLists();
   renderTable();
 }
 
@@ -123,6 +175,100 @@ function renderSummary() {
     <div class="comparison-summary-box"><dt>一致</dt><dd>${currentSummary.counts.match || 0}件</dd></div>
     <div class="comparison-summary-box comparison-summary-attention"><dt>確認が必要</dt><dd>${needsAttentionCount}件</dd></div>
   `;
+}
+
+const OVERALL_STATUS_META = {
+  attention: { cls: "status-attention", label: "🔴 要確認" },
+  partial: { cls: "status-partial", label: "🟡 一部要確認" },
+  ok: { cls: "status-ok", label: "🟢 問題なし" }
+};
+
+function renderOmissionOverall() {
+  const s = omissionResult.summary;
+  const meta = OVERALL_STATUS_META[s.overallStatus];
+  omissionOverallPanel.className = `omission-overall-panel ${meta.cls}`;
+  omissionOverallPanel.innerHTML = `
+    <span>積算チェック 総合判定: ${meta.label}</span>
+    <span class="omission-overall-detail">見積落としの可能性: 高 ${s.counts.high}件／中 ${s.counts.medium}件／低 ${s.counts.low}件／要確認 ${s.counts.needs_review}件</span>
+    <span class="omission-overall-detail">見積落とし候補 概算金額（積算資料の金額ベース・参考値）: ${fmt(s.referenceAmountTotal)}円</span>
+  `;
+}
+
+function omissionActionButtonsHtml(idx, actions, prefix) {
+  return `<div class="omission-decision-actions">${actions
+    .map(({ action, label }) => `<button type="button" class="secondary-btn ${prefix}ActionBtn" data-idx="${idx}" data-action="${action}">${escapeHtml(label)}</button>`)
+    .join("")}</div>`;
+}
+
+function linkPickerHtml(idx) {
+  const options = vendorItems.map((v) => `<option value="${escapeHtml(buildItemKey(v))}">${escapeHtml(v.itemName)}${v.spec ? `（${escapeHtml(v.spec)}）` : ""} - ${fmt(v.amount)}円</option>`).join("");
+  return `<div class="omission-link-picker">
+    <select class="omissionLinkSelect" data-idx="${idx}">${options}</select>
+    <button type="button" class="secondary-btn omissionLinkConfirmBtn" data-idx="${idx}">確定</button>
+    <button type="button" class="secondary-btn omissionLinkCancelBtn" data-idx="${idx}">キャンセル</button>
+  </div>`;
+}
+
+function omissionCandidateRowHtml(c, idx) {
+  const item = c.item;
+  const actionsHtml =
+    pendingPick && pendingPick.idx === idx ? linkPickerHtml(idx) : omissionActionButtonsHtml(idx, ESTIMATE_ACTIONS, "omission");
+  const tag = c.dispositionLabel ? `<span class="omission-disposition-tag">${escapeHtml(c.dispositionLabel)}</span>` : "";
+  return `<tr>
+    <td><span class="risk-badge risk-${c.risk}">${escapeHtml(c.riskLabel)}</span></td>
+    <td>${escapeHtml(item.category)}</td>
+    <td>${escapeHtml(item.itemName)}${item.spec ? `（${escapeHtml(item.spec)}）` : ""}<br>${fmt(item.quantity)}${escapeHtml(item.unit)} ／ 積算金額(参考) ${fmt(c.referenceAmount)}円</td>
+    <td class="comparison-note">${escapeHtml(c.reason || "")}</td>
+    <td>${actionsHtml}${tag}</td>
+  </tr>`;
+}
+
+function renderOmissionCandidates() {
+  const list = omissionResult.candidates;
+  omissionCandidatesEmpty.style.display = list.length === 0 ? "block" : "none";
+  omissionCandidatesTableWrap.hidden = list.length === 0;
+  omissionCandidatesTableBody.innerHTML = list.map((c, idx) => omissionCandidateRowHtml(c, idx)).join("");
+}
+
+function reverseCandidateRowHtml(c, idx) {
+  const item = c.item;
+  const actionsHtml = omissionActionButtonsHtml(idx, VENDOR_ACTIONS, "reverse");
+  const tag = c.dispositionLabel ? `<span class="omission-disposition-tag">${escapeHtml(c.dispositionLabel)}</span>` : "";
+  return `<tr>
+    <td>${escapeHtml(item.category)}</td>
+    <td>${escapeHtml(item.itemName)}${item.spec ? `（${escapeHtml(item.spec)}）` : ""}<br>${fmt(item.quantity)}${escapeHtml(item.unit)} ／ ${fmt(item.amount)}円</td>
+    <td class="comparison-note">${escapeHtml(c.reason || "")}</td>
+    <td>${actionsHtml}${tag}</td>
+  </tr>`;
+}
+
+function renderReverseCandidates() {
+  const list = omissionResult.reverseCandidates;
+  reverseCandidatesEmpty.style.display = list.length === 0 ? "block" : "none";
+  reverseCandidatesTableWrap.hidden = list.length === 0;
+  reverseCandidatesTableBody.innerHTML = list.map((c, idx) => reverseCandidateRowHtml(c, idx)).join("");
+}
+
+function resolvedRowHtml(c, idx, prefix) {
+  const linked = c.linkedItemKey ? `（${escapeHtml(vendorItemLabel(c.linkedItemKey))}）` : "";
+  return `<tr>
+    <td>${escapeHtml(c.item.category)}</td>
+    <td>${escapeHtml(c.item.itemName)}${c.item.spec ? `（${escapeHtml(c.item.spec)}）` : ""}</td>
+    <td>${escapeHtml(c.dispositionLabel || "")}${linked}</td>
+    <td><button type="button" class="secondary-btn ${prefix}ResetBtn" data-idx="${idx}">見直す</button></td>
+  </tr>`;
+}
+
+function renderResolvedLists() {
+  const est = omissionResult.resolved;
+  resolvedEstimateEmpty.style.display = est.length === 0 ? "block" : "none";
+  resolvedEstimateTableWrap.hidden = est.length === 0;
+  resolvedEstimateTableBody.innerHTML = est.map((c, idx) => resolvedRowHtml(c, idx, "resolvedEstimate")).join("");
+
+  const vq = omissionResult.resolvedReverse;
+  resolvedVendorEmpty.style.display = vq.length === 0 ? "block" : "none";
+  resolvedVendorTableWrap.hidden = vq.length === 0;
+  resolvedVendorTableBody.innerHTML = vq.map((c, idx) => resolvedRowHtml(c, idx, "resolvedVendor")).join("");
 }
 
 function applyListFilters(results) {
@@ -184,8 +330,13 @@ async function reloadOverrides() {
   overrides = await listItemMatchOverridesBySite(currentSite.id);
 }
 
+async function reloadDispositions() {
+  dispositions = await listOmissionDispositionsByBatch(currentSite.id, currentBatch.id);
+}
+
 async function selectBatch(batchId) {
   currentBatch = allBatches.find((b) => b.id === batchId) || null;
+  pendingPick = null;
   if (!currentBatch) {
     mainArea.hidden = true;
     noBatchMsg.hidden = false;
@@ -200,8 +351,8 @@ async function selectBatch(batchId) {
     <div><dt>見積日</dt><dd>${escapeHtml(currentBatch.quoteDate) || "-"}</dd></div>
   `;
   vendorItems = await listVendorQuoteItemsByBatch(currentBatch.id);
-  await reloadOverrides();
-  runComparison();
+  await Promise.all([reloadOverrides(), reloadDispositions()]);
+  recomputeAll();
 }
 
 vendorSelect.addEventListener("change", () => selectBatch(vendorSelect.value));
@@ -209,7 +360,7 @@ filterSelect.addEventListener("change", renderTable);
 searchInput.addEventListener("input", renderTable);
 toleranceApplyBtn.addEventListener("click", () => {
   tolerance = readToleranceFromForm();
-  if (currentBatch) runComparison();
+  if (currentBatch) recomputeAll();
 });
 backBtn.addEventListener("click", () => navigate(`/sites/${currentSite.id}/vendor-quotes`));
 
@@ -228,12 +379,116 @@ tableBody.addEventListener("click", async (e) => {
   });
   showMessage(sameBtn ? "「同一項目」として記録しました。以降の比較に自動適用されます。" : "「別項目」として記録しました。");
   await reloadOverrides();
-  runComparison();
+  recomputeAll();
+});
+
+omissionCandidatesTableBody.addEventListener("click", async (e) => {
+  const linkConfirmBtn = e.target.closest(".omissionLinkConfirmBtn");
+  const linkCancelBtn = e.target.closest(".omissionLinkCancelBtn");
+  const actionBtn = e.target.closest(".omissionActionBtn");
+
+  if (linkCancelBtn) {
+    pendingPick = null;
+    renderOmissionCandidates();
+    return;
+  }
+  if (linkConfirmBtn) {
+    const idx = Number(linkConfirmBtn.dataset.idx);
+    const select = omissionCandidatesTableBody.querySelector(`.omissionLinkSelect[data-idx="${idx}"]`);
+    const candidate = omissionResult.candidates[idx];
+    if (!candidate || !select) return;
+    await setOmissionDisposition({
+      siteId: currentSite.id,
+      vendorQuoteBatchId: currentBatch.id,
+      side: "estimate",
+      itemKey: candidate.itemKey,
+      disposition: pendingPick.disposition,
+      linkedItemKey: select.value
+    });
+    pendingPick = null;
+    showMessage("確認結果を記録しました。");
+    await reloadDispositions();
+    recomputeAll();
+    return;
+  }
+  if (actionBtn) {
+    const idx = Number(actionBtn.dataset.idx);
+    const action = actionBtn.dataset.action;
+    const candidate = omissionResult.candidates[idx];
+    if (!candidate) return;
+    if (LINK_PICKER_ACTIONS.has(action)) {
+      pendingPick = { idx, disposition: action };
+      renderOmissionCandidates();
+      return;
+    }
+    await setOmissionDisposition({
+      siteId: currentSite.id,
+      vendorQuoteBatchId: currentBatch.id,
+      side: "estimate",
+      itemKey: candidate.itemKey,
+      disposition: action
+    });
+    showMessage("確認結果を記録しました。");
+    await reloadDispositions();
+    recomputeAll();
+  }
+});
+
+reverseCandidatesTableBody.addEventListener("click", async (e) => {
+  const actionBtn = e.target.closest(".reverseActionBtn");
+  if (!actionBtn) return;
+  const idx = Number(actionBtn.dataset.idx);
+  const candidate = omissionResult.reverseCandidates[idx];
+  if (!candidate) return;
+  await setOmissionDisposition({
+    siteId: currentSite.id,
+    vendorQuoteBatchId: currentBatch.id,
+    side: "vendor",
+    itemKey: candidate.itemKey,
+    disposition: actionBtn.dataset.action
+  });
+  showMessage("確認結果を記録しました。");
+  await reloadDispositions();
+  recomputeAll();
+});
+
+resolvedEstimateTableBody.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".resolvedEstimateResetBtn");
+  if (!btn) return;
+  const candidate = omissionResult.resolved[Number(btn.dataset.idx)];
+  if (!candidate) return;
+  await setOmissionDisposition({
+    siteId: currentSite.id,
+    vendorQuoteBatchId: currentBatch.id,
+    side: "estimate",
+    itemKey: candidate.itemKey,
+    disposition: "needs_review"
+  });
+  showMessage("見積落とし候補に戻しました。");
+  await reloadDispositions();
+  recomputeAll();
+});
+
+resolvedVendorTableBody.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".resolvedVendorResetBtn");
+  if (!btn) return;
+  const candidate = omissionResult.resolvedReverse[Number(btn.dataset.idx)];
+  if (!candidate) return;
+  await setOmissionDisposition({
+    siteId: currentSite.id,
+    vendorQuoteBatchId: currentBatch.id,
+    side: "vendor",
+    itemKey: candidate.itemKey,
+    disposition: "needs_review"
+  });
+  showMessage("逆方向チェック候補に戻しました。");
+  await reloadDispositions();
+  recomputeAll();
 });
 
 exportCsvBtn.addEventListener("click", () => {
   if (!currentBatch) return;
-  const { blob, filename } = exportComparisonCsv({ site: currentSite, vendorBatch: currentBatch, results: currentResults });
+  const { blob, filename } = exportComparisonCsv({ site: currentSite, vendorBatch: currentBatch, results: currentResults, omission: omissionResult });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -242,12 +497,12 @@ exportCsvBtn.addEventListener("click", () => {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  showMessage(`比較結果をCSVで出力しました（${filename}）`);
+  showMessage(`積算チェック結果をCSVで出力しました（${filename}）`);
 });
 
 exportPdfBtn.addEventListener("click", () => {
   if (!currentBatch) return;
-  const { html } = buildComparisonPrintHtml({ site: currentSite, vendorBatch: currentBatch, summary: currentSummary, results: currentResults });
+  const { html } = buildComparisonPrintHtml({ site: currentSite, vendorBatch: currentBatch, summary: currentSummary, results: currentResults, omission: omissionResult });
   pdfPreviewFrame.srcdoc = html;
   pdfPreviewFrame.hidden = false;
   printBtn.hidden = false;

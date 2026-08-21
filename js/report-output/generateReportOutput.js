@@ -9,7 +9,7 @@
 
 import "./renderers/index.js";
 import { getSite } from "../sites.js";
-import { getReport } from "../reports.js";
+import { getReport, listReportsBySite } from "../reports.js";
 import { listPhotosByReport } from "../photos.js";
 import { listSignaturesByReport } from "../signatures.js";
 import { getCompanyProfile } from "./companyProfiles.js";
@@ -23,6 +23,19 @@ const FALLBACK_TEMPLATE = {
   excel: { rendererId: "default-csv", mapping: DEFAULT_EXCEL_MAPPING },
   pdf: { rendererId: "default-print-html", mapping: DEFAULT_PDF_MAPPING }
 };
+
+/**
+ * 現場の全日報から、各日報のsiteSupervisorNames（現場監督氏名の配列。
+ * 同じ日に複数名いる場合がある）の件数を、対象日報の日付まで
+ * （当日を含む）で合計する。帳票の「稼働人数」表の現場監督(社員)行の
+ * 累計欄（延べ人数）に使う。
+ */
+async function sumCumulativeSiteSupervisorCount(siteId, uptoDate) {
+  const reports = await listReportsBySite(siteId);
+  return reports
+    .filter((r) => (r.date || "") <= (uptoDate || ""))
+    .reduce((sum, r) => sum + (r.siteSupervisorNames || []).filter((n) => n && n.trim()).length, 0);
+}
 
 async function resolveTemplate({ format, companyProfileId, templateId }) {
   if (templateId) {
@@ -58,15 +71,16 @@ export async function generateReportOutput({ reportId, format, companyProfileId,
   // （同じファイルをPDF用に別途登録し直す必要をなくすため）。
   const lookupFormat = isCompanyPdf ? "excel" : format;
 
-  const [site, photos, signatures, companyProfile, template] = await Promise.all([
+  const [site, photos, signatures, companyProfile, template, cumulativeSiteSupervisorCount] = await Promise.all([
     getSite(report.siteId),
     listPhotosByReport(reportId),
     listSignaturesByReport(reportId),
     companyProfileId ? getCompanyProfile(companyProfileId) : Promise.resolve(null),
-    resolveTemplate({ format: lookupFormat, companyProfileId, templateId })
+    resolveTemplate({ format: lookupFormat, companyProfileId, templateId }),
+    sumCumulativeSiteSupervisorCount(report.siteId, report.date)
   ]);
 
-  const model = buildReportOutputModel({ site, report, photos, signatures, companyProfile });
+  const model = buildReportOutputModel({ site, report, photos, signatures, companyProfile, cumulativeSiteSupervisorCount });
 
   if (format === "excel") {
     const renderer = getExcelRenderer(template.rendererId);

@@ -5,7 +5,7 @@
    ========================================================== */
 
 const DB_NAME = "constructionReportsDB";
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 let dbPromise = null;
 
@@ -116,6 +116,15 @@ export function openDb() {
         const store = db.createObjectStore("itemMatchOverrides", { keyPath: "id" });
         store.createIndex("by_siteId", "siteId");
         store.createIndex("by_siteId_estimateItemKey", ["siteId", "estimateItemKey"]);
+      }
+
+      // 見積落とし発見エンジン。見積落とし候補・逆方向チェック候補に対する
+      // ユーザーの最終判断（見積落とし／別項目に含む／一式に含む／対象外／問題なし等）を
+      // 正規化キー（itemNormalize.jsのbuildItemKey）で保存し、再取込後も引き継ぐ。
+      if (!db.objectStoreNames.contains("omissionDispositions")) {
+        const store = db.createObjectStore("omissionDispositions", { keyPath: "id" });
+        store.createIndex("by_siteId", "siteId");
+        store.createIndex("by_siteId_vendorQuoteBatchId", ["siteId", "vendorQuoteBatchId"]);
       }
     };
 

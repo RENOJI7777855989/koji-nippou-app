@@ -57,8 +57,12 @@ function mapCompanyProfile(profile) {
  * 日報1件分の帳票用データモデルを組み立てる。
  * 引数はすべて既存データ層（sites.js/reports.js/photos.js/signatures.js/
  * company-profiles.js）が返す生のレコードをそのまま渡す。
+ * cumulativeSiteSupervisorCountは、現場の全日報から集計した「現場監督の
+ * 延べ人数（各日報のsiteSupervisorNames件数の合計、この日報の日付まで）」
+ * を呼び出し側（generateReportOutput.js）で計算して渡す。ここでは集計を
+ * 行わない（このアダプターは1件の日報の変換に閉じているため）。
  */
-export function buildReportOutputModel({ site, report, photos = [], signatures = [], companyProfile = null }) {
+export function buildReportOutputModel({ site, report, photos = [], signatures = [], companyProfile = null, cumulativeSiteSupervisorCount = null }) {
   const foremanSignatureByCompanyId = new Map(
     signatures.filter((s) => s.role === "foreman" && s.companyId).map((s) => [s.companyId, s])
   );
@@ -85,7 +89,13 @@ export function buildReportOutputModel({ site, report, photos = [], signatures =
       // 巡回点検の各項目キー→ステータス("good"/"bad"/"na")のマップ。
       // キーはjs/patrolChecklist.jsのPATROL_CHECKLIST_ITEMSと対応する。
       patrolChecklist: report?.patrolChecklist || {},
-      patrolComment: report?.patrolComment || ""
+      patrolComment: report?.patrolComment || "",
+      // 現場監督（職員）氏名の一覧。同じ日に複数名が現場にいる場合があるため
+      // 単一の名前ではなく配列で持つ。件数が帳票側の稼働人数表・
+      // 現場監督(社員)行の「人数」欄への反映で使う。
+      siteSupervisorNames: report?.siteSupervisorNames || [],
+      siteSupervisorCount: (report?.siteSupervisorNames || []).filter((n) => n && n.trim()).length,
+      cumulativeSiteSupervisorCount
     },
     companies: (report?.companies || []).map((c) => mapCompany(c, foremanSignatureByCompanyId.get(c.companyId))),
     photos: photos.map(mapPhoto),

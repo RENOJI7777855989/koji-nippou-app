@@ -59,6 +59,20 @@ export function buildXlsxCellPlan(model, cfg) {
     }
   }
 
+  // 稼働人数表の「現場監督(社員)」行。人数欄には当日在席した現場監督の
+  // 人数（同じ日に複数名いる場合はその件数）、累計欄には現場の全日報から
+  // 合計した延べ人数（呼び出し側で計算済み）を書く。当日データが無い
+  // （0人）場合は人数欄は元の空欄を維持し書き込まない。
+  const staffAttendance = cfg.staffAttendance;
+  if (staffAttendance) {
+    if (staffAttendance.headcountCell && model.report.siteSupervisorCount > 0) {
+      cellWrites.push({ cell: staffAttendance.headcountCell, value: model.report.siteSupervisorCount, numeric: true });
+    }
+    if (staffAttendance.cumulativeCell && model.report.cumulativeSiteSupervisorCount != null) {
+      cellWrites.push({ cell: staffAttendance.cumulativeCell, value: model.report.cumulativeSiteSupervisorCount, numeric: true });
+    }
+  }
+
   const patrolChecklist = cfg.patrolChecklist;
   if (patrolChecklist) {
     const marks = {

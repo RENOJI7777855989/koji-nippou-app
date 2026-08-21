@@ -233,6 +233,38 @@ button:active {
   margin-top: 8px;
 }
 
+/* ---------- 現場監督（職員）行 ---------- */
+
+.site-supervisor-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.site-supervisor-row .siteSupervisorNameInput {
+  flex: 1;
+}
+
+.removeSiteSupervisorBtn {
+  width: auto;
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #b02b2b;
+  background-color: white;
+  border: 1px solid #b02b2b;
+  flex-shrink: 0;
+}
+
+#addSiteSupervisorBtn {
+  width: 100%;
+  color: #2b6cb0;
+  background-color: white;
+  border: 2px dashed #2b6cb0;
+  margin-bottom: 20px;
+}
+
 /* ---------- 業者行内の職長サイン ---------- */
 
 .foreman-signature-block {
@@ -754,6 +786,8 @@ dialog h3 {
 .read-only-form .clearSignatureBtn,
 .read-only-form .removePhotoBtn,
 .read-only-form #addCompanyBtn,
+.read-only-form .removeSiteSupervisorBtn,
+.read-only-form #addSiteSupervisorBtn,
 .read-only-form #photoInputLabel {
   display: none;
 }
@@ -1036,4 +1070,135 @@ dialog h3 {
   .comparison-summary-panel {
     grid-template-columns: repeat(6, 1fr);
   }
+}
+
+/* ---------- 見積落とし発見エンジン ---------- */
+
+.omission-overall-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.omission-overall-panel.status-attention {
+  background: #fdecec;
+  border: 1px solid #f0b8b8;
+  color: #a02b2b;
+}
+
+.omission-overall-panel.status-partial {
+  background: #fff8e1;
+  border: 1px solid #e6c477;
+  color: #8a5a00;
+}
+
+.omission-overall-panel.status-ok {
+  background: #e3f6e6;
+  border: 1px solid #a8d9b0;
+  color: #1a7a34;
+}
+
+.omission-overall-panel .omission-overall-detail {
+  font-weight: normal;
+  font-size: 13px;
+}
+
+.omission-section {
+  margin: 18px 0;
+}
+
+.omission-table td,
+.omission-table th {
+  vertical-align: top;
+}
+
+.risk-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.risk-badge.risk-high {
+  background: #fdecec;
+  color: #a02b2b;
+}
+
+.risk-badge.risk-medium {
+  background: #fff1cf;
+  color: #8a5a00;
+}
+
+.risk-badge.risk-low {
+  background: #fff8e1;
+  color: #8a5a00;
+}
+
+.risk-badge.risk-needs_review {
+  background: #eee;
+  color: #555;
+}
+
+.omission-decision-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.omission-decision-actions button {
+  width: auto;
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.omission-link-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.omission-link-picker select {
+  width: auto;
+  min-width: 160px;
+}
+
+.omission-link-picker button {
+  width: auto;
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.omission-disposition-tag {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #667;
+}
+
+.omission-resolved-details {
+  margin: 16px 0;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.omission-resolved-details summary {
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.omission-resolved-details h4 {
+  margin: 14px 0 6px;
 }

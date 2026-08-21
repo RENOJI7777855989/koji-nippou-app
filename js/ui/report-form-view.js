@@ -28,6 +28,8 @@ const companiesContainer = document.getElementById("companiesContainer");
 const addCompanyBtn = document.getElementById("addCompanyBtn");
 const tomorrowPlanInput = document.getElementById("tomorrowPlan");
 const remarksInput = document.getElementById("remarks");
+const siteSupervisorsContainer = document.getElementById("siteSupervisorsContainer");
+const addSiteSupervisorBtn = document.getElementById("addSiteSupervisorBtn");
 const patrolInspectorNameInput = document.getElementById("patrolInspectorName");
 const patrolChecklistContainer = document.getElementById("patrolChecklistContainer");
 const patrolCommentInput = document.getElementById("patrolComment");
@@ -243,6 +245,7 @@ function resetForm() {
   form.reset();
   companiesContainer.innerHTML = "";
   addCompanyRow();
+  siteSupervisorsContainer.innerHTML = "";
   resetPatrolChecklist();
   photoGrid.innerHTML = "";
   recalcWorkerCountTotal();
@@ -309,6 +312,8 @@ export async function initReportFormViewEdit(params) {
   temperatureInput.value = report.temperature || "";
   tomorrowPlanInput.value = report.tomorrowPlan || "";
   remarksInput.value = report.remarks || "";
+  siteSupervisorsContainer.innerHTML = "";
+  (report.siteSupervisorNames || []).forEach((name) => addSiteSupervisorRow(name));
   patrolInspectorNameInput.value = report.patrolInspectorName || "";
   patrolCommentInput.value = report.patrolComment || "";
   loadPatrolChecklist(report.patrolChecklist);
@@ -332,6 +337,34 @@ export async function initReportFormViewEdit(params) {
   await renderPhotoGrid(report.id);
   applyReadOnlyMode(!hasPermission("editReports"));
 }
+
+function addSiteSupervisorRow(name = "") {
+  const row = document.createElement("div");
+  row.className = "site-supervisor-row";
+  row.innerHTML = `
+    <input type="text" class="siteSupervisorNameInput" placeholder="例）鈴木一郎">
+    <button type="button" class="removeSiteSupervisorBtn">削除</button>
+  `;
+  row.querySelector(".siteSupervisorNameInput").value = name;
+  siteSupervisorsContainer.appendChild(row);
+  return row;
+}
+
+function collectSiteSupervisorNames() {
+  const names = [];
+  siteSupervisorsContainer.querySelectorAll(".siteSupervisorNameInput").forEach((input) => {
+    const value = input.value.trim();
+    if (value) names.push(value);
+  });
+  return names;
+}
+
+addSiteSupervisorBtn.addEventListener("click", () => addSiteSupervisorRow());
+siteSupervisorsContainer.addEventListener("click", (e) => {
+  const removeBtn = e.target.closest(".removeSiteSupervisorBtn");
+  if (!removeBtn) return;
+  removeBtn.closest(".site-supervisor-row").remove();
+});
 
 function collectCompanies() {
   const companies = [];
@@ -375,6 +408,7 @@ form.addEventListener("submit", async (e) => {
     companies: collectCompanies(),
     tomorrowPlan: tomorrowPlanInput.value.trim(),
     remarks: remarksInput.value.trim(),
+    siteSupervisorNames: collectSiteSupervisorNames(),
     patrolInspectorName: patrolInspectorNameInput.value.trim(),
     patrolChecklist: collectPatrolChecklist(),
     patrolComment: patrolCommentInput.value.trim()

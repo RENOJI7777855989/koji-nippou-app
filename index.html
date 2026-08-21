@@ -179,6 +179,10 @@
           </label>
         </div>
 
+        <h3>現場監督（職員・当日在席した方のみ追加）</h3>
+        <div id="siteSupervisorsContainer"></div>
+        <button type="button" id="addSiteSupervisorBtn" class="secondary-btn">＋ 現場監督を追加</button>
+
         <h3>業者ごとの作業内容・職長サイン</h3>
         <div id="companiesContainer"></div>
         <button type="button" id="addCompanyBtn">＋ 業者を追加</button>
@@ -524,6 +528,57 @@
 
         <dl class="comparison-summary-panel" id="comparisonSummaryPanel"></dl>
 
+        <div id="omissionOverallPanel" class="omission-overall-panel"></div>
+
+        <section class="omission-section">
+          <h3>🔍 見積落とし候補</h3>
+          <p class="app-subtitle">積算資料（工事内訳）を基準に、本来必要な工事・材料・労務・経費が業者見積に含まれているかを確認します。「見積落とし」と断定するものではなく、リスクの高さの目安です。必ず内容をご確認のうえ判断してください。</p>
+          <p id="omissionCandidatesEmpty" class="empty-message">見積落とし候補はありません。</p>
+          <div class="table-scroll" id="omissionCandidatesTableWrap" hidden>
+            <table class="estimate-table comparison-table omission-table">
+              <thead>
+                <tr><th>リスク</th><th>工種</th><th>積算項目（数量／積算金額）</th><th>判定理由</th><th>確認</th></tr>
+              </thead>
+              <tbody id="omissionCandidatesTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="omission-section">
+          <h3>↩ 逆方向チェック（業者見積にあるが積算に無い項目）</h3>
+          <p class="app-subtitle">追加工事・別途工事・二重計上の可能性などをご確認ください。</p>
+          <p id="reverseCandidatesEmpty" class="empty-message">該当項目はありません。</p>
+          <div class="table-scroll" id="reverseCandidatesTableWrap" hidden>
+            <table class="estimate-table comparison-table omission-table">
+              <thead>
+                <tr><th>工種</th><th>業者見積項目（数量／金額）</th><th>備考</th><th>確認</th></tr>
+              </thead>
+              <tbody id="reverseCandidatesTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <details class="omission-resolved-details">
+          <summary>確認済み一覧を表示</summary>
+          <h4>見積落とし候補（確認済み）</h4>
+          <p id="resolvedEstimateEmpty" class="empty-message">確認済みの項目はありません。</p>
+          <div class="table-scroll" id="resolvedEstimateTableWrap" hidden>
+            <table class="estimate-table comparison-table">
+              <thead><tr><th>工種</th><th>項目</th><th>確認結果</th><th>操作</th></tr></thead>
+              <tbody id="resolvedEstimateTableBody"></tbody>
+            </table>
+          </div>
+          <h4>逆方向チェック（確認済み）</h4>
+          <p id="resolvedVendorEmpty" class="empty-message">確認済みの項目はありません。</p>
+          <div class="table-scroll" id="resolvedVendorTableWrap" hidden>
+            <table class="estimate-table comparison-table">
+              <thead><tr><th>工種</th><th>項目</th><th>確認結果</th><th>操作</th></tr></thead>
+              <tbody id="resolvedVendorTableBody"></tbody>
+            </table>
+          </div>
+        </details>
+
+        <h3>詳細（全比較結果）</h3>
         <div class="toolbar">
           <select id="comparisonFilterSelect">
             <option value="">すべての判定</option>

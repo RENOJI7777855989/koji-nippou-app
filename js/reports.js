@@ -30,6 +30,7 @@ export async function createReport(fields) {
     companies: fields.companies || [],
     remarks: fields.remarks || "",
     tomorrowPlan: fields.tomorrowPlan || "",
+    siteSupervisorNames: fields.siteSupervisorNames || [],
     patrolInspectorName: fields.patrolInspectorName || "",
     patrolChecklist: fields.patrolChecklist || {},
     patrolComment: fields.patrolComment || "",

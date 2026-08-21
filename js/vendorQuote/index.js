@@ -26,6 +26,8 @@ export {
 export { listItemMatchOverridesBySite, setItemMatchOverride } from "./itemMatchOverrides.js";
 export { buildItemKey } from "./itemNormalize.js";
 export { compareEstimateToQuote, summarizeComparison, DEFAULT_TOLERANCE } from "./compareEstimateToQuote.js";
+export { checkOmissions } from "./omissionCheck.js";
+export { listOmissionDispositionsBySite, listOmissionDispositionsByBatch, setOmissionDisposition } from "./omissionDispositions.js";
 export { exportComparisonCsv, buildComparisonPrintHtml } from "./comparisonExport.js";
 
 /**

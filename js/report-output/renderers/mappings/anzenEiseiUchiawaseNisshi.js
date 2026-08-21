@@ -29,6 +29,20 @@
    - 「巡回者」の氏名を書ける専用欄はこのテンプレートに存在しない
      （N1/O1/P1は所長／主任／工事担当者の印鑑欄で、氏名記入には
      幅・用途とも不適のため転記対象から除外している）。
+   - M2: 「気温：高　　℃:低　　℃」という定型ラベル1セル。
+     日報側は気温を1値しか持たないため、高低の書き分けはせず
+     ラベルごと{report.temperature}で置き換える。
+   - M4: 「天候：　　　　」という定型ラベル1セル。同様に
+     {report.weather}で置き換える。
+   - M5〜P52: 「稼働人数」表（職種ごとの人数・累計）。M50が
+     「社員」行で、現場監督（職員）はこの行を使う。同じ日に複数名の
+     現場監督がいる場合があるため、日報側はsiteSupervisorNamesを
+     配列で持つ。O50に当日の人数（0人なら元の空欄を維持）、P50に
+     累計（その現場の全日報のsiteSupervisorNames件数を、対象日報の
+     日付まで合計した延べ人数。generateReportOutput.js側で集計し
+     model.report.cumulativeSiteSupervisorCountとして渡される）を書く。
+     M49「警備員」・M51「計」・M52「延労働時間」の各行は対応する
+     データが無いため触れない。
    ========================================================== */
 
 export const ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING = {
@@ -43,8 +57,16 @@ export const ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING = {
   // 元のラベルを保ったまま値だけを差し込む（{フィールドパス|フォーマッタ}）
   templates: [
     { cell: "E2", template: "工事名：{site.name}" },
-    { cell: "E4", template: "打合日：{report.date|japaneseDate}　　作業日：{report.date|japaneseDate}" }
+    { cell: "E4", template: "打合日：{report.date|japaneseDate}　　作業日：{report.date|japaneseDate}" },
+    { cell: "M2", template: "気温：{report.temperature}" },
+    { cell: "M4", template: "天候：{report.weather}" }
   ],
+
+  // 稼働人数表「社員」行（現場監督(職員)用）。
+  staffAttendance: {
+    headcountCell: "O50",
+    cumulativeCell: "P50"
+  },
 
   // 協力会社ごとの繰り返し欄。company-table開始行から1社1行で埋める。
   companiesTable: {

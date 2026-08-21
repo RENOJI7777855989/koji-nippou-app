@@ -16,7 +16,7 @@
    そのパスを追加すること（ビルド工程が無い方針のため手動管理）。
    ========================================================== */
 
-const CACHE_NAME = "koji-nippou-v4";
+const CACHE_NAME = "koji-nippou-v5";
 
 const PRECACHE_URLS = [
   "./",
@@ -283,6 +283,8 @@ const PRECACHE_URLS = [
   "./js/ui/vendor-quote-list-view.js",
   "./js/ui/vendor-quote-import-view.js",
   "./js/ui/comparison-view.js",
+  "./js/vendorQuote/omissionDispositions.js",
+  "./js/vendorQuote/omissionCheck.js",
 ];
 
 self.addEventListener("install", (event) => {

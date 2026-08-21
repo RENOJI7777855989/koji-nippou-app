@@ -28,7 +28,8 @@ const DATA_STORES = [
   "estimateItems",
   "vendorQuoteBatches",
   "vendorQuoteItems",
-  "itemMatchOverrides"
+  "itemMatchOverrides",
+  "omissionDispositions"
 ];
 
 // 復元時の競合一覧に表示するための、ストアごとの見出しラベルと代表フィールド
@@ -45,7 +46,8 @@ const STORE_LABELS = {
   estimateItems: "積算項目",
   vendorQuoteBatches: "業者見積取込",
   vendorQuoteItems: "業者見積項目",
-  itemMatchOverrides: "項目対応関係"
+  itemMatchOverrides: "項目対応関係",
+  omissionDispositions: "見積落とし確認結果"
 };
 const RECORD_LABEL_FIELDS = {
   sites: "name",
@@ -56,7 +58,8 @@ const RECORD_LABEL_FIELDS = {
   estimateBatches: "sourceFileName",
   estimateItems: "itemName",
   vendorQuoteBatches: "sourceFileName",
-  vendorQuoteItems: "itemName"
+  vendorQuoteItems: "itemName",
+  omissionDispositions: "disposition"
 };
 
 // ストアごとに、Blobを含むフィールド一覧（バックアップ時は別ファイルへ退避する）
