@@ -495,6 +495,7 @@
     <!-- 見積・積算比較 -->
     <section class="view" id="view-comparison" hidden>
       <button type="button" id="backToVendorQuoteListFromComparisonBtn" class="link-btn">← 業者見積一覧に戻る</button>
+      <button type="button" id="goToMasterItemsFromComparisonBtn" class="link-btn">🗂 共通積算項目マスターを管理</button>
       <h2>見積・積算比較<span id="comparisonSiteName"></span></h2>
 
       <label>比較する業者見積
@@ -611,6 +612,18 @@
         </div>
         <iframe id="comparisonPdfPreviewFrame" class="output-preview-frame" title="比較結果PDF出力プレビュー" hidden></iframe>
       </div>
+    </section>
+
+    <!-- 共通積算項目マスター管理 -->
+    <section class="view" id="view-master-items" hidden>
+      <button type="button" id="backToSiteListFromMasterItemsBtn" class="link-btn">← 現場一覧に戻る</button>
+      <h2>共通積算項目マスター</h2>
+      <p class="app-subtitle">積算・業者見積の比較画面で「同一項目」と確定すると、ここに自動的に登録されます。全現場・全業者見積で共有され、一度確定させた対応関係は別の現場でも自動的に活かされます。項目コードはこのアプリ内だけの通し番号で、公共工事の正式なコード体系ではありません。</p>
+      <div class="toolbar">
+        <input type="search" id="masterItemSearchInput" placeholder="工種・標準項目名・別名で検索">
+      </div>
+      <p id="masterItemListEmpty" class="empty-message">共通積算項目マスターはまだ登録されていません。</p>
+      <ul id="masterItemList" class="master-item-list"></ul>
     </section>
 
     <!-- ユーザー管理（管理者のみ） -->

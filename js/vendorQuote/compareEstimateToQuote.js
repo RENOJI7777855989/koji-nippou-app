@@ -138,8 +138,13 @@ function buildDuplicateResult(item, side, candidateCount) {
 }
 
 /**
- * @param {object[]} estimateItems 積算項目（現場の全件）
- * @param {object[]} vendorItems 比較対象の業者見積バッチの全件
+ * @param {object[]} estimateItems 積算項目（現場の全件）。呼び出し側が
+ *   itemMasterMatch.jsのresolveToMaster()で共通積算項目マスターへ解決
+ *   済みの場合、各要素に`_masterItemCode`/`_masterMatchType`("exact"|"fuzzy")
+ *   を付与しておくと、その解決結果を最優先で対応付けに使う（マスター未解決の
+ *   項目や、呼び出し側がそもそも解決していない場合は何もしない＝既存動作と
+ *   完全に同一になる）。
+ * @param {object[]} vendorItems 比較対象の業者見積バッチの全件（同上）
  * @param {object[]} overrides itemMatchOverrides.js のレコード配列
  * @param {object} tolerance DEFAULT_TOLERANCEを上書きする許容差設定
  * @returns {object[]} 分類済みの比較結果配列
@@ -171,6 +176,39 @@ export function compareEstimateToQuote({ estimateItems = [], vendorItems = [], o
         break;
       }
     }
+  }
+
+  // 1.5. 共通積算項目マスターに同じ項目コードで解決された項目同士を、
+  //      文字列類似度の再計算なしで最優先に対応付ける（マスターが空、
+  //      または呼び出し側で解決していない場合はこのステップは何もしない）。
+  //      両側とも完全一致解決なら自動対応、片方でも曖昧一致(fuzzy)なら
+  //      要確認に留める。同じコードに複数件ある場合は重複の可能性があるため
+  //      ここでは確定させず、後段の類似度ベース処理・重複判定に委ねる。
+  const masterGroups = new Map();
+  for (const est of estList) {
+    if (est.matched || !est.item._masterItemCode) continue;
+    const code = est.item._masterItemCode;
+    if (!masterGroups.has(code)) masterGroups.set(code, { est: [], vq: [] });
+    masterGroups.get(code).est.push(est);
+  }
+  for (const vq of vqList) {
+    if (vq.matched || !vq.item._masterItemCode) continue;
+    const code = vq.item._masterItemCode;
+    if (!masterGroups.has(code)) masterGroups.set(code, { est: [], vq: [] });
+    masterGroups.get(code).vq.push(vq);
+  }
+  for (const { est: estGroup, vq: vqGroup } of masterGroups.values()) {
+    if (estGroup.length !== 1 || vqGroup.length !== 1) continue;
+    const [est] = estGroup;
+    const [vq] = vqGroup;
+    const bothExact = est.item._masterMatchType === "exact" && vq.item._masterMatchType === "exact";
+    if (bothExact) {
+      results.push(buildMatchedResult(est.item, vq.item, tol, "auto"));
+    } else {
+      results.push(buildNeedsReviewResult(est.item, vq.item, 1));
+    }
+    est.matched = true;
+    vq.matched = true;
   }
 
   // 2. 残った項目同士のペアスコアを計算（確定済み「別項目」は候補から除外）

@@ -29,6 +29,16 @@ export { compareEstimateToQuote, summarizeComparison, DEFAULT_TOLERANCE } from "
 export { checkOmissions } from "./omissionCheck.js";
 export { listOmissionDispositionsBySite, listOmissionDispositionsByBatch, setOmissionDisposition } from "./omissionDispositions.js";
 export { exportComparisonCsv, buildComparisonPrintHtml } from "./comparisonExport.js";
+export {
+  listMasterItems,
+  getMasterItem,
+  createMasterItem,
+  addAliasToMasterItem,
+  renameMasterItem,
+  deleteMasterItem,
+  mergeMasterItems
+} from "./masterItems.js";
+export { resolveToMaster } from "./itemMasterMatch.js";
 
 /**
  * アップロードされたファイル(.xlsx/.pdf/.csv)の拡張子を見て、

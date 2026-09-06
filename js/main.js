@@ -28,6 +28,7 @@ import { initEstimateAskView } from "./ui/estimate-ask-view.js";
 import { initVendorQuoteListView } from "./ui/vendor-quote-list-view.js";
 import { initVendorQuoteImportView } from "./ui/vendor-quote-import-view.js";
 import { initComparisonView } from "./ui/comparison-view.js";
+import { initMasterItemListView } from "./ui/master-item-list-view.js";
 
 async function bootstrap() {
   registerServiceWorker();
@@ -36,6 +37,7 @@ async function bootstrap() {
   // 具体的なパターンを先に、汎用的な":id"パターンを後に登録する
   registerRoute("/sites", () => initSiteListView());
   registerRoute("/report-templates", () => initReportTemplateListView());
+  registerRoute("/master-items", () => initMasterItemListView());
   registerRoute("/report-output", (params, query) => initReportOutputView(query));
   registerRoute("/history", () => initAuditLogView());
   registerRoute("/backup", () => initBackupView());

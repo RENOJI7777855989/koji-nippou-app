@@ -1202,3 +1202,144 @@ dialog h3 {
 .omission-resolved-details h4 {
   margin: 14px 0 6px;
 }
+
+/* ---------- 共通積算項目マスター ---------- */
+
+.master-code-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: bold;
+  background: #e6f0fa;
+  color: #1a4971;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.master-item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.master-item-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: #fafafa;
+}
+
+.master-item-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.master-item-category {
+  font-size: 12px;
+  color: #667;
+  background: #eee;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.master-item-name {
+  font-size: 15px;
+}
+
+.master-item-unit {
+  font-size: 12px;
+  color: #667;
+}
+
+.master-item-header button,
+.master-item-edit-form .toolbar button {
+  width: auto;
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 12px;
+  margin-left: auto;
+}
+
+.master-item-aliases {
+  margin-top: 8px;
+  font-size: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.master-alias-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  padding: 2px 6px 2px 10px;
+  font-size: 12px;
+}
+
+.master-alias-chip .removeAliasBtn {
+  width: auto;
+  min-height: auto;
+  padding: 0 4px;
+  font-size: 12px;
+  border: none;
+  background: none;
+  color: #b02b2b;
+  cursor: pointer;
+}
+
+.master-add-alias {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.master-add-alias input {
+  width: auto;
+  min-width: 160px;
+}
+
+.master-add-alias button {
+  width: auto;
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.master-item-merge {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #ccc;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.master-item-merge select {
+  width: auto;
+}
+
+.master-item-merge button {
+  width: auto;
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.master-item-edit-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+}
+
+.master-item-edit-form label:nth-child(2) {
+  grid-column: span 2;
+}

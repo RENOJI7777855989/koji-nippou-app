@@ -5,7 +5,7 @@
    ========================================================== */
 
 const DB_NAME = "constructionReportsDB";
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 let dbPromise = null;
 
@@ -125,6 +125,15 @@ export function openDb() {
         const store = db.createObjectStore("omissionDispositions", { keyPath: "id" });
         store.createIndex("by_siteId", "siteId");
         store.createIndex("by_siteId_vendorQuoteBatchId", ["siteId", "vendorQuoteBatchId"]);
+      }
+
+      // 共通積算項目マスター。全現場・全業者見積で共有するグローバルな
+      // 項目辞書（表記ゆれの別名一覧）。site/vendorQuoteとは独立し、
+      // どの現場にも紐付かない（siteIdを持たない）唯一のストア。
+      if (!db.objectStoreNames.contains("masterItems")) {
+        const store = db.createObjectStore("masterItems", { keyPath: "id" });
+        store.createIndex("by_itemCode", "itemCode", { unique: true });
+        store.createIndex("by_category", "category");
       }
     };
 

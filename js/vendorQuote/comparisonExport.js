@@ -38,6 +38,7 @@ function rowValues(r) {
   const vq = r.vendorItem;
   return [
     TYPE_LABEL[r.type] || r.type,
+    est?._masterItemCode || vq?._masterItemCode || "",
     est?.category || vq?.category || "",
     est?.itemName || vq?.itemName || "",
     est?.spec || vq?.spec || "",
@@ -55,20 +56,21 @@ function rowValues(r) {
 }
 
 const HEADER = [
-  "判定", "工種", "項目", "仕様",
+  "判定", "共通項目コード", "工種", "項目", "仕様",
   "積算数量", "見積数量", "数量差率",
   "積算単価", "見積単価", "単価差率",
   "積算金額", "見積金額", "金額差率",
   "備考"
 ];
 
-const OMISSION_HEADER = ["リスク", "工種", "項目", "仕様", "数量", "単位", "積算金額(参考)", "判定理由", "確認結果"];
-const REVERSE_HEADER = ["工種", "項目", "仕様", "数量", "単位", "金額", "備考", "確認結果"];
+const OMISSION_HEADER = ["リスク", "共通項目コード", "工種", "項目", "仕様", "数量", "単位", "積算金額(参考)", "判定理由", "確認結果"];
+const REVERSE_HEADER = ["共通項目コード", "工種", "項目", "仕様", "数量", "単位", "金額", "備考", "確認結果"];
 
 function omissionCandidateRowValues(c) {
   const item = c.item;
   return [
     c.confirmed ? "高（確定）" : RISK_ORDER_LABEL[c.risk] || c.risk,
+    item._masterItemCode || "",
     item.category || "", item.itemName || "", item.spec || "",
     item.quantity ?? "", item.unit || "", c.referenceAmount ?? "",
     c.reason || "", c.dispositionLabel || "（未確認）"
@@ -77,7 +79,7 @@ function omissionCandidateRowValues(c) {
 
 function reverseCandidateRowValues(c) {
   const item = c.item;
-  return [item.category || "", item.itemName || "", item.spec || "", item.quantity ?? "", item.unit || "", item.amount ?? "", c.reason || "", c.dispositionLabel || "（未確認）"];
+  return [item._masterItemCode || "", item.category || "", item.itemName || "", item.spec || "", item.quantity ?? "", item.unit || "", item.amount ?? "", c.reason || "", c.dispositionLabel || "（未確認）"];
 }
 
 /**
@@ -113,6 +115,7 @@ function resultRowHtml(r) {
   const typeClass = `type-${r.type.replace(/_/g, "-")}`;
   return `<tr class="${typeClass}">
     <td><span class="badge ${typeClass}">${escapeHtml(TYPE_LABEL[r.type] || r.type)}</span></td>
+    <td>${escapeHtml(est?._masterItemCode || vq?._masterItemCode || "")}</td>
     <td>${escapeHtml(est?.category || vq?.category || "")}</td>
     <td>${escapeHtml(est?.itemName || vq?.itemName || "")}</td>
     <td>${escapeHtml(est?.spec || vq?.spec || "")}</td>
@@ -135,6 +138,7 @@ function omissionCandidateRowHtml(c) {
   const riskLabel = c.confirmed ? "見積落とし（確定）" : c.riskLabel;
   return `<tr class="${riskClass}">
     <td><span class="badge ${riskClass}">${escapeHtml(riskLabel)}</span></td>
+    <td>${escapeHtml(item._masterItemCode || "")}</td>
     <td>${escapeHtml(item.category || "")}</td>
     <td>${escapeHtml(item.itemName || "")}</td>
     <td>${escapeHtml(item.spec || "")}</td>
@@ -148,6 +152,7 @@ function omissionCandidateRowHtml(c) {
 function reverseCandidateRowHtml(c) {
   const item = c.item;
   return `<tr>
+    <td>${escapeHtml(item._masterItemCode || "")}</td>
     <td>${escapeHtml(item.category || "")}</td>
     <td>${escapeHtml(item.itemName || "")}</td>
     <td>${escapeHtml(item.spec || "")}</td>
@@ -173,13 +178,13 @@ function omissionSectionHtml(omission) {
     <div class="box"><dt>見積落とし候補 概算金額(参考)</dt><dd>${fmt(s.referenceAmountTotal)}円</dd></div>
   </dl>
   <table>
-    <thead><tr><th>リスク</th><th>工種</th><th>項目</th><th>仕様</th><th>数量</th><th>積算金額(参考)</th><th>判定理由</th><th>確認結果</th></tr></thead>
-    <tbody>${omission.candidates.map(omissionCandidateRowHtml).join("") || `<tr><td colspan="8">見積落とし候補はありません。</td></tr>`}</tbody>
+    <thead><tr><th>リスク</th><th>コード</th><th>工種</th><th>項目</th><th>仕様</th><th>数量</th><th>積算金額(参考)</th><th>判定理由</th><th>確認結果</th></tr></thead>
+    <tbody>${omission.candidates.map(omissionCandidateRowHtml).join("") || `<tr><td colspan="9">見積落とし候補はありません。</td></tr>`}</tbody>
   </table>
   <h2>逆方向チェック（業者見積にあるが積算に無い項目）</h2>
   <table>
-    <thead><tr><th>工種</th><th>項目</th><th>仕様</th><th>数量</th><th>金額</th><th>備考</th><th>確認結果</th></tr></thead>
-    <tbody>${omission.reverseCandidates.map(reverseCandidateRowHtml).join("") || `<tr><td colspan="7">該当項目はありません。</td></tr>`}</tbody>
+    <thead><tr><th>コード</th><th>工種</th><th>項目</th><th>仕様</th><th>数量</th><th>金額</th><th>備考</th><th>確認結果</th></tr></thead>
+    <tbody>${omission.reverseCandidates.map(reverseCandidateRowHtml).join("") || `<tr><td colspan="8">該当項目はありません。</td></tr>`}</tbody>
   </table>
   <h2>詳細（全比較結果）</h2>`;
 }
@@ -248,7 +253,7 @@ export function buildComparisonPrintHtml({ site, vendorBatch, summary, results, 
   <table>
     <thead>
       <tr>
-        <th>判定</th><th>工種</th><th>項目</th><th>仕様</th>
+        <th>判定</th><th>コード</th><th>工種</th><th>項目</th><th>仕様</th>
         <th>積算数量</th><th>見積数量</th><th>数量差率</th>
         <th>積算単価</th><th>見積単価</th><th>単価差率</th>
         <th>積算金額</th><th>見積金額</th><th>金額差率</th>
