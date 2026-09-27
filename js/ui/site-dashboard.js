@@ -1,0 +1,213 @@
+/* ==========================================================
+   現場ダッシュボード（現場詳細画面の上部）
+   日誌に入力した内容を、その日の「現場の流れ・搬入・作業・人員・日誌状況」として
+   見やすく表示する。ダッシュボード専用の入力は無い（編集は日誌で行う）。
+   集計は js/dashboard/siteDashboardModel.js、A3「今日の現場シート」は todaySheetHtml.js。
+   ========================================================== */
+
+import { listReportsBySite } from "../reports.js";
+import { dbGetAll } from "../db.js";
+import { hasPermission } from "../auth.js";
+import { escapeHtml } from "../utils.js";
+import { navigate } from "../router.js";
+import { buildDashboardModel } from "../dashboard/siteDashboardModel.js";
+import { buildTodaySheetHtml } from "../dashboard/todaySheetHtml.js";
+import { openReportPrintDialog } from "./report-print-dialog.js";
+
+const root = document.getElementById("siteDashboard");
+let current = { site: null, date: null, onFilter: null };
+
+export const todayIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+const shiftDate = (iso, days) => {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+const fmtDate = (iso, weekday) => {
+  const [, m, d] = iso.split("-").map(Number);
+  return `${m}/${d}（${weekday}）`;
+};
+
+async function loadModel(site, date) {
+  const reports = (await listReportsBySite(site.id)).filter((r) => !r.isDeleted);
+  const ids = new Set(reports.map((r) => r.id));
+  const signatures = (await dbGetAll("signatures")).filter((s) => ids.has(s.reportId));
+  return buildDashboardModel({ site, reports, signatures, date });
+}
+
+function progressHtml(h) {
+  if (h.progressPercent != null) {
+    return `<span class="dash-chip">進捗 <b>${h.progressPercent}%</b></span>`;
+  }
+  return h.elapsedPct != null ? `<span class="dash-chip dash-chip-sub">工期経過 ${h.elapsedPct}%（進捗率は現場情報で入力）</span>` : "";
+}
+
+function render(model) {
+  const h = model.header;
+  const canEdit = hasPermission("editReports") && !current.site.completedAt;
+  const empty = (text) => `<p class="dash-empty">${escapeHtml(text)}</p>`;
+
+  const flowHtml = model.flow.length
+    ? `<ol class="dash-flow">${model.flow
+        .map((f) => `<li class="dash-flow-item${f.kind === "delivery" ? " is-delivery" : ""}${f.cancelled ? " is-cancelled" : ""}">
+          <span class="dash-flow-time">${escapeHtml(f.time || "--:--")}</span>
+          <span class="dash-flow-mark" aria-hidden="true">${f.mark}</span>
+          <span class="dash-flow-body"><span class="dash-flow-title">${escapeHtml(f.title)}</span>${f.note ? `<span class="dash-flow-note">${escapeHtml(f.note)}</span>` : ""}</span>
+          ${f.status ? `<span class="dash-badge">${escapeHtml(f.status)}</span>` : ""}
+        </li>`)
+        .join("")}</ol>`
+    : empty(model.reportId ? "日誌の「本日の現場の流れ」「搬入事項」に入力すると、ここに時刻順で表示されます。" : "この日の日誌はまだありません。");
+
+  const deliveryHtml = model.deliveries.length
+    ? model.deliveries
+        .map((d) => `<details class="dash-delivery${d.status === "cancelled" ? " is-cancelled" : ""}">
+          <summary><span class="dash-flow-time">${escapeHtml(d.time || "--:--")}</span> <b>${escapeHtml(d.item || "搬入")}</b>${d.quantity ? ` ${escapeHtml(d.quantity)}` : ""}
+            <span class="dash-badge">${escapeHtml(d.statusLabel)}</span><br><span class="dash-sub">${escapeHtml([d.vendor, d.destination].filter(Boolean).join("／"))}</span></summary>
+          <dl class="dash-dl">
+            ${[["搬入業者", d.vendor], ["数量", d.quantity], ["搬入元", d.origin], ["搬入先", d.destination], ["車両", d.vehicle], ["備考", d.note]]
+              .filter(([, v]) => v)
+              .map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(v).replace(/\n/g, "<br>")}</dd>`)
+              .join("")}
+          </dl>
+        </details>`)
+        .join("")
+    : empty("本日の搬入はありません。");
+
+  const s = model.staff;
+  const staffHtml = `
+    <div class="dash-big">${s.today}<small>人</small></div>
+    <p class="dash-sub">本日の実績人数${s.plannedToday ? `（予定 ${s.plannedToday}人）` : ""}</p>
+    <dl class="dash-dl dash-dl-row">
+      <dt>職長</dt><dd>${s.foremen}人</dd><dt>業者</dt><dd>${s.vendors}社</dd>
+      ${s.supervisors ? `<dt>現場監督</dt><dd>${s.supervisors}人</dd>` : ""}
+      <dt>累計</dt><dd>${s.cumulative.toLocaleString()}人</dd>
+      <dt>延べ労働時間</dt><dd>${s.laborHoursCumulative.toLocaleString()}時間</dd>
+    </dl>`;
+
+  const d = model.diary;
+  const diaryHtml = d
+    ? `<dl class="dash-dl">
+        <dt>天候</dt><dd>${escapeHtml(d.weather || "-")}${d.temperature ? `　${escapeHtml(d.temperature)}` : ""}</dd>
+        <dt>作業</dt><dd>${model.works.length ? model.works.map((w) => escapeHtml(`${w.vendor ? w.vendor + "：" : ""}${w.content || w.occupation || ""}`)).join("<br>") : "-"}</dd>
+        ${d.tomorrowPlan ? `<dt>明日の予定</dt><dd>${escapeHtml(d.tomorrowPlan).replace(/\n/g, "<br>")}</dd>` : ""}
+      </dl>
+      <p class="dash-sub">${d.confirmed ? "確認済み" : "未確認"}・${d.printed ? "印刷済み" : "未印刷"}</p>`
+    : empty("この日の日誌はまだありません。");
+
+  const st = model.status;
+  const statusRow = (label, value, filter) =>
+    `<button type="button" class="dash-status-row"${filter ? ` data-filter="${filter}"` : " disabled"}><span>${label}</span><b>${value == null ? "-" : value}</b></button>`;
+  const statusHtml = `
+    ${st.scheduled == null ? `<p class="dash-sub">工事開始日を入れると提出予定・未提出を数えます。</p>` : ""}
+    ${statusRow("提出予定", st.scheduled, null)}
+    ${statusRow("未提出", st.missing, "missing")}
+    ${statusRow("未署名", st.unsigned, null)}
+    ${statusRow("未承認（未確認）", st.unconfirmed, "unconfirmed")}
+    ${statusRow("未印刷", st.unprinted, "unprinted")}
+    <p class="dash-sub">${escapeHtml(fmtDate(h.date, h.weekday))}までの日誌</p>`;
+
+  const worksHtml = model.works.length
+    ? `<div class="dash-table-wrap"><table class="dash-table">
+        <thead><tr><th>業者</th><th>職種</th><th>予定/実績</th><th>作業時間</th><th>作業内容</th><th>職長</th><th>備考</th></tr></thead>
+        <tbody>${model.works
+          .map((w) => `<tr><td>${escapeHtml(w.vendor)}</td><td>${escapeHtml(w.occupation)}</td><td class="num">${w.planned ?? "-"} / ${w.actual ?? "-"}</td><td>${escapeHtml(w.hours)}</td><td>${escapeHtml(w.content)}</td><td>${escapeHtml(w.foreman)}</td><td>${escapeHtml([w.notes, w.machinery ? "機械：" + w.machinery : ""].filter(Boolean).join("／"))}</td></tr>`)
+          .join("")}</tbody></table></div>`
+    : empty("本日の作業（日誌の業者欄）はまだありません。");
+
+  root.innerHTML = `
+    <div class="dash-head">
+      <div class="dash-title-row">
+        <h2 class="dash-title">🏗 現場ダッシュボード</h2>
+        <div class="dash-date">
+          <button type="button" class="secondary-btn dash-nav" data-shift="-1" aria-label="前の日">◀</button>
+          <input type="date" class="dash-date-input" value="${escapeHtml(h.date)}" aria-label="表示する日">
+          <button type="button" class="secondary-btn dash-nav" data-shift="1" aria-label="次の日">▶</button>
+          <button type="button" class="secondary-btn dash-nav" data-today="1">今日</button>
+        </div>
+      </div>
+      <p class="dash-site">${escapeHtml(h.siteName)}　<span class="dash-sub">${escapeHtml(fmtDate(h.date, h.weekday))}</span></p>
+      <div class="dash-chips">
+        ${h.constructionNumber ? `<span class="dash-chip">工事番号 ${escapeHtml(h.constructionNumber)}</span>` : ""}
+        ${progressHtml(h)}
+        ${h.remainingDays != null ? `<span class="dash-chip">残り <b>${h.remainingDays}</b>日</span>` : ""}
+        ${h.dayNumber != null ? `<span class="dash-chip dash-chip-sub">${h.dayNumber}日目</span>` : ""}
+        ${h.startDate || h.endDate ? `<span class="dash-chip dash-chip-sub">工期 ${escapeHtml(h.startDate || "未定")}〜${escapeHtml(h.endDate || "未定")}</span>` : ""}
+      </div>
+      ${model.sameDayCount > 1 ? `<p class="dash-sub">この日の日誌が${model.sameDayCount}件あります（最後に更新したものを表示）。</p>` : ""}
+    </div>
+    <div class="dash-grid">
+      <section class="dash-card dash-card-flow"><h3>本日の現場の流れ</h3>${flowHtml}</section>
+      <section class="dash-card"><h3>🚚 本日の搬入</h3>${deliveryHtml}</section>
+      <section class="dash-card"><h3>👷 本日の人員</h3>${staffHtml}</section>
+      <section class="dash-card"><h3>📋 今日の日誌</h3>${diaryHtml}</section>
+      <section class="dash-card"><h3>📊 日誌状況</h3>${statusHtml}</section>
+      <section class="dash-card dash-card-wide"><h3>本日の作業</h3>${worksHtml}</section>
+    </div>
+    <div class="dash-actions">
+      ${canEdit ? `<button type="button" data-action="diary">＋日誌</button><button type="button" data-action="deliveries" class="secondary-btn">🚚搬入</button><button type="button" data-action="companies" class="secondary-btn">👷業者</button>` : ""}
+      <button type="button" data-action="print" class="secondary-btn">🖨A3印刷</button>
+    </div>`;
+  root.hidden = false;
+}
+
+async function refresh() {
+  const model = await loadModel(current.site, current.date);
+  current.model = model;
+  render(model);
+}
+
+/** 日誌を開く（その日の日誌があれば編集、無ければその日付で新規）。focus は入力画面で表示する欄 */
+function openDiary(focus) {
+  if (focus) window.__reportFormFocus = focus;
+  const base = `/sites/${current.site.id}`;
+  navigate(current.model.reportId ? `${base}/report/${current.model.reportId}` : `${base}/report/new?date=${current.date}`);
+}
+
+root?.addEventListener("click", async (e) => {
+  const nav = e.target.closest(".dash-nav");
+  if (nav) {
+    current.date = nav.dataset.today ? todayIso() : shiftDate(current.date, Number(nav.dataset.shift));
+    await refresh();
+    return;
+  }
+  const statusBtn = e.target.closest(".dash-status-row[data-filter]");
+  if (statusBtn && current.onFilter) {
+    current.onFilter(statusBtn.dataset.filter);
+    return;
+  }
+  const action = e.target.closest("[data-action]")?.dataset.action;
+  if (action === "diary") openDiary(null);
+  if (action === "deliveries") openDiary("deliveries");
+  if (action === "companies") openDiary("companies");
+  if (action === "print") {
+    const html = buildTodaySheetHtml(current.model);
+    openReportPrintDialog({
+      html,
+      mode: "print",
+      title: `今日の現場シート（${current.model.header.date}）A3横`,
+      note: "A3・横向きで印刷してください（iPadは共有→プリント、Windowsは印刷画面で用紙A3・横を選択）。03-2の日報とは別の帳票で、日報の印刷記録には残りません。"
+    });
+  }
+});
+
+root?.addEventListener("change", async (e) => {
+  if (!e.target.classList.contains("dash-date-input") || !e.target.value) return;
+  current.date = e.target.value;
+  await refresh();
+});
+
+/**
+ * @param {object} site
+ * @param {{onFilter?: (filter: string) => void}} [options] 日誌状況の数字を押したときに日報一覧を絞り込む
+ */
+export async function renderSiteDashboard(site, { onFilter } = {}) {
+  if (!root) return;
+  const keepDate = current.site?.id === site.id && current.date ? current.date : todayIso();
+  current = { site, date: keepDate, onFilter, model: null };
+  await refresh();
+}

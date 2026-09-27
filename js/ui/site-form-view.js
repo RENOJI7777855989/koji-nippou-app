@@ -2,7 +2,7 @@
    現場フォーム画面（新規作成／編集）
    ========================================================== */
 
-import { createSite, updateSite, getSite } from "../sites.js";
+import { createSite, updateSite, getSite, normalizeProgress } from "../sites.js";
 import { listUsers, ROLES } from "../auth.js";
 import { escapeHtml } from "../utils.js";
 import { showView, showMessage } from "./common.js";
@@ -16,6 +16,8 @@ const clientNameInput = document.getElementById("siteFormClientName");
 const addressInput = document.getElementById("siteFormAddress");
 const startDateInput = document.getElementById("siteFormStartDate");
 const endDateInput = document.getElementById("siteFormEndDate");
+const constructionNumberInput = document.getElementById("siteFormConstructionNumber");
+const progressPercentInput = document.getElementById("siteFormProgressPercent");
 const memoInput = document.getElementById("siteFormMemo");
 const assignedWrap = document.getElementById("siteFormAssignedWrap");
 const assignedSelect = document.getElementById("siteFormAssignedUsers");
@@ -79,6 +81,8 @@ export async function initSiteFormViewEdit(params) {
   addressInput.value = site.address || "";
   startDateInput.value = site.startDate || "";
   endDateInput.value = site.endDate || "";
+  constructionNumberInput.value = site.constructionNumber || "";
+  progressPercentInput.value = site.progressPercent ?? "";
   memoInput.value = site.memo || "";
   await populateAssignedSelect(site.assignedUserIds || []);
   await populateTemplateSelect(site.reportTemplateId || "");
@@ -99,6 +103,8 @@ form.addEventListener("submit", async (e) => {
     address: addressInput.value.trim(),
     startDate: startDateInput.value,
     endDate: endDateInput.value,
+    constructionNumber: constructionNumberInput.value.trim(),
+    progressPercent: normalizeProgress(progressPercentInput.value),
     memo: memoInput.value.trim(),
     assignedUserIds: Array.from(assignedSelect.selectedOptions).map((opt) => opt.value),
     reportTemplateId: templateSelect.value || null

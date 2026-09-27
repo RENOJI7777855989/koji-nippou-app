@@ -110,6 +110,12 @@
           <label>竣工予定日
             <input type="date" id="siteFormEndDate">
           </label>
+          <label>工事番号
+            <input type="text" id="siteFormConstructionNumber" placeholder="例）2026-015">
+          </label>
+          <label>進捗率（％・任意）
+            <input type="number" id="siteFormProgressPercent" min="0" max="100" step="1" inputmode="numeric" placeholder="例）62">
+          </label>
           <label class="full-width">メモ
             <textarea id="siteFormMemo" rows="3"></textarea>
           </label>
@@ -135,6 +141,7 @@
         <dt>元請名</dt><dd id="siteDetailClientName"></dd>
         <dt>住所</dt><dd id="siteDetailAddress"></dd>
         <dt>日報のExcel様式</dt><dd id="siteDetailReportTemplate"></dd>
+        <dt>工事番号</dt><dd id="siteDetailConstructionNumber"></dd>
         <dt>着工日〜竣工予定日</dt><dd id="siteDetailPeriod"></dd>
         <dt>メモ</dt><dd id="siteDetailMemo"></dd>
       </dl>
@@ -144,7 +151,9 @@
         <button type="button" id="toggleArchiveBtn" class="secondary-btn"></button>
       </div>
 
-      <h2>工事日報</h2>
+      <section id="siteDashboard" class="site-dashboard" hidden aria-label="現場ダッシュボード"></section>
+
+      <h2 id="reportListHeading">工事日報</h2>
       <p id="siteCompletedNotice" class="site-completed-notice" hidden></p>
       <button type="button" id="newReportBtn">＋ 新しい日報を作成</button>
       <div class="toolbar report-list-toolbar">
@@ -229,9 +238,18 @@
         <div id="siteSupervisorsContainer"></div>
         <button type="button" id="addSiteSupervisorBtn" class="secondary-btn">＋ 現場監督を追加</button>
 
-        <h3>業者ごとの作業内容・職長サイン</h3>
+        <h3 id="companiesHeading">業者ごとの作業内容・職長サイン</h3>
         <div id="companiesContainer"></div>
         <button type="button" id="addCompanyBtn">＋ 業者を追加</button>
+
+        <h3>本日の現場の流れ（時刻順に現場ダッシュボード・今日の現場シートへ表示）</h3>
+        <p class="app-subtitle">朝礼・作業・検査などを時刻つきで何件でも登録できます。搬入は下の「搬入事項」に入れると、流れにも自動で表示されます。</p>
+        <div id="timelineContainer"></div>
+        <button type="button" id="addTimelineBtn" class="secondary-btn">＋ 予定・作業を追加</button>
+
+        <h3 id="deliveriesHeading">搬入事項</h3>
+        <div id="deliveriesContainer"></div>
+        <button type="button" id="addDeliveryBtn" class="secondary-btn">＋ 搬入を追加</button>
 
         <label>明日の予定
           <textarea id="tomorrowPlan" rows="3"></textarea>

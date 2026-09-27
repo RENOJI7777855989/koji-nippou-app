@@ -46,7 +46,8 @@ const git = (...args) => execFileSync(GIT, args, { cwd: REPO, stdio: ["pipe", "p
     const blobOf = (buf) => execFileSync(GIT, ["hash-object", "--stdin"], { input: buf, cwd: REPO }).toString().trim();
     const hasObject = (id) => { try { git("cat-file", "-e", id); return true; } catch { return false; } };
     const origBlob = fs.existsSync(ORIGINAL) ? blobOf(fs.readFileSync(ORIGINAL)) : null;
-    check("2 Git履歴（全コミット）に .xlsx のファイル名が無い", !/\.xls[xm]?\b/i.test(objects), `${git("rev-list", "--all").split("\n").filter(Boolean).length}コミット`);
+    // 暗号化ファイル（.xlsx.enc）は除き、平文の .xlsx/.xls/.xlsm で終わるファイル名だけを見る
+    check("2 Git履歴（全コミット）に .xlsx のファイル名が無い（暗号化した .xlsx.enc を除く）", !/\.xls[xm]?$/im.test(objects), `${git("rev-list", "--all").split("\n").filter(Boolean).length}コミット`);
     check("2 Gitのオブジェクトに、平文のクリーン版・原本の中身が1つも無い（中身のハッシュで照合）", !hasObject(blobOf(plain)) && (!origBlob || !hasObject(origBlob)));
   } else {
     check("1・2 Gitの確認（gitコマンドが使えないため未確認）", false, "gitが見つかりません");

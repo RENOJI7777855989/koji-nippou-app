@@ -7,6 +7,7 @@ import { getSite, copySite, archiveSite, unarchiveSite, completeSite, reopenSite
 import { listReportsBySite, getPrintStatus, isEditedAfterPrint, PRINT_STATUS_LABELS, recordReportOutput } from "../reports.js";
 import { exportReportsExcelZip, buildReportsPrintHtml, exportSiteLedgerExcel, buildSiteLedgerPrintHtml, resolveCompanyTemplateForSite } from "../reportPrint.js";
 import { previewSiteTemplateUpgrade, upgradeSiteTemplate, revertSiteTemplate } from "../report-output/templateResolver.js";
+import { renderSiteDashboard } from "./site-dashboard.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
 import { escapeHtml } from "../utils.js";
 import { showView, showMessage } from "./common.js";
@@ -19,6 +20,7 @@ const clientNameEl = document.getElementById("siteDetailClientName");
 const addressEl = document.getElementById("siteDetailAddress");
 const periodEl = document.getElementById("siteDetailPeriod");
 const reportTemplateEl = document.getElementById("siteDetailReportTemplate");
+const constructionNumberEl = document.getElementById("siteDetailConstructionNumber");
 const memoEl = document.getElementById("siteDetailMemo");
 const editBtn = document.getElementById("editSiteBtn");
 const copyBtn = document.getElementById("copySiteBtn");
@@ -379,6 +381,7 @@ function renderSiteInfo() {
   renderSiteTemplateInfo();
   addressEl.textContent = currentSite.address || "-";
   periodEl.textContent = fmtPeriod(currentSite);
+  constructionNumberEl.textContent = currentSite.constructionNumber || "-";
   memoEl.textContent = currentSite.memo || "-";
   toggleArchiveBtn.textContent = currentSite.status === "archived" ? "アーカイブを解除" : "この現場をアーカイブ";
   const completed = !!currentSite.completedAt;
@@ -416,4 +419,12 @@ export async function initSiteDetailView(params) {
 
   renderSiteInfo();
   await renderReportList();
+  // 現場ダッシュボード（日誌の内容を表示するだけ。日誌状況の数字を押すと下の日報一覧を絞り込む）
+  await renderSiteDashboard(site, {
+    onFilter: async (filter) => {
+      reportListFilter.value = filter;
+      await renderReportList();
+      document.getElementById("reportListHeading")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
 }

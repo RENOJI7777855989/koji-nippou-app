@@ -17,6 +17,7 @@ import { PATROL_CHECKLIST_ITEMS, PATROL_STATUS_OPTIONS } from "../patrolChecklis
 import { hasPermission, canAccessSite } from "../auth.js";
 import { showView, showMessage } from "./common.js";
 import { navigate } from "../router.js";
+import { FLOW_KINDS, FLOW_STATUSES, DELIVERY_STATUSES, normalizeFlowRow, normalizeDeliveryRow } from "../dashboard/dailyFlow.js";
 
 const reportSaveBtn = document.getElementById("reportSaveBtn");
 
@@ -28,6 +29,10 @@ const temperatureInput = document.getElementById("temperature");
 const workerCountTotalInput = document.getElementById("workerCountTotal");
 const companiesContainer = document.getElementById("companiesContainer");
 const addCompanyBtn = document.getElementById("addCompanyBtn");
+const timelineContainer = document.getElementById("timelineContainer");
+const addTimelineBtn = document.getElementById("addTimelineBtn");
+const deliveriesContainer = document.getElementById("deliveriesContainer");
+const addDeliveryBtn = document.getElementById("addDeliveryBtn");
 const tomorrowPlanInput = document.getElementById("tomorrowPlan");
 const remarksInput = document.getElementById("remarks");
 const siteSupervisorsContainer = document.getElementById("siteSupervisorsContainer");
@@ -132,6 +137,9 @@ function addCompanyRow(data = {}) {
     <label>実績人数
       <input type="number" class="actualWorkerCount" min="0" placeholder="例）5">
     </label>
+    <label>作業時間
+      <input type="text" class="workHours" placeholder="例）8:00～17:00">
+    </label>
     <label class="full-row">使用機械
       <input type="text" class="machinery" placeholder="例）バックホウ">
     </label>
@@ -161,6 +169,7 @@ function addCompanyRow(data = {}) {
   row.querySelector(".plannedWorkerCount").value = data.plannedWorkerCount || "";
   row.querySelector(".actualWorkerCount").value = data.actualWorkerCount || "";
   row.querySelector(".machinery").value = data.machinery || "";
+  row.querySelector(".workHours").value = data.workHours || "";
   row.querySelector(".workContent").value = data.workContent || "";
   row.querySelector(".safetyNotes").value = data.safetyNotes || "";
   row.querySelector(".foremanName").value = data.foremanName || "";
@@ -201,7 +210,7 @@ companiesContainer.addEventListener("click", async (e) => {
   const removeBtn = e.target.closest(".removeCompanyBtn");
   if (removeBtn) {
     const row = removeBtn.closest(".company-row");
-    const hasInput = ["companyName", "occupation", "plannedWorkerCount", "actualWorkerCount", "workContent", "safetyNotes", "foremanName"].some(
+    const hasInput = ["companyName", "occupation", "plannedWorkerCount", "actualWorkerCount", "workHours", "workContent", "safetyNotes", "foremanName"].some(
       (cls) => row.querySelector(`.${cls}`).value.trim() !== ""
     );
     const hasSignature = !row._signaturePad.isEmpty() || row.dataset.existingSignatureId;
@@ -215,6 +224,99 @@ companiesContainer.addEventListener("click", async (e) => {
 });
 
 addCompanyBtn.addEventListener("click", () => addCompanyRow());
+
+// ================= 本日の現場の流れ・搬入事項（現場ダッシュボード用。日誌に入力する） =================
+
+const optionsHtml = (list, selected) => list.map((o) => `<option value="${o.value}"${o.value === selected ? " selected" : ""}>${escapeHtml(o.label)}</option>`).join("");
+
+function addTimelineRow(data = {}) {
+  const row = document.createElement("div");
+  row.className = "timeline-row";
+  row.dataset.rowId = data.id || createId();
+  row.innerHTML = `
+    <label>時刻<input type="time" class="flowTime" step="300"></label>
+    <label>種別<select class="flowKind">${optionsHtml(FLOW_KINDS, data.kind || "work")}</select></label>
+    <label class="full-row">内容<input type="text" class="flowTitle" placeholder="例）朝礼・KY／型枠工事／配筋検査"></label>
+    <label>予定・実績<select class="flowStatus">${optionsHtml(FLOW_STATUSES, data.status || "plan")}</select></label>
+    <label class="full-row">メモ<input type="text" class="flowNote" placeholder="任意"></label>
+    <button type="button" class="removeRowBtn secondary-btn">この行を削除</button>`;
+  row.querySelector(".flowTime").value = data.time || "";
+  row.querySelector(".flowTitle").value = data.title || "";
+  row.querySelector(".flowNote").value = data.note || "";
+  timelineContainer.appendChild(row);
+  return row;
+}
+
+function addDeliveryRow(data = {}) {
+  const row = document.createElement("div");
+  row.className = "delivery-row";
+  row.dataset.rowId = data.id || createId();
+  row.innerHTML = `
+    <label>搬入時刻<input type="time" class="dlvTime" step="300"></label>
+    <label>状況<select class="dlvStatus">${optionsHtml(DELIVERY_STATUSES, data.status || "plan")}</select></label>
+    <label>搬入物<input type="text" class="dlvItem" placeholder="例）鉄筋"></label>
+    <label>数量<input type="text" class="dlvQuantity" placeholder="例）10t"></label>
+    <label>搬入業者<input type="text" class="dlvVendor" placeholder="例）〇〇建設"></label>
+    <label>車両<input type="text" class="dlvVehicle" placeholder="例）10t車"></label>
+    <label>搬入元<input type="text" class="dlvOrigin" placeholder="例）〇〇工場"></label>
+    <label>搬入先<input type="text" class="dlvDestination" placeholder="例）北側ゲート"></label>
+    <label class="full-row">備考<textarea class="dlvNote" rows="2" placeholder="例）北側道路から進入・誘導員1名配置"></textarea></label>
+    <button type="button" class="removeRowBtn secondary-btn">この搬入を削除</button>`;
+  row.querySelector(".dlvTime").value = data.time || "";
+  for (const [cls, key] of [["dlvItem", "item"], ["dlvQuantity", "quantity"], ["dlvVendor", "vendor"], ["dlvVehicle", "vehicle"], ["dlvOrigin", "origin"], ["dlvDestination", "destination"], ["dlvNote", "note"]]) row.querySelector(`.${cls}`).value = data[key] || "";
+  deliveriesContainer.appendChild(row);
+  return row;
+}
+
+function collectTimeline() {
+  return [...timelineContainer.querySelectorAll(".timeline-row")]
+    .map((row) => normalizeFlowRow({
+      id: row.dataset.rowId,
+      time: row.querySelector(".flowTime").value,
+      kind: row.querySelector(".flowKind").value,
+      title: row.querySelector(".flowTitle").value,
+      status: row.querySelector(".flowStatus").value,
+      note: row.querySelector(".flowNote").value
+    }))
+    .filter(Boolean);
+}
+
+function collectDeliveries() {
+  return [...deliveriesContainer.querySelectorAll(".delivery-row")]
+    .map((row) => normalizeDeliveryRow({
+      id: row.dataset.rowId,
+      time: row.querySelector(".dlvTime").value,
+      status: row.querySelector(".dlvStatus").value,
+      item: row.querySelector(".dlvItem").value,
+      quantity: row.querySelector(".dlvQuantity").value,
+      vendor: row.querySelector(".dlvVendor").value,
+      vehicle: row.querySelector(".dlvVehicle").value,
+      origin: row.querySelector(".dlvOrigin").value,
+      destination: row.querySelector(".dlvDestination").value,
+      note: row.querySelector(".dlvNote").value
+    }))
+    .filter(Boolean);
+}
+
+function loadFlowAndDeliveries(report = {}) {
+  timelineContainer.innerHTML = "";
+  deliveriesContainer.innerHTML = "";
+  (report.timeline || []).forEach((r) => addTimelineRow(r));
+  (report.deliveries || []).forEach((r) => addDeliveryRow(r));
+}
+
+addTimelineBtn.addEventListener("click", () => addTimelineRow());
+addDeliveryBtn.addEventListener("click", () => addDeliveryRow());
+for (const container of [timelineContainer, deliveriesContainer]) {
+  container.addEventListener("click", (e) => {
+    const btn = e.target.closest(".removeRowBtn");
+    if (!btn) return;
+    const row = btn.closest(".timeline-row, .delivery-row");
+    const hasInput = [...row.querySelectorAll("input, textarea")].some((el) => el.value.trim() !== "");
+    if (hasInput && !confirm("入力内容が削除されます。この行を削除しますか？")) return;
+    row.remove();
+  });
+}
 
 async function renderPhotoGrid(reportId) {
   const photos = await listPhotosByReport(reportId);
@@ -254,6 +356,7 @@ function resetForm() {
   companiesContainer.innerHTML = "";
   addCompanyRow();
   siteSupervisorsContainer.innerHTML = "";
+  loadFlowAndDeliveries({});
   resetPatrolChecklist();
   photoGrid.innerHTML = "";
   recalcWorkerCountTotal();
@@ -301,6 +404,7 @@ export async function initReportFormViewNew(params) {
   dateInput.value = /^\d{4}-\d{2}-\d{2}$/.test(params.date || "") ? params.date : localToday;
   await renderPhotoGrid(draftReportId);
   applyReadOnlyMode(false); // このルートには編集権限があるユーザーしか到達しない
+  focusRequestedSection();
 }
 
 export async function initReportFormViewEdit(params) {
@@ -335,6 +439,7 @@ export async function initReportFormViewEdit(params) {
   patrolInspectorNameInput.value = report.patrolInspectorName || "";
   patrolCommentInput.value = report.patrolComment || "";
   loadPatrolChecklist(report.patrolChecklist);
+  loadFlowAndDeliveries(report);
 
   companiesContainer.innerHTML = "";
   const signatures = await listSignaturesByReport(report.id);
@@ -355,6 +460,17 @@ export async function initReportFormViewEdit(params) {
   await renderPhotoGrid(report.id);
   applyReadOnlyMode(!hasPermission("editReports") || !!report.finalizedAt);
   renderOutputPanel(report);
+  focusRequestedSection();
+}
+
+/** 現場ダッシュボードの「🚚搬入」「👷業者」から開いたときは、その欄まで移動する（搬入は空なら1行追加） */
+function focusRequestedSection() {
+  const focus = window.__reportFormFocus;
+  window.__reportFormFocus = null;
+  if (!focus) return;
+  if (focus === "deliveries" && !deliveriesContainer.querySelector(".delivery-row") && !form.classList.contains("read-only-form")) addDeliveryRow();
+  const target = document.getElementById(focus === "deliveries" ? "deliveriesHeading" : "companiesHeading");
+  target?.scrollIntoView({ block: "start" });
 }
 
 // ================= 出力・印刷・再印刷 =================
@@ -477,6 +593,7 @@ function collectCompanies() {
       plannedWorkerCount,
       actualWorkerCount,
       machinery: row.querySelector(".machinery").value.trim(),
+      workHours: row.querySelector(".workHours").value.trim(),
       workContent: row.querySelector(".workContent").value.trim(),
       safetyNotes: row.querySelector(".safetyNotes").value.trim(),
       foremanName: row.querySelector(".foremanName").value.trim()
@@ -508,7 +625,9 @@ form.addEventListener("submit", async (e) => {
     siteSupervisorNames: collectSiteSupervisorNames(),
     patrolInspectorName: patrolInspectorNameInput.value.trim(),
     patrolChecklist: collectPatrolChecklist(),
-    patrolComment: patrolCommentInput.value.trim()
+    patrolComment: patrolCommentInput.value.trim(),
+    timeline: collectTimeline(),
+    deliveries: collectDeliveries()
   };
 
   let report;

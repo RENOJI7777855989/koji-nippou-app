@@ -183,3 +183,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **出力にも個人名を持ち越さない**: 1日出力・台帳の残留情報の除去（`scrubWorkbookResidue`）で、文書のプロパティの作成者・最終更新者・最終印刷日時と、コメントの作成者名を空にする（利用者が登録した原本から出力する場合も）。
 - **iPad実機確認用の確認用サイト**（本番とは別・非公開）: `node tools/build-site.js && node tools/serve-staging.js`。このMacから同じWi‑Fi内だけにHTTPSで `dist/` を配信する（インターネットには公開しない）。HTTPSの証明書は、このMacで作る確認用の認証局（30日・同じネットワークのIPと .local に限定）で発行し、秘密鍵は `~/.koji-nippou-app/staging/` にだけ置く。iPadには `http://<MacのIP>:8080/` から確認用の証明書を一時的にインストールして信頼する（確認後に削除）。`https://…/v2/` は「同梱の新しい版（確認用第2版）」が届いた状態を再現する（同じ保存領域なので、既存現場は旧版のまま・新規現場は新しい版になることを確かめられる。本番の同梱ファイルは変えない）。確認用のセットアップリンクは `~/.koji-nippou-app/setup-link-staging.txt` にだけ保存し、画面・ログには出さない。チェック表は `http://<MacのIP>:8080/checklist`（`tools/staging-checklist.html`。結果はその端末に保存し、「結果をコピー」で取り出す）。
 - **WebKit（Safariと同じエンジン）での確認**: `tests/webkit-ipad-setup.js`（iPadの画面設定・通常のプロファイル。Playwrightの一時コンテキストはプライベートブラウズ相当でIndexedDBにファイルを保存できないため）。iPad実機の代わりにはならない。
+
+## 現場ダッシュボード・A3「今日の現場シート」
+
+現場詳細の上部（`#siteDashboard`）に、日誌（日報）の内容だけを集計・整理して表示する。**ダッシュボード用の入力は無い**（入力はすべて日誌側。ダッシュボードの「＋日誌」「🚚搬入」「👷業者」は、表示中の日付の日誌の該当欄を開くだけ）。03-2のExcel出力・様式には一切影響しない（流れ・搬入・作業時間は03-2に書き込まない）。DBスキーマ・バージョンは変更していない（任意の項目を足しただけで、従来の日報・現場はそのまま表示できる）。
+
+- **追加した項目**: 日報 `timeline`（本日の現場の流れ `{id,time,title,kind,status,note}`）・`deliveries`（搬入事項 `{id,time,item,quantity,vendor,origin,destination,vehicle,status,note}`、状況は 予定/搬入済/変更/中止）・業者行の `workHours`（作業時間、任意）。現場 `constructionNumber`（工事番号）・`progressPercent`（進捗率 0〜100、手入力。未入力なら工期経過率を別表示）。定義は `js/dashboard/dailyFlow.js`（時刻は "8:00"→"08:00" に正規化、すべて空の行は保存しない）。
+- **集計**（`js/dashboard/siteDashboardModel.js`、DOM・DB非依存の純粋関数）: 流れは日誌の流れ（●）と搬入（◆）を時刻順に並べる（二重入力なし）。人員は実績人数の合計、累計は工事開始〜表示日の実績人数の合計、延べ労働時間=累計×8時間。日誌状況（表示日まで）: 提出予定=開始日〜表示日（竣工予定日まで）の日数／未提出=日報の無い日／未署名=職長サインの無い業者がある日報／未承認=確認済みでない日報／未印刷=印刷状態が未印刷。実際の提出・承認の仕組みは無い。日誌状況の行を押すと日報一覧が絞り込まれる。
+- **A3印刷**（`js/dashboard/todaySheetHtml.js`）: A3横1枚の印刷用HTML。各欄が溢れる場合だけその欄の文字を縮小（最小6pt）。下段の申し送り・明日の予定・現場メモは日誌の内容＋手書き用の罫線。印刷は既存の印刷ダイアログ（`openReportPrintDialog`）を使う。
+- 画面は `js/ui/site-dashboard.js`（日付の前後移動・今日）。検証: `tests/site-dashboard.js`（Chromium。iPad実機・Windows実機は未確認）。

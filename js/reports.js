@@ -37,7 +37,12 @@ export async function createReport(fields) {
     patrolChecklist: fields.patrolChecklist || {},
     patrolComment: fields.patrolComment || "",
     photoIds: fields.photoIds || [],
-    signatureIds: fields.signatureIds || []
+    signatureIds: fields.signatureIds || [],
+    // 現場ダッシュボード・A3「今日の現場シート」用（日誌に入力し、ダッシュボードは表示するだけ）
+    //   timeline   … 本日の現場の流れ [{ id, time:"HH:MM", title, kind, status:"plan"|"done", note }]
+    //   deliveries … 搬入事項 [{ id, time, item, quantity, vendor, origin, destination, vehicle, status, note }]
+    timeline: fields.timeline || [],
+    deliveries: fields.deliveries || []
   };
   if (fields.id) base.id = fields.id; // 新規作成前に写真/署名を紐付けるため、事前発行IDを許容する
   const report = stampNew(base);
