@@ -123,6 +123,10 @@ function writeUint16(arr, offset, value) {
  * @param {string} [mimeType]
  */
 export function buildZip(zip, modifications, mimeType = "application/zip") {
+  return buildZipInternal(zip, modifications, mimeType, null);
+}
+
+function buildZipInternal(zip, modifications, mimeType, precompressed) {
   const encoder = new TextEncoder();
   const localChunks = [];
   const centralChunks = [];
@@ -137,7 +141,16 @@ export function buildZip(zip, modifications, mimeType = "application/zip") {
 
     let method, crc, compressedSize, uncompressedSize, compressedData, modTime, modDate;
 
-    if (changed) {
+    if (changed && precompressed?.has(name)) {
+      const packed = precompressed.get(name);
+      method = packed.method;
+      crc = packed.crc;
+      compressedSize = packed.data.length;
+      uncompressedSize = packed.uncompressedSize;
+      compressedData = packed.data;
+      modTime = original?.modTime ?? 0;
+      modDate = original?.modDate ?? 0x21;
+    } else if (changed) {
       const content = modifications.get(name);
       method = 0; // 変更・追加エントリは無圧縮(STORED)で書き込む
       crc = crc32(content);
@@ -211,4 +224,23 @@ export function buildZip(zip, modifications, mimeType = "application/zip") {
   writeUint16(eocd, 20, 0);
 
   return new Blob([...localChunks, ...centralChunks, eocd], { type: mimeType });
+}
+
+async function deflateRaw(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+/**
+ * buildZipと同じ入力で、変更・追加したエントリをdeflate圧縮して書き込む版。
+ * 台帳のように大きなシートXMLを作るときに、無圧縮（buildZip）だとファイルが数倍〜10倍に
+ * 膨らむため、こちらを使う。変更しないエントリは元の圧縮バイト列のままコピーする。
+ */
+export async function buildZipCompressed(zip, modifications, mimeType = "application/zip") {
+  const compressed = new Map();
+  for (const [name, content] of modifications) {
+    const packed = await deflateRaw(content);
+    compressed.set(name, { method: 8, crc: crc32(content), uncompressedSize: content.length, data: packed });
+  }
+  return buildZipInternal(zip, modifications, mimeType, compressed);
 }

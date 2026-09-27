@@ -1,0 +1,20 @@
+{
+  "templates": [
+    {
+      "id": "anzen-eisei-03-2",
+      "layoutId": "anzen-eisei-03-2",
+      "name": "03-2 安全衛生作業打合日誌（標準）",
+      "fileName": "anzen-eisei-03-2.xlsx.enc",
+      "encrypted": true,
+      "algorithm": "AES-256-GCM",
+      "iv": "E0TL8KIdMkUuwBSu",
+      "keyId": "c11a66b5f144b782",
+      "sha256": "71f8f2533fc50cd1376a5e89da7cef7b17aff011d3ab1da77cc0c84d63a4372c",
+      "cipherSha256": "baeb7cf1e2cc957793c2a8833c489722ea03a32362f1d8d9cad9eeaf12fd2c32",
+      "bundleVersion": 1,
+      "cleaned": true,
+      "removedTextCount": 1,
+      "note": "会社様式から、前の工事の記入例・社内パス・個人名・プリンター情報・指定した文言を除き、暗号化した複製（復号するにはセットアップリンクが必要）"
+    }
+  ]
+}

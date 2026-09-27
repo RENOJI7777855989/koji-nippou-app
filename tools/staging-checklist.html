@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iPad実機確認チェック表</title>
+<style>
+  :root { --bg: #f7f8fa; --card: #fff; --line: #d9dee5; --ink: #1f2933; --sub: #5b6573; --ok: #1b7f3b; --ng: #b3261e; --na: #8a6d00; --accent: #2b6cb0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, "Hiragino Sans", sans-serif; line-height: 1.6; }
+  header { position: sticky; top: 0; z-index: 2; background: var(--card); border-bottom: 1px solid var(--line); padding: 10px 16px; }
+  header h1 { font-size: 1.1rem; margin: 0 0 4px; }
+  .summary { font-size: .9rem; color: var(--sub); }
+  .summary b { color: var(--ink); }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  button { font: inherit; padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  main { max-width: 960px; margin: 0 auto; padding: 12px 16px 60px; }
+  .note { background: #fff8e1; border: 1px solid #f0d98c; border-radius: 8px; padding: 10px 12px; font-size: .92rem; }
+  section { margin-top: 18px; }
+  section h2 { font-size: 1.05rem; margin: 0 0 8px; }
+  .item { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+  .item .id { font-weight: bold; color: var(--accent); margin-right: 6px; }
+  .row { display: grid; grid-template-columns: 5.5em 1fr; gap: 4px 10px; margin-top: 4px; font-size: .93rem; }
+  .row .k { color: var(--sub); }
+  textarea { width: 100%; min-height: 2.6em; font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 6px; }
+  .judge { display: flex; gap: 6px; }
+  .judge label { border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; }
+  .judge input { margin-right: 4px; }
+  .judge label.sel-ok { border-color: var(--ok); color: var(--ok); font-weight: bold; }
+  .judge label.sel-ng { border-color: var(--ng); color: var(--ng); font-weight: bold; }
+  .judge label.sel-na { border-color: var(--na); color: var(--na); font-weight: bold; }
+  code { background: #eef1f5; padding: 1px 4px; border-radius: 4px; word-break: break-all; }
+</style>
+</head>
+<body>
+<header>
+  <h1>工事日報アプリ iPad実機確認チェック表</h1>
+  <div class="summary" id="summary"></div>
+  <div class="bar"><button class="primary" id="copyBtn">結果をコピー（Claudeへの報告用）</button><button id="resetBtn">記入を消す</button></div>
+</header>
+<main>
+  <p class="note">
+    確認用サイト: <code>{{SITE}}</code>（このMacから同じWi‑Fi内だけに配信。インターネットには公開していません）<br>
+    確認用の第2版（新しい版が届いた状態）: <code>{{SITE_V2}}</code><br>
+    証明書と手順: <code>{{HTTP}}</code><br>
+    セットアップリンク（鍵を含む）はここには載せていません。Macの <code>~/.koji-nippou-app/setup-link-staging.txt</code> の中身を、自分宛てのメッセージやAirDropでiPadに送ってください（他人に送らない・掲示しない）。<br>
+    記入した結果はこの端末のブラウザにだけ保存されます。確認用の証明書は、すべて終わったらiPadから削除してください。
+  </p>
+  <div id="sections"></div>
+</main>
+<script>
+const SECTIONS = [
+  ["0. 準備", [
+    ["0-1", "iPadのSafariで {{HTTP}} を開き、「確認用の証明書をダウンロード」→「設定」→「プロファイルがダウンロードされました」→インストール", "プロファイル「Koji Nippou Staging CA」がインストールされる"],
+    ["0-2", "「設定」→「一般」→「情報」→「証明書信頼設定」で「Koji Nippou Staging CA」をオン", "オンにできる"],
+    ["0-3", "Macの setup-link-staging.txt の中身（https://…#setup=…）を、自分宛てのメッセージ（またはAirDrop）でiPadへ送る", "iPadのメッセージにリンクが届く（まだ開かない）"]
+  ]],
+  ["A. Safari", [
+    ["A-1", "Safariで確認用サイト {{SITE}} を開く", "証明書の警告なしで現場一覧が表示される（アドレスバーに鍵のマーク）"],
+    ["A-2", "テンプレート管理（帳票テンプレート管理）を開く", "「アプリ同梱: …未登録です…セットアップリンクを開くか…」と入力欄が表示される（まだ登録されていない）"],
+    ["A-3", "Safariのプライベートブラウズでセットアップリンクを開く（確認後、そのタブは閉じる）", "「セットアップできませんでした: …プライベートブラウズでは保存できません…」と表示され、登録されない"]
+  ]],
+  ["C. セットアップリンク", [
+    ["C-1", "メッセージで届いたセットアップリンクをタップ（通常のSafariで開く）", "アプリが開き「標準テンプレート（03-2）をこの端末に登録しました（標準に設定）」と表示される"],
+    ["C-2", "アドレスバーのURLを確認する", "末尾が #/sites で、#setup=… が残っていない"],
+    ["C-3", "テンプレート管理を開く", "「03-2 安全衛生作業打合日誌（標準）」が標準・第1版で登録されている"],
+    ["C-4", "アプリを開いたまま、もう一度同じリンクをタップ", "重複して登録されない（テンプレートは1件のまま）。アドレスから鍵が消える"]
+  ]],
+  ["F. Excel出力（Safari）", [
+    ["F-1", "新しい現場を作る（工事開始日・終了日を入力）→ 現場詳細を開く", "「日報のExcel様式: 03-2 … 第1版（標準テンプレート・この現場に固定）」と表示される"],
+    ["F-2", "日報を入力・保存し、日報画面の「Excel出力」→ ダウンロード →「ファイル」アプリで開く", "鍵の入力なしでダウンロードでき、Excel（またはNumbers）で開ける。工事名・日付・業者・作業内容が入っている"],
+    ["F-3", "日報画面の「印刷」または「PDF出力」で印刷プレビューを開く", "A3横で1日1頁のプレビューになる（崩れやはみ出しが無い）"],
+    ["F-4", "日報に写真と職長サインを追加して保存 → もう一度開く → Excel出力", "写真・サインが保存・表示される。ExcelのH列（職長印・サイン）にサインが入る"]
+  ]],
+  ["D. オフライン", [
+    ["D-1", "Safariで一度アプリを開いたあと、機内モードをオン → Safariでアプリを再読み込み", "アプリが表示される（オフラインでも開ける）"],
+    ["D-2", "機内モードのまま、新しい日報を作成してExcel出力", "鍵の入力なしでExcelを出力できる"],
+    ["D-3", "機内モードをオフに戻す", "（記録のみ）"]
+  ]],
+  ["B. ホーム画面PWA", [
+    ["B-1", "Safariの共有ボタン →「ホーム画面に追加」→ ホーム画面のアイコンから起動", "アドレスバーの無い全画面のアプリとして開く"],
+    ["B-2", "PWAで現場一覧・テンプレート管理を開く", "（記録）Safariで作った現場・Safariで登録した03-2がPWAにも見えるか。見える＝保存領域が共通／見えない＝別"],
+    ["B-3", "B-2で03-2が見えない場合: PWAのテンプレート管理の入力欄に、セットアップリンクを貼り付けて「登録」（リンクはメッセージで長押し→コピー）", "PWAでも03-2が標準として登録される"],
+    ["B-4", "PWAで新しい現場・日報を作りExcel出力", "鍵の入力なしで出力できる"],
+    ["B-5", "PWAを終了（アプリスイッチャーで上にスワイプ）→ 再びアイコンから起動", "テンプレート・現場・日報が残っている"],
+    ["B-6", "機内モードをオンにしてPWAを起動 → 日報をExcel出力 → 機内モードをオフ", "オフラインでも起動・出力できる"],
+    ["B-7", "PWAで作った現場が、Safariの確認用サイトで見えるか確認", "（記録）保存領域が共通か別か（B-2と同じ結果になるはず）"],
+    ["B-8", "PWAでセットアップリンクをタップした場合の動き（メッセージのリンクをタップ）", "（記録）PWAではなくSafariで開くかどうか"]
+  ]],
+  ["G. Safariの履歴（鍵が残らないか）", [
+    ["G-1", "Safariの履歴（ブックマークボタン→時計のタブ）で確認用サイトの項目を見る", "（記録）#setup= を含むURLが表示されるか。表示される場合は「Safariの履歴には残る」制限として扱う"],
+    ["G-2", "Safariの「戻る」ボタンを長押しして、戻る先の一覧を見る", "#setup= を含む項目が無い"],
+    ["G-3", "タブ一覧の「＋」を長押し →「最近閉じたタブ」を見る", "（記録）#setup= を含む項目があるか"],
+    ["G-4", "アドレスバーに確認用サイトのIPアドレスを入力して候補を見る", "（記録）#setup= を含む候補が出るか"],
+    ["G-5", "G-1〜G-4で残っていた場合: 履歴の項目を左にスワイプして削除できるか", "（記録）削除できるか"]
+  ]],
+  ["E. データ削除→復旧", [
+    ["E-1", "「設定」→「アプリ」→「Safari」→「詳細」→「Webサイトデータ」で確認用サイトのIPを削除 → Safariで確認用サイトを開く", "テンプレート・現場が消えている（テンプレート管理に「未登録」）"],
+    ["E-2", "同じセットアップリンクをもう一度タップ", "03-2が標準として再登録され、Excel出力できる"],
+    ["E-3", "（PWA）ホーム画面のアイコンを削除して、Safariから再度ホーム画面に追加 → 起動", "（記録）データが残っているか。無い場合はB-3の貼り付けで復旧できるか"]
+  ]],
+  ["H. 既存現場の03-2版固定", [
+    ["H-1", "Safariで確認用の第2版 {{SITE_V2}} を開き、テンプレート管理を開く", "「同梱の新しい版（第2版）があります」と表示される（自動では置き換わらない）"],
+    ["H-2", "「同梱の新しい版へ更新」を押す", "確認に「既に作成した現場は、それぞれ固定した版のまま変わりません」と固定文言の違いが表示される。OKで第2版になる"],
+    ["H-3", "F-1で作った既存の現場を開く", "「第1版（この現場に固定）」「最新は第2版」と表示される"],
+    ["H-4", "既存の現場の日報をExcel出力し、巡回点検記録の見出しを見る", "「（確認用第2版）」の文字が無い（第1版のまま）"],
+    ["H-5", "既存の現場で「最新版（第2版）に切り替える」→ 確認 → Excel出力", "違いを確認してから切り替わり、見出しに「（確認用第2版）」が入る"],
+    ["H-6", "「前の版（第1版）に戻す」→ Excel出力", "第1版に戻り、「（確認用第2版）」が無くなる"]
+  ]],
+  ["I. 新規現場の最新版", [
+    ["I-1", "第2版に更新したあと、新しい現場を作る → 現場詳細を見る", "「第2版（この現場に固定）」と表示される"],
+    ["I-2", "新しい現場の日報をExcel出力", "巡回点検記録の見出しに「（確認用第2版）」が入っている"]
+  ]],
+  ["J. 180日超のExcel（Microsoft Excel）", [
+    ["J-1", "工事開始日 2026-04-01・終了日 2027-05-05（400日）の現場を作り、1日目・181日目（2026-09-28）・400日目（2027-05-05）に日報を入れる", "保存できる"],
+    ["J-2", "現場詳細「まとめて出力・工事完了」→「台帳Excel（工事期間1冊）」", "ダウンロードできる（シートは20枚: 1～20 … 381～400）"],
+    ["J-3", "Microsoft Excel（iPad版またはPC）で台帳を開く", "修復のメッセージが出ずに開ける"],
+    ["J-4", "各シートの1頁目・181日目（181～200の1頁目）・400日目の頁を見る", "日付が暦日で連続し、日報を入れた日だけ内容がある。レイアウトが崩れていない"],
+    ["J-5", "社員の累計・計・延労働時間の数式セルを選んで数式を見る", "数式が残っていて、累計が途切れずに正しい"],
+    ["J-6", "ページレイアウト（印刷設定）を確認", "A3・横向き、印刷範囲が1日＝1頁"],
+    ["J-7", "1日分の日報Excel（F-2で出力したもの）もMicrosoft Excelで開く", "修復のメッセージが出ずに開け、A3横・1頁に収まる"]
+  ]]
+];
+const KEY = "koji-staging-checklist-v1";
+let state = {};
+try { state = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch { state = {}; }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} renderSummary(); };
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const container = document.getElementById("sections");
+for (const [title, items] of SECTIONS) {
+  const sec = document.createElement("section");
+  sec.innerHTML = `<h2>${esc(title)}</h2>` + items.map(([id, op, expect]) => `
+    <div class="item" data-id="${id}">
+      <div><span class="id">${id}</span></div>
+      <div class="row"><span class="k">操作</span><span>${esc(op)}</span></div>
+      <div class="row"><span class="k">期待結果</span><span>${esc(expect)}</span></div>
+      <div class="row"><span class="k">実際の結果</span><textarea data-field="actual">${esc(state[id]?.actual || "")}</textarea></div>
+      <div class="row"><span class="k">判定</span><span class="judge">
+        ${[["ok", "○"], ["ng", "×"], ["na", "未確認"]].map(([v, l]) => `<label class="${state[id]?.judge === v ? "sel-" + v : ""}"><input type="radio" name="j-${id}" value="${v}" ${state[id]?.judge === v ? "checked" : ""}>${l}</label>`).join("")}
+      </span></div>
+    </div>`).join("");
+  container.appendChild(sec);
+}
+container.addEventListener("input", (e) => {
+  const item = e.target.closest(".item"); if (!item) return;
+  const id = item.dataset.id; state[id] = state[id] || {};
+  if (e.target.dataset.field === "actual") state[id].actual = e.target.value;
+  if (e.target.type === "radio") {
+    state[id].judge = e.target.value;
+    item.querySelectorAll(".judge label").forEach((l) => { l.className = l.querySelector("input").checked ? "sel-" + l.querySelector("input").value : ""; });
+  }
+  save();
+});
+function renderSummary() {
+  const all = SECTIONS.flatMap(([, items]) => items.map(([id]) => id));
+  const c = { ok: 0, ng: 0, na: 0 };
+  for (const id of all) if (state[id]?.judge) c[state[id].judge]++;
+  document.getElementById("summary").innerHTML = `全${all.length}項目：<b>○ ${c.ok}</b>／<b>× ${c.ng}</b>／<b>未確認 ${c.na}</b>／未記入 ${all.length - c.ok - c.ng - c.na}`;
+}
+renderSummary();
+document.getElementById("copyBtn").addEventListener("click", async () => {
+  const label = { ok: "○", ng: "×", na: "未確認" };
+  const lines = ["iPad実機確認の結果"];
+  for (const [title, items] of SECTIONS) {
+    lines.push(`\n■ ${title}`);
+    for (const [id] of items) lines.push(`${id} [${label[state[id]?.judge] || "未記入"}] ${(state[id]?.actual || "").replace(/\s+/g, " ")}`);
+  }
+  const text = lines.join("\n");
+  try { await navigator.clipboard.writeText(text); alert("結果をコピーしました。Claudeへの返信に貼り付けてください。"); }
+  catch { const w = window.open("", "_blank"); if (w) { w.document.body.innerText = text; } else { alert(text); } }
+});
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (!confirm("この端末に保存した記入をすべて消しますか？")) return;
+  state = {}; save(); location.reload();
+});
+</script>
+</body>
+</html>

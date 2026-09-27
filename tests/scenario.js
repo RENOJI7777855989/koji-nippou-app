@@ -179,13 +179,14 @@ async function runMainScenario(browser, photoPath) {
   await page.click("#backToSiteDetailBtn");
   await page.waitForTimeout(200);
 
-  // 日報削除
+  // 日報は通常操作では削除できない（紙を紛失しても再出力できるよう日報データを残す仕様。
+  // 以前は「日報削除後、一覧から消える」を確認していたが、仕様変更によりこの確認に置き換えた）
   await page.locator(".report-card").first().click();
   await page.waitForTimeout(200);
-  await page.click("#deleteReportBtn");
+  const deleteVisible = await page.isVisible("#deleteReportBtn");
+  await page.click("#backToSiteDetailBtn");
   await page.waitForTimeout(200);
-  record("日報削除後、一覧から消える", (await page.locator("#reportList .report-card").count()) === 0);
-  record("日報0件で空メッセージが表示される", await page.isVisible("#reportListEmpty"));
+  record("日報は削除できない（削除ボタン非表示・一覧に残る）", !deleteVisible && (await page.locator("#reportList .report-card").count()) === 1);
 
   // 現場コピー（文字情報のみ、日報コピーなし）
   await page.click("#copySiteBtn");
@@ -195,6 +196,8 @@ async function runMainScenario(browser, photoPath) {
   const copiedName = await page.textContent("#siteDetailName");
   record("現場コピーで新しい現場詳細に遷移する", copiedName === "テスト現場A（コピー）", copiedName);
   record("コピー先に日報がコピーされない（チェックなし）", (await page.locator("#reportList .report-card").count()) === 0);
+  // 以前は日報削除後の現場で確認していた。日報は削除できない仕様になったため、日報0件のコピー先現場で確認する
+  record("日報0件で空メッセージが表示される", await page.isVisible("#reportListEmpty"));
 
   // アーカイブ
   await page.click("#toggleArchiveBtn");
@@ -217,11 +220,7 @@ async function runMainScenario(browser, photoPath) {
   // 現場コピー（日報あり、日報コピーする）
   await page.locator(".site-card", { hasText: "テスト現場A" }).first().click();
   await page.waitForTimeout(200);
-  // このテスト現場Aは既に日報0件（先ほど削除済み）のため、新規日報を1件追加してからコピー確認する
-  await page.click("#newReportBtn");
-  await page.fill("#tomorrowPlan", "コピー確認用日報");
-  await page.click("#reportSaveBtn");
-  await page.waitForTimeout(200);
+  // このテスト現場Aには日報が1件ある（日報は削除できない仕様のため、以前のように削除・再作成はしない）
 
   await page.click("#copySiteBtn");
   await page.check("#copySiteReportsCheckbox");

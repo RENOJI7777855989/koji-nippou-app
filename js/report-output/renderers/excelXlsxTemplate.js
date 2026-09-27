@@ -16,7 +16,9 @@
    ========================================================== */
 
 import { registerExcelRenderer } from "../rendererRegistry.js";
-import { loadZip, readZipEntryText, buildZip } from "../../zipUtil.js";
+import { loadZip, readZipEntryText } from "../../zipUtil.js";
+import { WorkbookPackage } from "../ledger/workbookPackage.js";
+import { sanitizeSingleSheetOutput } from "../ledger/outputSanitizer.js";
 import {
   setCellInSheetXml,
   appendImageAnchorToDrawingXml,
@@ -29,6 +31,8 @@ import {
 import { cellRefToRowCol, rowColToCellRef } from "../cellGrid.js";
 import { buildXlsxCellPlan } from "../xlsxCellPlan.js";
 import { ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING } from "./mappings/anzenEiseiUchiawaseNisshi.js";
+import { getLayoutProfile } from "../layoutProfiles.js";
+import "../layouts/index.js";
 
 function letterToColIndex(letter) {
   return cellRefToRowCol(`${letter}1`).col;
@@ -53,7 +57,8 @@ async function loadSheetDrawingParts(zip, sheetPath) {
 }
 
 async function render(model, mapping, companyProfile, template) {
-  const cfg = mapping || ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING;
+  // マッピングの優先順: テンプレート自身のmapping → 様式の種類（layoutId）のマッピング → 03-2（従来の既定）
+  const cfg = mapping || getLayoutProfile(template?.layoutId)?.dailyMapping || ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING;
   if (!template?.sourceFileBlob) {
     throw new Error("このテンプレートには元になる.xlsxファイルが登録されていません。テンプレート管理画面からファイルを登録してください。");
   }
@@ -129,9 +134,20 @@ async function render(model, mapping, companyProfile, template) {
 
   modifications.set(sheetPath, new TextEncoder().encode(sheetXml));
 
-  const blob = buildZip(zip, modifications, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  // 他工事データ除去: 書き込んだシート以外（前の工事の記入例が残る台帳シート等）と
+  // 保存先パス・外部リンク・参照されない共有文字列を、出力用の複製から外す。
+  // 原本（template.sourceFileBlob）は読み取るだけで変更しない。
+  const pkg = new WorkbookPackage(zip);
+  const decoder = new TextDecoder("utf-8");
+  for (const [path, bytes] of modifications) {
+    if (/\.(xml|rels)$/.test(path)) pkg.setText(path, decoder.decode(bytes));
+    else pkg.setBytes(path, bytes);
+  }
+  const sanitized = await sanitizeSingleSheetOutput(pkg, cfg.sheetName);
+
+  const blob = await pkg.toCompressedBlob();
   const filename = `${model.site.name || "現場"}_${model.report.date || "日付未定"}_日報.xlsx`;
-  return { blob, filename, warnings: plan.warnings };
+  return { blob, filename, warnings: plan.warnings, sanitized };
 }
 
 registerExcelRenderer("xlsx-template-patch", render);

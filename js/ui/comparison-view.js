@@ -100,11 +100,16 @@ let pendingPick = null; // { idx, disposition }
 const TYPE_LABEL = {
   match: "一致",
   diff: "差あり",
-  needs_review: "要確認",
+  candidate: "同一候補",
+  needs_review: "名称違い・要確認",
+  unit_diff: "単位違い・要確認",
+  lump_sum: "一式計上・要確認",
   estimate_only: "見積漏れの可能性",
   vendor_only: "積算漏れの可能性",
   duplicate_possible: "重複の可能性"
 };
+// 「同一候補」「名称違い・要確認」は、人間が同一項目かどうかを確定するまで対応付けが確定していない結果
+const CONFIRMABLE_TYPES = new Set(["candidate", "needs_review"]);
 
 const ESTIMATE_ACTIONS = [
   { action: "omission_confirmed", label: "見積落とし" },
@@ -194,6 +199,9 @@ function renderSummary() {
   const diffLabel = currentSummary.diffAmount >= 0 ? "増" : "減";
   const needsAttentionCount =
     (currentSummary.counts.needs_review || 0) +
+    (currentSummary.counts.candidate || 0) +
+    (currentSummary.counts.unit_diff || 0) +
+    (currentSummary.counts.lump_sum || 0) +
     (currentSummary.counts.estimate_only || 0) +
     (currentSummary.counts.vendor_only || 0) +
     (currentSummary.counts.duplicate_possible || 0);
@@ -338,8 +346,11 @@ function resultRowHtml(r, idx) {
     .map((f) => `<span class="status-badge status-warning">${{ quantity: "数量差", unitPrice: "単価差", amount: "金額差" }[f]}</span>`)
     .join(" ");
 
+  const lumpBadge = r.lumpSum && r.type !== "lump_sum" ? ` <span class="status-badge status-warning">一式計上・要確認</span>` : "";
+  const showUnits = r.type === "unit_diff" || r.type === "lump_sum";
+  const unitOf = (item) => (item?.unit ? escapeHtml(item.unit) : "");
   const decisionButtons =
-    r.type === "needs_review"
+    CONFIRMABLE_TYPES.has(r.type)
       ? `<div class="comparison-decision-actions">
           <button type="button" class="secondary-btn decisionSameBtn" data-idx="${idx}">同一項目</button>
           <button type="button" class="secondary-btn decisionDifferentBtn" data-idx="${idx}">別項目</button>
@@ -347,14 +358,14 @@ function resultRowHtml(r, idx) {
       : "";
 
   return `<tr class="${typeClass}">
-    <td><span class="status-badge ${r.type === "match" ? "" : "status-warning"}">${escapeHtml(TYPE_LABEL[r.type] || r.type)}</span>${flagBadges}</td>
+    <td><span class="status-badge ${r.type === "match" ? "" : "status-warning"}">${escapeHtml(TYPE_LABEL[r.type] || r.type)}</span>${flagBadges}${lumpBadge}</td>
     <td>${escapeHtml(est?.category || vq?.category || "")}</td>
     <td>
       <p class="comparison-item-name">積算: ${est ? `${masterCodeBadge(est)}${escapeHtml(est.itemName)}` : "-"}</p>
       <p class="comparison-item-name">見積: ${vq ? `${masterCodeBadge(vq)}${escapeHtml(vq.itemName)}` : "-"}</p>
     </td>
-    <td class="num">${fmt(est?.quantity)} / ${fmt(vq?.quantity)}${r.quantityDiffPct != null ? `<br>(${fmtPct(r.quantityDiffPct)})` : ""}</td>
-    <td class="num">${fmt(est?.unitPrice)} / ${fmt(vq?.unitPrice)}${r.unitPriceDiffPct != null ? `<br>(${fmtPct(r.unitPriceDiffPct)})` : ""}</td>
+    <td class="num">${fmt(est?.quantity)}${showUnits ? unitOf(est) : ""} / ${fmt(vq?.quantity)}${showUnits ? unitOf(vq) : ""}${r.quantityDiffPct != null ? `<br>(${fmtPct(r.quantityDiffPct)})` : ""}${showUnits ? "<br>（単位が違うため数量は比較しません）" : ""}</td>
+    <td class="num">${fmt(est?.unitPrice)} / ${fmt(vq?.unitPrice)}${r.unitPriceDiffPct != null ? `<br>(${fmtPct(r.unitPriceDiffPct)})` : ""}${showUnits ? "<br>（単価は比較しません）" : ""}</td>
     <td class="num">${fmt(est?.amount)} / ${fmt(vq?.amount)}${r.amountDiffPct != null ? `<br>(${fmtPct(r.amountDiffPct)})` : ""}</td>
     <td class="comparison-note">${escapeHtml(r.note || "")}${decisionButtons}</td>
   </tr>`;
@@ -441,7 +452,7 @@ tableBody.addEventListener("click", async (e) => {
   const btn = sameBtn || diffBtn;
   if (!btn) return;
   const r = currentResults[Number(btn.dataset.idx)];
-  if (!r || r.type !== "needs_review") return;
+  if (!r || !CONFIRMABLE_TYPES.has(r.type)) return;
   await setItemMatchOverride({
     siteId: currentSite.id,
     estimateItemKey: r.estimateItemKey,

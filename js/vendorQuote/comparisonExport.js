@@ -17,7 +17,10 @@ import { escapeHtml } from "../utils.js";
 const TYPE_LABEL = {
   match: "一致",
   diff: "数量・単価・金額差",
-  needs_review: "要確認",
+  candidate: "同一候補",
+  needs_review: "名称違い・要確認",
+  unit_diff: "単位違い・要確認",
+  lump_sum: "一式計上・要確認",
   estimate_only: "見積漏れの可能性",
   vendor_only: "積算漏れの可能性",
   duplicate_possible: "重複の可能性"
@@ -226,7 +229,7 @@ export function buildComparisonPrintHtml({ site, vendorBatch, summary, results, 
   .badge { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 10px; white-space: nowrap; }
   .type-match .badge, .risk-ok .badge { background: #e3f6e6; color: #1a7a34; }
   .type-diff .badge, .risk-medium .badge { background: #fff1cf; color: #8a5a00; }
-  .type-needs-review .badge, .risk-needs_review .badge { background: #eee; color: #555; }
+  .type-needs-review .badge, .type-candidate .badge, .type-unit-diff .badge, .type-lump-sum .badge, .risk-needs_review .badge { background: #eee; color: #555; }
   .type-estimate-only .badge, .type-vendor-only .badge, .risk-high .badge { background: #fde3e3; color: #a02b2b; }
   .type-duplicate-possible .badge { background: #e6e6fa; color: #4b3fa0; }
   .risk-low .badge { background: #fff8e1; color: #8a5a00; }

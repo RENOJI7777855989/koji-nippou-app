@@ -45,7 +45,7 @@ async function renderList() {
       <p class="site-card-name">${escapeHtml(site.name)}</p>
       <p class="site-card-meta">${escapeHtml(site.clientName) || "-"}</p>
       <p class="site-card-meta">${escapeHtml(site.address) || "-"}</p>
-      <span class="status-badge status-${site.status}">${statusLabel(site.status)}</span>
+      <span class="status-badge status-${site.status}">${statusLabel(site.status)}${site.completedAt ? "・工事完了" : ""}</span>
     `;
     listEl.appendChild(li);
   });

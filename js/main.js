@@ -12,6 +12,8 @@
    ========================================================== */
 
 import { runMigration } from "./migrate.js";
+import { seedBundledTemplatesOnFreshInstall, extractSetupKey, runBundledSetup } from "./report-output/bundledTemplates.js";
+import { pinUnpinnedSites } from "./report-output/templateResolver.js";
 import { registerServiceWorker } from "./pwaRegister.js";
 import { registerRoute, startRouter } from "./router.js";
 import { initSiteListView } from "./ui/site-list-view.js";
@@ -29,8 +31,43 @@ import { initVendorQuoteListView } from "./ui/vendor-quote-list-view.js";
 import { initVendorQuoteImportView } from "./ui/vendor-quote-import-view.js";
 import { initComparisonView } from "./ui/comparison-view.js";
 import { initMasterItemListView } from "./ui/master-item-list-view.js";
+import { initSubmissionView } from "./ui/submission-view.js";
+import { initSubmissionImportView } from "./ui/submission-import-view.js";
+
+/**
+ * セットアップリンク（index.html#setup=鍵）で開かれたら、鍵をURLから取り除いてから処理する
+ * （画面のアドレス・戻る履歴に鍵を残さない。# 以降はもともとサーバーへ送られない）。
+ */
+function takeSetupKeyFromUrl() {
+  const key = extractSetupKey(window.location.hash);
+  if (!key) return null;
+  history.replaceState(null, "", `${window.location.pathname}${window.location.search}#/sites`);
+  return key;
+}
+
+async function runSetupLink(key) {
+  const { showMessage } = await import("./ui/common.js");
+  showMessage("標準テンプレートを登録しています…");
+  try {
+    const r = await runBundledSetup(key);
+    const text = r.installed.length
+      ? `標準テンプレート（03-2）をこの端末に登録しました${r.madeStandard ? "（標準に設定）" : "（標準は変更していません。必要ならテンプレート管理で標準にしてください）"}。以後は鍵の入力なしで使えます。`
+      : "この端末には登録済みです。鍵を保存しました（新しい版があればテンプレート管理から更新できます）。";
+    showMessage(text);
+    window.dispatchEvent(new CustomEvent("bundled-template-setup", { detail: r }));
+  } catch (err) {
+    showMessage(`セットアップできませんでした: ${err?.message || "原因不明のエラー"}`, true);
+  }
+}
 
 async function bootstrap() {
+  const setupKey = takeSetupKeyFromUrl();
+  // アプリを開いたままセットアップリンクを開いた場合（再読み込みされず # 以降だけ変わる）も受け取る。
+  // ルーターより先に登録し、鍵をURLから取り除いてから（ルーターは置き換え後の #/sites を表示する）処理する
+  window.addEventListener("hashchange", () => {
+    const key = takeSetupKeyFromUrl();
+    if (key) runSetupLink(key).then(() => pinUnpinnedSites()).catch(() => {});
+  });
   registerServiceWorker();
   await runMigration();
 
@@ -43,17 +80,29 @@ async function bootstrap() {
   registerRoute("/backup", () => initBackupView());
   registerRoute("/sites/new", () => initSiteFormViewNew());
   registerRoute("/sites/:id/edit", (params) => initSiteFormViewEdit(params));
-  registerRoute("/sites/:id/report/new", (params) => initReportFormViewNew(params));
+  registerRoute("/sites/:id/report/new", (params, query) => initReportFormViewNew({ ...params, date: query?.date }));
   registerRoute("/sites/:id/report/:reportId", (params) => initReportFormViewEdit(params));
   registerRoute("/sites/:id/estimates/import", (params) => initEstimateImportView(params));
   registerRoute("/sites/:id/estimates/ask", (params) => initEstimateAskView(params));
   registerRoute("/sites/:id/estimates", (params) => initEstimateListView(params));
+  registerRoute("/sites/:id/submission/import", (params) => initSubmissionImportView(params));
+  registerRoute("/sites/:id/submission", (params) => initSubmissionView(params));
   registerRoute("/sites/:id/vendor-quotes/import", (params) => initVendorQuoteImportView(params));
   registerRoute("/sites/:id/vendor-quotes/compare", (params) => initComparisonView(params));
   registerRoute("/sites/:id/vendor-quotes", (params) => initVendorQuoteListView(params));
   registerRoute("/sites/:id", (params) => initSiteDetailView(params));
 
   startRouter();
+
+  // 画面を表示してから（待たせないよう）バックグラウンドで行う:
+  //  ・新規インストールの初回起動だけ、同梱の標準テンプレート（クリーンな03-2）を自動登録する。
+  //    既存の端末・既存のデータには何もしない。失敗してもアプリは使える（次回の起動で再試行）
+  //  ・様式の版を固定していない既存の現場を、今使っている版に固定する（現場・日報の内容は変えない）
+  (setupKey ? runSetupLink(setupKey) : Promise.resolve())
+    .then(() => seedBundledTemplatesOnFreshInstall())
+    .catch((err) => console.warn("同梱テンプレートの初回登録をスキップしました", err))
+    .then(() => pinUnpinnedSites())
+    .catch((err) => console.warn("様式の版の記録をスキップしました", err));
 }
 
 bootstrap().catch((err) => {

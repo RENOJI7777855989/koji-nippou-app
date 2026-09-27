@@ -26,9 +26,11 @@ import { buildXlsxCellPlan } from "../xlsxCellPlan.js";
 import { parseXlsxStyles, parseSharedStrings, readSheetLayout, colLettersToIndex } from "../xlsxSheetReader.js";
 import { escapeHtml } from "../../utils.js";
 import { ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING } from "./mappings/anzenEiseiUchiawaseNisshi.js";
+import { getLayoutProfile } from "../layoutProfiles.js";
+import "../layouts/index.js";
 
 const EMU_PER_PX = 9525;
-const PAPER_SIZE_MM = {
+export const PAPER_SIZE_MM = {
   1: [216, 279], 3: [216, 356], 5: [216, 356], 8: [297, 420], 9: [210, 297], 11: [148, 210]
 };
 
@@ -52,10 +54,16 @@ function bytesToDataUrl(bytes, mimeType) {
   return `data:${mimeType};base64,${btoa(binary)}`;
 }
 
-/** 列/行の累積オフセット(px)配列を作る（インデックス1がA列/1行目の開始位置=0） */
-function buildOffsets(sizesPx) {
-  const offsets = [0];
-  for (let i = 1; i < sizesPx.length; i++) offsets.push(offsets[i - 1] + (sizesPx[i - 1] || 0));
+/**
+ * 列/行の累積オフセット(px)配列を作る。offsets[i]＝i番目（1始まり）の列/行の開始位置。
+ * sizesPxのインデックス0は未使用（readSheetLayoutの配列は1始まり）なので、
+ * 先頭に足し込まない（足し込むと図形・職長サインが列幅・行高ぶん右下にずれる）。
+ */
+export function buildOffsets(sizesPx) {
+  const offsets = [0, 0];
+  for (let i = 2; i < sizesPx.length; i++) offsets.push(offsets[i - 1] + (sizesPx[i - 1] || 0));
+  // 最終の列/行の終端（範囲末尾を指すアンカーのto用）
+  offsets.push(offsets[sizesPx.length - 1] + (sizesPx[sizesPx.length - 1] || 0));
   return offsets;
 }
 
@@ -72,7 +80,7 @@ async function loadDrawingParts(zip, sheetPath) {
 }
 
 /** 図形パートの画像(<xdr:pic>)・テキストのみの図形(<xdr:sp>)を抽出し、px座標に変換する */
-async function collectTemplateShapes(zip, sheetPath, colOffsetPx, rowOffsetPx) {
+export async function collectTemplateShapes(zip, sheetPath, colOffsetPx, rowOffsetPx) {
   const parts = await loadDrawingParts(zip, sheetPath);
   if (!parts) return { images: [], textShapes: [] };
   const doc = new DOMParser().parseFromString(parts.drawingXml, "application/xml");
@@ -129,7 +137,12 @@ async function collectTemplateShapes(zip, sheetPath, colOffsetPx, rowOffsetPx) {
     const mediaPath = `xl/${target.replace(/^\.\.\//, "")}`;
     const bytes = await readZipEntryBytes(zip, mediaPath);
     if (!bytes) continue;
-    images.push({ ...anchorBoxFromTwoCell(anchorEl), dataUrl: bytesToDataUrl(bytes, guessMimeType(mediaPath)) });
+    // 元画像の一部だけを表示する設定（<a:srcRect l t r b>、1/1000%単位）。無視すると画像全体が枠に押し込まれて別物に見える
+    const srcRect = pic.getElementsByTagName("a:srcRect")[0];
+    const crop = srcRect
+      ? { l: Number(srcRect.getAttribute("l")) || 0, t: Number(srcRect.getAttribute("t")) || 0, r: Number(srcRect.getAttribute("r")) || 0, b: Number(srcRect.getAttribute("b")) || 0 }
+      : null;
+    images.push({ ...anchorBoxFromTwoCell(anchorEl), dataUrl: bytesToDataUrl(bytes, guessMimeType(mediaPath)), crop });
   }
 
   for (const anchorEl of Array.from(doc.getElementsByTagName("xdr:oneCellAnchor"))) {
@@ -145,7 +158,25 @@ async function collectTemplateShapes(zip, sheetPath, colOffsetPx, rowOffsetPx) {
   return { images, textShapes };
 }
 
-function cellStyleToCss(style) {
+/** 図形の重ね描きHTML。切り抜き指定（crop）があれば、元画像の該当部分だけを枠いっぱいに表示する */
+export function overlayImageHtml(img) {
+  const box = `left:${img.left}px;top:${img.top}px;width:${img.width}px;height:${img.height}px`;
+  const c = img.crop;
+  if (c && (c.l || c.t || c.r || c.b)) {
+    const visW = 100000 - c.l - c.r;
+    const visH = 100000 - c.t - c.b;
+    if (visW > 0 && visH > 0) {
+      const w = (img.width * 100000) / visW;
+      const h = (img.height * 100000) / visH;
+      const left = -(w * c.l) / 100000;
+      const top = -(h * c.t) / 100000;
+      return `<div class="xlsx-overlay-crop" style="${box}"><img src="${img.dataUrl}" alt="" style="position:absolute;left:${left}px;top:${top}px;width:${w}px;height:${h}px;max-width:none"></div>`;
+    }
+  }
+  return `<img class="xlsx-overlay-img" style="${box}" src="${img.dataUrl}" alt="">`;
+}
+
+export function cellStyleToCss(style) {
   const parts = [];
   if (style.font.bold) parts.push("font-weight:bold");
   if (style.font.italic) parts.push("font-style:italic");
@@ -221,7 +252,7 @@ function colIndexToLetters(n) {
 }
 
 async function render(model, mapping, companyProfile, template) {
-  const cfg = mapping || ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING;
+  const cfg = mapping || getLayoutProfile(template?.layoutId)?.dailyMapping || ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING;
   if (!template?.sourceFileBlob) {
     throw new Error("このテンプレートには元になる.xlsxファイルが登録されていません。テンプレート管理画面からファイルを登録してください。");
   }
@@ -273,9 +304,19 @@ async function render(model, mapping, companyProfile, template) {
   const marginLeftMm = layout.pageMarginsIn.left * 25.4;
   const marginRightMm = layout.pageMarginsIn.right * 25.4;
 
-  const imagesHtml = [...templateImages, ...signatureImages]
-    .map((img) => `<img class="xlsx-overlay-img" style="left:${img.left}px;top:${img.top}px;width:${img.width}px;height:${img.height}px" src="${img.dataUrl}" alt="">`)
-    .join("");
+  // 会社様式が「1ページに収める」印刷設定（mappingのfitToPage、Excel出力にも同じ設定を適用）の場合、
+  // 印刷用HTMLも用紙の印刷可能領域に収まる倍率で縮小する。縮小しないと、A3横でも下部が2ページ目にはみ出す。
+  // HTMLの表は、セルの余白・文字の高さ分だけExcelの行高より大きく描画されるため、倍率は「実際に描画された
+  // 表の大きさ」から表示時・印刷時に計算する（下のscript）。
+  const mmToPx = (mm) => (mm / 25.4) * 96;
+  const fitToPage = !!plan.fitToPage;
+  const availWpx = mmToPx(pageSizeMm[0] - marginLeftMm - marginRightMm);
+  const availHpx = mmToPx(pageSizeMm[1] - marginTopMm - marginBottomMm);
+  const fitScript = fitToPage
+    ? `<script>(function(){var AW=${availWpx.toFixed(1)},AH=${availHpx.toFixed(1)};function fit(){var ws=document.querySelectorAll(".xlsx-sheet-wrap");for(var i=0;i<ws.length;i++){var w=ws[i];var t=w.querySelector("table.xlsx-sheet");if(!t)continue;w.style.zoom="1";var r=t.getBoundingClientRect();if(!r.width||!r.height)continue;w.style.zoom=String(Math.min(1,AW/r.width*0.99,AH/r.height*0.99));}}fit();window.addEventListener("load",fit);window.addEventListener("beforeprint",fit);})();</script>`
+    : "";
+
+  const imagesHtml = [...templateImages, ...signatureImages].map(overlayImageHtml).join("");
   const textShapesHtml = textShapes
     .map((s) => `<div class="xlsx-overlay-text" style="left:${s.left}px;top:${s.top}px;width:${s.width}px;height:${s.height}px;font-size:${s.fontSizePx}px">${escapeHtml(s.text)}</div>`)
     .join("");
@@ -293,6 +334,7 @@ async function render(model, mapping, companyProfile, template) {
   table.xlsx-sheet { border-collapse: collapse; table-layout: fixed; }
   table.xlsx-sheet td { padding: 1px 2px; }
   .xlsx-overlay-img { position: absolute; object-fit: contain; }
+  .xlsx-overlay-crop { position: absolute; overflow: hidden; }
   .xlsx-overlay-text { position: absolute; display: flex; align-items: center; justify-content: center; text-align: center; }
 </style>
 </head>
@@ -302,6 +344,7 @@ async function render(model, mapping, companyProfile, template) {
     ${imagesHtml}
     ${textShapesHtml}
   </div>
+  ${fitScript}
 </body>
 </html>`;
 

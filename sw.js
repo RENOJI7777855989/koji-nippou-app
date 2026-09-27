@@ -16,9 +16,11 @@
    そのパスを追加すること（ビルド工程が無い方針のため手動管理）。
    ========================================================== */
 
-const CACHE_NAME = "koji-nippou-v6";
+const CACHE_NAME = "koji-nippou-v17";
 
 const PRECACHE_URLS = [
+  "./assets/templates/manifest.json",
+  "./assets/templates/anzen-eisei-03-2.xlsx.enc",
   "./",
   "./index.html",
   "./style.css",
@@ -75,6 +77,22 @@ const PRECACHE_URLS = [
   "./js/report-output/renderers/index.js",
   "./js/report-output/renderers/pdfDefault.js",
   "./js/report-output/renderers/mappings/anzenEiseiUchiawaseNisshi.js",
+  "./js/report-output/renderers/mappings/anzenEiseiLedger.js",
+  "./js/report-output/layoutProfiles.js",
+  "./js/report-output/layouts/anzenEisei03_2.js",
+  "./js/report-output/layouts/index.js",
+  "./js/report-output/templateInspector.js",
+  "./js/report-output/templateCleaner.js",
+  "./js/report-output/bundledTemplates.js",
+  "./js/report-output/templateResolver.js",
+  "./js/report-output/ledger/workbookPackage.js",
+  "./js/report-output/ledger/sheetCells.js",
+  "./js/report-output/ledger/ledgerTemplate.js",
+  "./js/report-output/ledger/formulaCache.js",
+  "./js/report-output/ledger/outputSanitizer.js",
+  "./js/report-output/ledger/renderLedgerWorkbook.js",
+  "./js/report-output/ledger/ledgerPrintHtml.js",
+  "./js/report-output/ledger/generateLedgerOutput.js",
   "./js/estimate/estimateAssistant.js",
   "./js/estimate/estimateBatches.js",
   "./js/estimate/estimateItems.js",
@@ -287,12 +305,32 @@ const PRECACHE_URLS = [
   "./js/vendorQuote/omissionCheck.js",
   "./js/vendorQuote/masterItems.js",
   "./js/vendorQuote/itemMasterMatch.js",
+  "./js/vendorQuote/vendorQuoteTrace.js",
+  "./js/vendorQuote/vendorQuoteRevision.js",
+  "./js/reportPrint.js",
+  "./js/ui/report-print-dialog.js",
   "./js/ui/master-item-list-view.js",
   "./js/quote-output/quoteDataAdapter.js",
   "./js/quote-output/quoteCellPlan.js",
   "./js/quote-output/generateQuoteOutput.js",
   "./js/quote-output/renderers/quoteCsvDefault.js",
   "./js/quote-output/index.js",
+  "./js/submission/submissionPlans.js",
+  "./js/submission/submissionAssignments.js",
+  "./js/submission-output/templateProfile.js",
+  "./js/submission-output/submissionTotals.js",
+  "./js/submission-output/submissionModel.js",
+  "./js/submission-output/pageBuilder.js",
+  "./js/submission-output/sheetXmlWriter.js",
+  "./js/submission-output/renderSubmissionWorkbook.js",
+  "./js/submission-output/generateSubmissionOutput.js",
+  "./js/submission-output/index.js",
+  "./js/ui/submission-view.js",
+  "./js/submission-import/submissionWorkbookParser.js",
+  "./js/submission-import/importMatcher.js",
+  "./js/submission-import/importDiff.js",
+  "./js/submission-import/submissionImports.js",
+  "./js/ui/submission-import-view.js",
 ];
 
 self.addEventListener("install", (event) => {

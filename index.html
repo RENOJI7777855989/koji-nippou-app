@@ -97,6 +97,10 @@
           <label>元請名
             <input type="text" id="siteFormClientName">
           </label>
+          <label class="full-width">日報のExcel様式
+            <select id="siteFormReportTemplate"></select>
+            <small id="siteFormReportTemplateHint" class="empty-message"></small>
+          </label>
           <label>住所
             <input type="text" id="siteFormAddress">
           </label>
@@ -130,6 +134,7 @@
       <dl class="site-detail-info">
         <dt>元請名</dt><dd id="siteDetailClientName"></dd>
         <dt>住所</dt><dd id="siteDetailAddress"></dd>
+        <dt>日報のExcel様式</dt><dd id="siteDetailReportTemplate"></dd>
         <dt>着工日〜竣工予定日</dt><dd id="siteDetailPeriod"></dd>
         <dt>メモ</dt><dd id="siteDetailMemo"></dd>
       </dl>
@@ -140,12 +145,53 @@
       </div>
 
       <h2>工事日報</h2>
+      <p id="siteCompletedNotice" class="site-completed-notice" hidden></p>
       <button type="button" id="newReportBtn">＋ 新しい日報を作成</button>
+      <div class="toolbar report-list-toolbar">
+        <select id="reportListFilter" aria-label="日報の絞り込み">
+          <option value="all">全日報</option>
+          <option value="unprinted">未印刷</option>
+          <option value="printed">印刷済み</option>
+          <option value="reprinted">再印刷</option>
+          <option value="editedAfterPrint">印刷後に修正あり</option>
+          <option value="confirmed">確認済み</option>
+          <option value="unconfirmed">未確認</option>
+          <option value="missing">未入力（日報のない日）</option>
+        </select>
+        <input type="search" id="reportListSearch" placeholder="日付・業者名・作業内容で検索" aria-label="日報の検索">
+      </div>
+      <p id="reportListSummary" class="app-subtitle"></p>
       <p id="reportListEmpty" class="empty-message">まだ日報がありません。</p>
       <ul id="reportList" class="report-list"></ul>
+      <ul id="reportMissingList" class="report-list" hidden></ul>
+
+      <details class="report-bulk-panel" id="reportBulkPanel">
+        <summary>まとめて出力・工事完了</summary>
+        <p class="app-subtitle">上の一覧に表示中の日報（絞り込み・検索の結果）をまとめて出力します。紙を紛失した場合も、保存されている日報データから同じ帳票を作り直せます。</p>
+        <div class="toolbar">
+          <button type="button" id="bulkExcelBtn" class="secondary-btn">Excel一括出力（ZIP）</button>
+          <button type="button" id="bulkPdfBtn" class="secondary-btn">PDF一括出力</button>
+          <button type="button" id="bulkPrintBtn" class="secondary-btn">まとめて印刷</button>
+        </div>
+        <h4>工事期間の台帳（1冊）</h4>
+        <p class="app-subtitle">会社指定様式の台帳シート（1～20・21～40…）に、工事開始日から終了日（未設定なら最後の日報の日）までを1日1頁で書き込みます。頁は日付で決まり、日報のない日（休工日）は空欄の頁になります。180日を超える場合はシートを自動で追加します。絞り込みに関係なく、この現場のすべての日報が対象です。</p>
+        <div class="toolbar">
+          <button type="button" id="ledgerExcelBtn" class="secondary-btn">台帳Excel（工事期間1冊）</button>
+          <button type="button" id="ledgerPrintBtn" class="secondary-btn">台帳を印刷・PDF</button>
+        </div>
+        <h4>工事完了</h4>
+        <p class="app-subtitle">工事完了にすると、この現場の日報をすべて確定します（以後は修正・追加ができなくなりますが、閲覧・検索・再出力はいつでもできます。データは削除されません）。完了後にアーカイブすると現場一覧から隠れます（「アーカイブ済みを表示」でいつでも表示できます）。</p>
+        <div class="toolbar">
+          <button type="button" id="completeSiteBtn" class="secondary-btn">日報を確定して工事完了にする</button>
+          <button type="button" id="reopenSiteBtn" class="secondary-btn" hidden>工事完了を取り消す（修正する場合）</button>
+        </div>
+      </details>
 
       <h2>積算</h2>
       <button type="button" id="goToEstimateListBtn" class="secondary-btn">📐 積算内訳を見る</button>
+
+      <h2>📄 提出金額内訳書</h2>
+      <button type="button" id="goToSubmissionFromSiteBtn" class="secondary-btn">会社様式で提出内訳書を出力</button>
 
       <h2>🏢 業者見積</h2>
       <div class="toolbar">
@@ -214,8 +260,19 @@
           <button type="button" id="reportCancelBtn" class="secondary-btn">キャンセル</button>
         </div>
       </form>
-      <button type="button" id="goToReportOutputFromReportBtn" class="secondary-btn" hidden>この日報を帳票出力</button>
-      <button type="button" id="deleteReportBtn" class="deleteReportBtn">この日報を削除</button>
+      <section id="reportOutputPanel" class="report-output-panel" hidden>
+        <h3>出力・印刷</h3>
+        <p id="reportOutputStatus" class="report-output-status"></p>
+        <div class="toolbar">
+          <button type="button" id="reportExcelBtn" class="secondary-btn">Excel出力</button>
+          <button type="button" id="reportPdfBtn" class="secondary-btn">PDF出力</button>
+          <button type="button" id="reportPrintBtn">印刷</button>
+          <button type="button" id="reportConfirmBtn" class="secondary-btn">内容を確認済みにする</button>
+        </div>
+        <p class="app-subtitle">日報は削除できません。内容に誤りがある場合は修正して保存してください（紙を紛失しても、ここからいつでも同じ帳票を再出力できます）。</p>
+      </section>
+      <button type="button" id="goToReportOutputFromReportBtn" class="secondary-btn" hidden>この日報を帳票出力（様式を選んで出力）</button>
+      <button type="button" id="deleteReportBtn" class="deleteReportBtn" hidden>この日報を削除</button>
     </section>
 
     <!-- 帳票出力 -->
@@ -263,6 +320,7 @@
         <button type="button" id="outputPreviewBtn" class="secondary-btn">プレビュー</button>
         <button type="button" id="outputGenerateBtn">出力する</button>
         <button type="button" id="outputPrintBtn" class="secondary-btn" hidden>印刷する</button>
+        <button type="button" id="outputPrintedRecordBtn" class="secondary-btn" hidden>紙に印刷できた（印刷状態に記録）</button>
       </div>
 
       <div id="outputPreviewArea" hidden>
@@ -276,12 +334,168 @@
     <section class="view" id="view-report-templates" hidden>
       <button type="button" id="backToSiteListFromTemplatesBtn" class="link-btn">← 現場一覧に戻る</button>
       <h2>帳票テンプレート管理</h2>
-      <p class="app-subtitle">提出先の元請会社ごとに、Excel(.xlsx)・PDFの様式ファイルを登録しておけます。（データの自動差し込みは今後対応予定です）</p>
+      <p class="app-subtitle">日報のExcel様式（例: 03-2 安全衛生作業打合日誌）を登録します。「標準テンプレート」にした様式は、新規現場で自動的に使われます（現場ごとに別の様式を指定することもできます）。現場は作成した時点の様式・版に固定され、会社側で様式が更新されて「編集」からファイルを最新版へ差し替えても、工事中の現場は自動では切り替わりません（新しく作る現場から新しい版になります。既存の現場は現場詳細から切り替え・元に戻すことができます）。前の版は残り、いつでも戻せます。登録したファイルの複製をアプリ内に保存するだけで、日報の出力でファイルの原本を書き換えることはありません。</p>
+      <p id="reportTemplateStandardSummary" class="app-subtitle"></p>
+      <div id="bundledTemplateSection" class="bundled-template-section" hidden></div>
       <div class="toolbar">
         <button type="button" id="addReportTemplateBtn">＋ テンプレートを追加</button>
       </div>
       <p id="reportTemplateListEmpty" class="empty-message">テンプレートがまだありません。</p>
       <ul id="reportTemplateList" class="report-template-list"></ul>
+    </section>
+
+    <!-- 提出金額内訳書（会社様式Excel出力） -->
+    <section class="view" id="view-submission" hidden>
+      <button type="button" id="backToSiteFromSubmissionBtn" class="link-btn">← 現場詳細に戻る</button>
+      <h2>提出金額内訳書<span id="submissionSiteName"></span></h2>
+      <p class="app-subtitle">積算項目を号棟・工種・種別に割り当て、会社指定の様式（Excel）で提出用内訳書を出力します。積算データ自体は変更されません。</p>
+
+      <h3>1. 会社様式（テンプレート）</h3>
+      <div class="toolbar">
+        <select id="submissionTemplateSelect"></select>
+      </div>
+      <div class="toolbar">
+        <input type="file" id="submissionTemplateFile" accept=".xlsx">
+        <button type="button" id="submissionTemplateRegisterBtn" class="secondary-btn">この様式を登録</button>
+        <button type="button" id="submissionTemplateDeleteBtn" class="secondary-btn">選択中の様式を削除</button>
+      </div>
+      <p id="submissionTemplateInfo" class="app-subtitle"></p>
+
+      <h3>2. 出力設定</h3>
+      <div class="submission-settings">
+        <label class="full-width">各頁に印字する工事名
+          <input type="text" id="submissionProjectTitle" placeholder="未入力の場合は現場名">
+        </label>
+        <label class="full-width">各頁に印字する会社名（空欄で様式のまま）
+          <input type="text" id="submissionCompanyName" placeholder="">
+        </label>
+        <label class="full-width">印刷設定
+          <select id="submissionPrintMode">
+            <option value="original">原本設定（会社様式の印刷設定のまま）</option>
+            <option value="fit">1頁ごとに改頁して縮小</option>
+          </select>
+        </label>
+        <p class="app-subtitle" id="submissionPrintModeHelp">
+          <strong>原本設定</strong>: 会社様式の印刷設定を一切変えません。原本と同じ印刷結果になります（LibreOfficeでは1頁分の内容が複数の印刷頁にまたがることを確認済み。Excel実機は未確認）。<br>
+          <strong>1頁ごとに改頁して縮小</strong>: 各頁（P-1〜P-n）の終わりで改頁し、用紙に収まるよう縮小率を指定します。印刷頁数がP-nと一致します（LibreOfficeで確認済み。Excel実機は未確認）。
+        </p>
+        <label class="checkbox-label"><input type="checkbox" id="submissionAllowUnassigned"> 区分が未割当の積算項目を除外して出力する</label>
+        <button type="button" id="submissionSaveSettingsBtn" class="secondary-btn">設定を保存</button>
+      </div>
+
+      <div class="toolbar">
+        <button type="button" id="submissionGoToImportBtn" class="secondary-btn">📥 完成した内訳書Excelを取り込んで初期割当を作る</button>
+      </div>
+
+      <h3>3. 区分グループ</h3>
+      <p class="app-subtitle">表紙の「Ａ号棟・Ｂ号棟…共通仮設費・現場管理費」に相当するグループです。記号（Ａ・Ｂ…）は号棟→共通仮設費→現場管理費の順に自動で付きます。</p>
+      <ul id="submissionGroupList" class="submission-group-list"></ul>
+      <div class="toolbar">
+        <input type="text" id="submissionNewGroupName" placeholder="区分グループ名（例: ＲＪ号棟）">
+        <select id="submissionNewGroupKind"></select>
+        <button type="button" id="submissionAddGroupBtn" class="secondary-btn">＋ 追加</button>
+      </div>
+
+      <h3>4. 項目の割当</h3>
+      <div class="toolbar">
+        <select id="submissionAssignGroup"></select>
+        <input type="text" id="submissionAssignWorkType" list="submissionWorkTypeList" placeholder="工種（空欄＝内訳頁なしの1行）">
+        <input type="text" id="submissionAssignSubType" list="submissionSubTypeList" placeholder="種別（空欄＝工種に直接）">
+        <datalist id="submissionWorkTypeList"></datalist>
+        <datalist id="submissionSubTypeList"></datalist>
+      </div>
+      <div class="toolbar">
+        <button type="button" id="submissionAssignBtn">選択した項目に割当</button>
+        <button type="button" id="submissionUnassignBtn" class="secondary-btn">選択した項目の割当を解除</button>
+        <label class="checkbox-label"><input type="checkbox" id="submissionOnlyUnassigned"> 未割当のみ表示</label>
+      </div>
+      <p id="submissionAssignSummary" class="app-subtitle"></p>
+      <div class="table-scroll">
+        <table class="estimate-table">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="submissionSelectAll" aria-label="表示中をすべて選択"></th>
+              <th>工種（積算）</th><th>項目</th><th>仕様</th><th>数量</th><th>単位</th><th>単価</th><th>金額</th><th>割当</th><th>備考（出力用）</th>
+            </tr>
+          </thead>
+          <tbody id="submissionItemTableBody"></tbody>
+        </table>
+      </div>
+
+      <h3>5. 確認・出力</h3>
+      <div id="submissionPreview" class="submission-preview"></div>
+      <ul id="submissionIssueList" class="submission-issue-list"></ul>
+      <button type="button" id="submissionGenerateBtn">Excelを出力</button>
+    </section>
+
+    <!-- 提出金額内訳書Excelの取込（初期割当の自動作成） -->
+    <section class="view" id="view-submission-import" hidden>
+      <button type="button" id="backToSubmissionFromImportBtn" class="link-btn">← 提出金額内訳書に戻る</button>
+      <h2>提出内訳Excelの取込<span id="subImpSiteName"></span></h2>
+      <p class="app-subtitle">完成した提出金額内訳書（例: 七里 提出金額.xlsx）を読み取り、区分・工種・種別の階層と明細を取り出して、既存の積算項目と照合します。<strong>元のExcelファイルは変更しません（読み取りのみ）。</strong>自動で割当になるのは「完全一致」だけで、それ以外は下の表で人間が確認します。</p>
+
+      <div class="toolbar">
+        <input type="file" id="subImpFile" accept=".xlsx">
+        <button type="button" id="subImpAnalyzeBtn">解析して取込</button>
+      </div>
+      <p id="subImpStatus" class="app-subtitle"></p>
+
+      <div id="subImpSummary" class="submission-preview"></div>
+      <ul id="subImpIssueList" class="submission-issue-list"></ul>
+      <div id="subImpDiff"></div>
+
+      <h3>区分グループ（取込結果）</h3>
+      <div class="table-scroll"><table class="estimate-table"><thead><tr><th>記号</th><th>名称</th><th>区分の種類</th><th>判別根拠</th><th>内訳頁</th></tr></thead><tbody id="subImpGroupBody"></tbody></table></div>
+
+      <h3>明細と照合結果</h3>
+      <div class="toolbar">
+        <select id="subImpFilter">
+          <option value="all">すべて</option>
+          <option value="todo">要対応（候補・要確認・不一致で未確認）</option>
+          <option value="exact">完全一致</option>
+          <option value="candidate">候補</option>
+          <option value="review">要確認</option>
+          <option value="none">不一致</option>
+          <option value="note">摘要のみの行</option>
+          <option value="ambiguous">構造要確認</option>
+          <option value="changed">再取込で変更・追加</option>
+          <option value="registered">積算項目として登録済み</option>
+        </select>
+        <button type="button" id="subImpPairBtn" class="secondary-btn">同一内容を出現順に対応付け</button>
+        <button type="button" id="subImpBulkRegisterBtn" class="secondary-btn">選択した不一致を確認して登録…</button>
+      </div>
+      <p class="app-subtitle">「不一致」で似た既存項目も無い明細だけ、チェックして一括で確認・登録できます。候補がある行・構造要確認の行・摘要のみの行は、行ごとの「積算項目として登録…」で判断材料を見て登録します。<strong>確認して登録ボタンを押すまで、積算項目は作られません。</strong></p>
+      <div class="table-scroll">
+        <table class="estimate-table">
+          <thead><tr><th><input type="checkbox" id="subImpSelectAll" aria-label="登録候補をすべて選択"></th><th>#</th><th>区分／工種／種別</th><th>Excelの名称・摘要</th><th>数量</th><th>単位</th><th>単価</th><th>金額</th><th>照合結果</th><th>対応する積算項目</th><th>操作</th></tr></thead>
+          <tbody id="subImpLineBody"></tbody>
+        </table>
+      </div>
+
+      <h3>割当への反映</h3>
+      <p class="app-subtitle">反映しても既存の手動割当は上書きしません（内容が違う場合は「衝突」として一覧に出し、上書きする行だけ選べます）。同じ取込を何度反映しても二重登録されません。</p>
+      <button type="button" id="subImpApplyBtn">割当に反映</button>
+      <div id="subImpApplyReport"></div>
+
+      <dialog id="subImpRegisterDialog">
+        <h3 id="subImpRegTitle">積算項目として登録</h3>
+        <p class="app-subtitle" id="subImpRegLead"></p>
+        <div id="subImpRegBody"></div>
+        <label class="checkbox-label"><input type="checkbox" id="subImpRegConfirm"> 上の内容を確認しました（この内容で積算項目に登録します）</label>
+        <p id="subImpRegError" class="app-subtitle" style="color:#9b1c1c"></p>
+        <div class="form-actions">
+          <button type="button" id="subImpRegSubmit">積算項目として登録</button>
+          <button type="button" id="subImpRegCancel" class="secondary-btn">キャンセル（何も登録しない）</button>
+        </div>
+      </dialog>
+
+      <dialog id="subImpItemDialog">
+        <h3>対応する積算項目を選ぶ</h3>
+        <p id="subImpItemDialogLine" class="app-subtitle"></p>
+        <input type="search" id="subImpItemSearch" placeholder="項目名・仕様で検索">
+        <ul id="subImpItemList" class="subimp-item-list"></ul>
+        <div class="form-actions"><button type="button" id="subImpItemCancel" class="secondary-btn">閉じる</button></div>
+      </dialog>
     </section>
 
     <!-- 積算内訳一覧 -->
@@ -452,6 +666,7 @@
 
       <label class="full-width">業者見積ファイル（.xlsx / .pdf / .csv）
         <input type="file" id="vendorQuoteFileInput" accept=".xlsx,.pdf,.csv">
+        <span class="app-subtitle">この画面にPDF・Excel・CSVのファイルをドラッグ＆ドロップしても選択できます。画像だけのPDF（スキャン）は、文字認識（OCR）に未対応のため読み取れません。</span>
       </label>
 
       <div id="vendorQuoteImportSheetSection" hidden>
@@ -585,7 +800,10 @@
             <option value="">すべての判定</option>
             <option value="match">一致</option>
             <option value="diff">差あり</option>
-            <option value="needs_review">要確認</option>
+            <option value="candidate">同一候補</option>
+            <option value="needs_review">名称違い・要確認</option>
+            <option value="unit_diff">単位違い・要確認</option>
+            <option value="lump_sum">一式計上・要確認</option>
             <option value="estimate_only">見積漏れの可能性</option>
             <option value="vendor_only">積算漏れの可能性</option>
             <option value="duplicate_possible">重複の可能性</option>
@@ -704,6 +922,23 @@
   </dialog>
 
   <!-- 現場コピー用モーダル -->
+  <dialog id="reportPrintDialog">
+    <h3 id="reportPrintTitle">印刷</h3>
+    <p id="reportPrintNote" class="app-subtitle"></p>
+    <iframe id="reportPrintFrame" class="report-print-frame" title="印刷プレビュー"></iframe>
+    <div class="form-actions">
+      <button type="button" id="reportPrintOpenBtn">印刷画面を開く</button>
+      <button type="button" id="reportPrintCloseBtn" class="secondary-btn">閉じる</button>
+    </div>
+    <div id="reportPrintRecordArea" class="report-print-record" hidden>
+      <p>紙に印刷できましたか？（「印刷できた」を押すと印刷状態に記録します）</p>
+      <div class="form-actions">
+        <button type="button" id="reportPrintDoneBtn">紙に印刷できた（記録する）</button>
+        <button type="button" id="reportPrintNotDoneBtn" class="secondary-btn">印刷しなかった（記録しない）</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="copySiteDialog">
     <form id="copySiteForm">
       <h3>現場をコピー</h3>
@@ -724,7 +959,7 @@
   <dialog id="reportTemplateFormDialog">
     <form id="reportTemplateForm">
       <h3 id="reportTemplateFormTitle">テンプレートを追加</h3>
-      <label>会社
+      <label>会社（標準テンプレートなど、会社に紐づけない場合は「共通」）
         <select id="reportTemplateCompanySelect">
           <option value="__new__">＋ 新しい会社を追加</option>
         </select>
@@ -739,6 +974,8 @@
         <input type="file" id="reportTemplateFile" accept=".xlsx,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf">
       </label>
       <p id="reportTemplateFileInfo" class="empty-message"></p>
+      <ul id="reportTemplateInspectList" class="template-inspect-list"></ul>
+      <label class="checkbox-label"><input type="checkbox" id="reportTemplateAsStandard"> 標準テンプレートにする（新規現場で自動的に使う。Excelのみ）</label>
       <div class="form-actions">
         <button type="submit" id="reportTemplateSaveBtn">保存</button>
         <button type="button" id="reportTemplateCancelBtn" class="secondary-btn">キャンセル</button>

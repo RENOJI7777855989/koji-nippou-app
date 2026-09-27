@@ -1,3 +1,16 @@
 node_modules/
 .DS_Store
 .claude/settings.local.json
+
+# 会社指定様式（03-2など）の平文のExcelは、リポジトリ・公開サイトに置かない。
+# アプリに同梱するのは暗号化したファイル（assets/templates/*.xlsx.enc）だけ。
+*.xlsx
+*.xlsm
+*.xls
+# テンプレートの復号鍵・セットアップリンク（通常はリポジトリの外 ~/.koji-nippou-app/ に保存する）
+template-key.json
+setup-link.txt
+*.template-key
+
+# 配信用フォルダ（tools/build-site.js の出力。コミットしない）
+dist/

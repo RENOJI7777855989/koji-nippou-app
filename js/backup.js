@@ -30,7 +30,10 @@ const DATA_STORES = [
   "vendorQuoteItems",
   "itemMatchOverrides",
   "omissionDispositions",
-  "masterItems"
+  "masterItems",
+  "submissionPlans",
+  "submissionAssignments",
+  "submissionImports"
 ];
 
 // 復元時の競合一覧に表示するための、ストアごとの見出しラベルと代表フィールド
@@ -49,7 +52,10 @@ const STORE_LABELS = {
   vendorQuoteItems: "業者見積項目",
   itemMatchOverrides: "項目対応関係",
   omissionDispositions: "見積落とし確認結果",
-  masterItems: "共通積算項目マスター"
+  masterItems: "共通積算項目マスター",
+  submissionPlans: "提出内訳の出力設定",
+  submissionAssignments: "提出内訳の区分割当",
+  submissionImports: "提出内訳Excelの取込結果"
 };
 const RECORD_LABEL_FIELDS = {
   sites: "name",
@@ -62,7 +68,9 @@ const RECORD_LABEL_FIELDS = {
   vendorQuoteBatches: "sourceFileName",
   vendorQuoteItems: "itemName",
   omissionDispositions: "disposition",
-  masterItems: "standardName"
+  masterItems: "standardName",
+  submissionPlans: "projectTitle",
+  submissionImports: "sourceFileName"
 };
 
 // ストアごとに、Blobを含むフィールド一覧（バックアップ時は別ファイルへ退避する）

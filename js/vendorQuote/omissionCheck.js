@@ -73,7 +73,7 @@ const RESOLVING_ESTIMATE_DISPOSITIONS = new Set(["included_in_other_item", "incl
 const RESOLVING_VENDOR_DISPOSITIONS = new Set(["additional_work", "separate_contract", "out_of_scope", "possible_duplicate", "ok"]);
 
 function computeEstimateRisk(result, item, vendorItems, excludedVendorKeys) {
-  if (result.type === "needs_review" || result.type === "duplicate_possible") {
+  if (result.type === "needs_review" || result.type === "candidate" || result.type === "duplicate_possible") {
     return {
       risk: "needs_review", riskLabel: RISK_LABEL.needs_review,
       reason: result.note, lumpSumCandidate: null, ambiguousVendorItem: result.vendorItem || null
@@ -150,13 +150,13 @@ export function checkOmissions({ compareResults = [], vendorItems = [], disposit
 
   // 「一式」候補探索から除外する、既に1:1で確定的に対応付けられた業者見積項目
   const excludedVendorKeys = new Set(
-    compareResults.filter((r) => (r.type === "match" || r.type === "diff") && r.vendorItem).map((r) => buildItemKey(r.vendorItem))
+    compareResults.filter((r) => ["match", "diff", "unit_diff", "lump_sum"].includes(r.type) && r.vendorItem).map((r) => buildItemKey(r.vendorItem))
   );
 
   const candidates = [];
   const resolved = [];
   for (const r of compareResults) {
-    if (r.type === "estimate_only" || r.type === "needs_review" || (r.type === "duplicate_possible" && r.estimateItem)) {
+    if (r.type === "estimate_only" || r.type === "needs_review" || r.type === "candidate" || (r.type === "duplicate_possible" && r.estimateItem)) {
       const disposition = estimateDispositionByKey.get(buildItemKey(r.estimateItem));
       const built = buildEstimateCandidate(r, vendorItems, excludedVendorKeys, disposition);
       (built.resolved ? resolved : candidates).push(built);

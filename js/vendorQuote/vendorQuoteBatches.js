@@ -14,6 +14,28 @@ export async function listVendorQuoteBatchesBySite(siteId) {
   return all.filter((b) => !b.isDeleted).sort((a, b) => (b.importedAt || "").localeCompare(a.importedAt || ""));
 }
 
+/**
+ * 同じ現場に、同一ファイル（SHA-256）・同一シート／頁の取込がすでにあれば返す（重複取込の防止用）。
+ * 同じファイルでもシートが違えば別の取込として許す（複数シートの見積を1枚ずつ取り込む使い方を妨げない）。
+ * SHA-256を持たない従来の取込は判定対象外。新しい索引は使わず、現場の取込一覧から探す。
+ */
+export async function findDuplicateVendorQuoteBatch({ siteId, sourceFileSha256, sheetName }) {
+  if (!sourceFileSha256) return null;
+  const batches = await listVendorQuoteBatchesBySite(siteId);
+  return batches.find((b) => b.sourceFileSha256 === sourceFileSha256 && b.sheetName === sheetName) || null;
+}
+
+/**
+ * 別版の候補: 同じ現場・同じ業者名（空でない）・別のSHA-256の取込のうち最新のもの。無ければnull。
+ * 前の版として扱うかどうかは、取込時にユーザーが確認する（自動では決めない）。
+ */
+export async function findPreviousVersionCandidate({ siteId, vendorName, sourceFileSha256 }) {
+  const name = (vendorName || "").trim();
+  if (!name) return null;
+  const batches = await listVendorQuoteBatchesBySite(siteId);
+  return batches.find((b) => (b.vendorName || "").trim() === name && b.sourceFileSha256 !== sourceFileSha256) || null;
+}
+
 export async function getVendorQuoteBatch(id) {
   return dbGet("vendorQuoteBatches", id);
 }
@@ -27,6 +49,8 @@ export async function createVendorQuoteBatch({
   sourceFileType = "excel",
   sourceFileBlob = null,
   sourceFileMimeType = "",
+  sourceFileSha256 = null, // 元ファイルのSHA-256（同一ファイル・同一シートの重複取込の判定に使う）
+  revisionOf = null, // 前の版の取込ID（内容が変わった見積を別版として取り込んだ場合）
   sheetName,
   columnMapping,
   headerRow,
@@ -42,6 +66,8 @@ export async function createVendorQuoteBatch({
     sourceFileType, // "excel" | "pdf" | "csv"
     sourceFileBlob,
     sourceFileMimeType,
+    sourceFileSha256,
+    revisionOf,
     sheetName,
     columnMapping,
     headerRow,

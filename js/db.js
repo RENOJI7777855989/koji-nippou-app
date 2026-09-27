@@ -5,7 +5,7 @@
    ========================================================== */
 
 const DB_NAME = "constructionReportsDB";
-const DB_VERSION = 7;
+const DB_VERSION = 9;
 
 let dbPromise = null;
 
@@ -135,6 +135,27 @@ export function openDb() {
         store.createIndex("by_itemCode", "itemCode", { unique: true });
         store.createIndex("by_category", "category");
       }
+
+      // 提出金額内訳書の出力専用データ。積算項目(estimateItems)には手を加えず、
+      // 「どの区分グループ・工種・種別に出力するか」の割当と、現場ごとの出力設定
+      // （区分グループ一覧・工事名・使用テンプレート等）だけを別ストアに持つ。
+      if (!db.objectStoreNames.contains("submissionPlans")) {
+        const store = db.createObjectStore("submissionPlans", { keyPath: "id" });
+        store.createIndex("by_siteId", "siteId");
+      }
+
+      if (!db.objectStoreNames.contains("submissionAssignments")) {
+        const store = db.createObjectStore("submissionAssignments", { keyPath: "id" });
+        store.createIndex("by_siteId", "siteId");
+        store.createIndex("by_estimateItemId", "estimateItemId");
+      }
+
+      // 提出金額内訳書Excelの取込結果（解析した明細・照合結果・人間の確認結果）。
+      // 取込1回=1レコード。既存ストアには影響しない。
+      if (!db.objectStoreNames.contains("submissionImports")) {
+        const store = db.createObjectStore("submissionImports", { keyPath: "id" });
+        store.createIndex("by_siteId", "siteId");
+      }
     };
 
     req.onsuccess = () => resolve(req.result);
@@ -165,13 +186,29 @@ export async function dbGetAll(storeName, indexName, query) {
   });
 }
 
+/**
+ * 保存に失敗したときのエラーを、原因の分かるErrorにする。WebKit（Safari）では失敗時に
+ * トランザクションのエラーが空（null）で、原因はリクエスト側にだけ入っていることがある。
+ * プライベートブラウズ等でファイル・画像（Blob）を保存できない場合は、利用者向けの説明にする。
+ */
+function storageError(err, storeName) {
+  const message = err?.message || "";
+  if (/Blob\/File/i.test(message)) {
+    return new Error("このブラウザの状態ではファイル・画像のデータを保存できません（Safariのプライベートブラウズでは保存できません）。通常のSafari、またはホーム画面に追加したアプリで開いてください。");
+  }
+  if (err instanceof Error) return err;
+  return new Error(`データを保存できませんでした（${storeName}）${message ? "：" + message : ""}`);
+}
+
 export async function dbPut(storeName, value) {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
-    tx.objectStore(storeName).put(value);
+    const req = tx.objectStore(storeName).put(value);
+    const fail = () => reject(storageError(req.error || tx.error, storeName));
     tx.oncomplete = () => resolve(value);
-    tx.onerror = () => reject(tx.error);
+    tx.onerror = fail;
+    tx.onabort = fail;
   });
 }
 

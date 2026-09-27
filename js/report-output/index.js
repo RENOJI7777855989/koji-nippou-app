@@ -22,6 +22,39 @@ export {
   updateReportTemplate,
   deleteReportTemplate,
   getDefaultTemplateForCompany,
-  setDefaultReportTemplate
+  setDefaultReportTemplate,
+  getAppDefaultReportTemplate,
+  setAppDefaultReportTemplate,
+  clearAppDefaultReportTemplate,
+  listTemplateVersions,
+  replaceReportTemplateFile,
+  restoreReportTemplateVersion,
+  sha256OfBlob,
+  normalizeAppDefaultReportTemplate
 } from "./reportTemplates.js";
+export {
+  getBundledTemplateStatuses,
+  installBundledTemplate,
+  prepareBundledUpdate,
+  applyBundledUpdate,
+  seedBundledTemplatesOnFreshInstall,
+  runBundledSetup,
+  extractSetupKey,
+  getStoredKeyId
+} from "./bundledTemplates.js";
+export {
+  resolveReportTemplateForSite,
+  ensureSitePinned,
+  pinUnpinnedSites,
+  repinSite,
+  previewSiteTemplateUpgrade,
+  upgradeSiteTemplate,
+  revertSiteTemplate,
+  listSitesUsingTemplate,
+  listSitesPinnedToVersion,
+  findTemplateVersion
+} from "./templateResolver.js";
+export { inspectTemplate, compareTemplateVersions } from "./templateInspector.js";
+export { listLayoutProfiles, getLayoutProfile } from "./layoutProfiles.js";
+import "./layouts/index.js";
 export { registerExcelRenderer, registerPdfRenderer, listExcelRendererIds, listPdfRendererIds } from "./rendererRegistry.js";

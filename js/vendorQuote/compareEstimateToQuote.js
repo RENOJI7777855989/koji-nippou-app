@@ -10,7 +10,8 @@
    「〜の可能性」「確認が必要」という表現に統一する。
    ========================================================== */
 
-import { itemSimilarity, buildItemKey } from "./itemNormalize.js";
+import { itemSimilarity, buildItemKey, normalizeItemText } from "./itemNormalize.js";
+import { detectLumpSum } from "./vendorQuoteTrace.js";
 
 // 類似度スコアの解釈:
 //   AUTO_MATCH_THRESHOLD 以上   → 自動的に対応ありとみなす
@@ -18,6 +19,9 @@ import { itemSimilarity, buildItemKey } from "./itemNormalize.js";
 //   REVIEW_THRESHOLD 未満       → 対応候補にしない
 const AUTO_MATCH_THRESHOLD = 0.82;
 const REVIEW_THRESHOLD = 0.55;
+// 「同一候補」として提示する類似度の下限（policy:"candidate"のみ）。これ以上は候補、
+// REVIEW_THRESHOLD以上これ未満は「名称違い・要確認」。どちらも自動では確定しない。
+const CANDIDATE_THRESHOLD = 0.7;
 // 同一項目に対し、僅差の候補が複数ある場合は「重複の可能性」として
 // 機械的な確定をしない（例: 同じ工種が複数行に分割されている等）
 const DUPLICATE_SCORE_MARGIN = 0.05;
@@ -54,7 +58,65 @@ function classifySeverity(pct, tolerancePercent, alertPercent) {
 
 const FLAG_LABELS = { quantity: "数量差", unitPrice: "単価差", amount: "金額差" };
 
-function buildMatchedResult(estItem, vqItem, tol, matchType) {
+const UNIT_DIFF_LABEL = "単位違い・要確認";
+const LUMP_SUM_RESULT_LABEL = "一式計上・要確認";
+
+/**
+ * 対応が確定した（または完全一致した）ペアで、単位が違う／一式計上のものは、数量・単価を
+ * 単純比較しない別の結果にする（換算・再計算は行わない）。
+ *   ・両方が一式 → lump_sum（金額は参考の差だけ。数量×単価は使わない）
+ *   ・単位が違う（片方が一式の場合を含む） → unit_diff
+ * @returns {object|null} 該当しなければnull（通常の数量・単価・金額の比較へ進む）
+ */
+function buildUnitOrLumpResult(estItem, vqItem, matchType) {
+  const estLump = detectLumpSum(estItem);
+  const vqLump = detectLumpSum(vqItem);
+  const eu = normalizeItemText(estItem.unit);
+  const vu = normalizeItemText(vqItem.unit);
+  const unitMismatch = !!eu && !!vu && eu !== vu;
+  const lumpSum = estLump.isLumpSum || vqLump.isLumpSum;
+  if (!(estLump.isLumpSum && vqLump.isLumpSum) && !unitMismatch) return null;
+  const both = estLump.isLumpSum && vqLump.isLumpSum;
+  return {
+    type: both ? "lump_sum" : "unit_diff",
+    matchType,
+    estimateItem: estItem,
+    vendorItem: vqItem,
+    estimateItemKey: buildItemKey(estItem),
+    vendorItemKey: buildItemKey(vqItem),
+    // 金額の差だけは参考として出す（数量・単価は比較しない）
+    quantityDiffPct: null,
+    unitPriceDiffPct: null,
+    amountDiffPct: diffPercent(estItem.amount, vqItem.amount),
+    flags: [],
+    lumpSum,
+    unitMismatch,
+    label: both ? LUMP_SUM_RESULT_LABEL : UNIT_DIFF_LABEL,
+    note: both
+      ? "一式計上のため、数量×単価の比較はしません。金額は元の値のままです。含まれる工事の範囲が積算と合っているか確認してください。"
+      : `単位が異なります（積算: ${estItem.unit || "-"}／業者見積: ${vqItem.unit || "-"}）。単位の換算は自動では行わず、数量・単価は比較していません。${lumpSum ? "一式計上の可能性もあります。" : ""}確認してください。`
+  };
+}
+
+function buildCandidateResult(estItem, vqItem, score) {
+  return {
+    type: "candidate",
+    matchType: null,
+    estimateItem: estItem,
+    vendorItem: vqItem,
+    estimateItemKey: buildItemKey(estItem),
+    vendorItemKey: buildItemKey(vqItem),
+    similarityScore: score,
+    label: "同一候補",
+    note: "名称・仕様が近い候補です。自動では同一項目として確定していません。同一項目かご確認のうえ、確定してください。"
+  };
+}
+
+function buildMatchedResult(estItem, vqItem, tol, matchType, policy = "candidate") {
+  if (policy !== "legacy") {
+    const special = buildUnitOrLumpResult(estItem, vqItem, matchType);
+    if (special) return special;
+  }
   const quantityDiffPct = diffPercent(estItem.quantity, vqItem.quantity);
   const unitPriceDiffPct = diffPercent(estItem.unitPrice, vqItem.unitPrice);
   const amountDiffPct = diffPercent(estItem.amount, vqItem.amount);
@@ -149,8 +211,18 @@ function buildDuplicateResult(item, side, candidateCount) {
  * @param {object} tolerance DEFAULT_TOLERANCEを上書きする許容差設定
  * @returns {object[]} 分類済みの比較結果配列
  */
-export function compareEstimateToQuote({ estimateItems = [], vendorItems = [], overrides = [], tolerance = {} } = {}) {
+export function compareEstimateToQuote({ estimateItems = [], vendorItems = [], overrides = [], tolerance = {}, policy = "candidate" } = {}) {
+  // policy:
+  //   "candidate"（既定）… 類似度による一致は「同一候補」にとどめ、自動では同一項目として確定しない。
+  //                        自動で対応付けるのは、確定済み(overrides)・共通項目マスターの完全一致・
+  //                        名称と仕様が正規化後に完全一致（双方に他の候補なし）のものだけ。
+  //                        単位違い・一式計上は別の結果として扱う。
+  //   "legacy"          … 従来の動作（類似度0.82以上を自動で対応あり）。互換用。
   const tol = { ...DEFAULT_TOLERANCE, ...tolerance };
+  const isExactName = (a, b) =>
+    normalizeItemText(a.itemName) !== "" &&
+    normalizeItemText(a.itemName) === normalizeItemText(b.itemName) &&
+    normalizeItemText(a.spec) === normalizeItemText(b.spec);
 
   const overrideMap = new Map();
   for (const o of overrides) {
@@ -170,7 +242,7 @@ export function compareEstimateToQuote({ estimateItems = [], vendorItems = [], o
     for (const vq of vqList) {
       if (vq.matched) continue;
       if (vendorDecisions.get(vq.key) === "same") {
-        results.push(buildMatchedResult(est.item, vq.item, tol, "confirmed"));
+        results.push(buildMatchedResult(est.item, vq.item, tol, "confirmed", policy));
         est.matched = true;
         vq.matched = true;
         break;
@@ -203,7 +275,7 @@ export function compareEstimateToQuote({ estimateItems = [], vendorItems = [], o
     const [vq] = vqGroup;
     const bothExact = est.item._masterMatchType === "exact" && vq.item._masterMatchType === "exact";
     if (bothExact) {
-      results.push(buildMatchedResult(est.item, vq.item, tol, "auto"));
+      results.push(buildMatchedResult(est.item, vq.item, tol, policy === "legacy" ? "auto" : "master", policy));
     } else {
       results.push(buildNeedsReviewResult(est.item, vq.item, 1));
     }
@@ -263,7 +335,11 @@ export function compareEstimateToQuote({ estimateItems = [], vendorItems = [], o
   for (const { est, vq, score } of pairs) {
     if (est.matched || vq.matched) continue;
     if (score >= AUTO_MATCH_THRESHOLD) {
-      results.push(buildMatchedResult(est.item, vq.item, tol, "auto"));
+      if (policy === "legacy") results.push(buildMatchedResult(est.item, vq.item, tol, "auto", policy));
+      else if (isExactName(est.item, vq.item)) results.push(buildMatchedResult(est.item, vq.item, tol, "exact", policy));
+      else results.push(buildCandidateResult(est.item, vq.item, score));
+    } else if (policy !== "legacy" && score >= CANDIDATE_THRESHOLD) {
+      results.push(buildCandidateResult(est.item, vq.item, score));
     } else {
       results.push(buildNeedsReviewResult(est.item, vq.item, score));
     }
@@ -279,6 +355,15 @@ export function compareEstimateToQuote({ estimateItems = [], vendorItems = [], o
     if (!vq.matched && !vq.excluded) results.push(buildUnmatchedVendorResult(vq.item));
   }
 
+  // 対応の付かなかった項目が一式計上の可能性を持つ場合は目印を付ける（複数の積算項目 ↔ 1つの一式は
+  // 1対1に無理に対応させず、人間が確認する。確認は見積落とし確認の「一式に含む」で記録できる）
+  if (policy !== "legacy") {
+    for (const r of results) {
+      if (r.type === "estimate_only") r.lumpSum = detectLumpSum(r.estimateItem).isLumpSum;
+      if (r.type === "vendor_only") r.lumpSum = detectLumpSum(r.vendorItem).isLumpSum;
+    }
+  }
+
   return results;
 }
 
@@ -289,7 +374,7 @@ export function summarizeComparison({ estimateItems = [], vendorItems = [], resu
   const diffAmount = vendorTotalAmount - estimateTotalAmount;
   const diffPercentValue = estimateTotalAmount !== 0 ? (diffAmount / estimateTotalAmount) * 100 : null;
 
-  const counts = { match: 0, diff: 0, needs_review: 0, estimate_only: 0, vendor_only: 0, duplicate_possible: 0 };
+  const counts = { match: 0, diff: 0, needs_review: 0, estimate_only: 0, vendor_only: 0, duplicate_possible: 0, candidate: 0, unit_diff: 0, lump_sum: 0 };
   for (const r of results) counts[r.type] = (counts[r.type] || 0) + 1;
 
   return { estimateTotalAmount, vendorTotalAmount, diffAmount, diffPercent: diffPercentValue, counts };

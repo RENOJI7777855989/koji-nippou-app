@@ -5,7 +5,7 @@
 
 import { dbGetAll, dbGet, dbPut } from "./db.js";
 import { stampNew, stampUpdate } from "./utils.js";
-import { listReportsBySite, createReport } from "./reports.js";
+import { listReportsBySite, createReport, setSiteReportsFinalized } from "./reports.js";
 import { recordChange } from "./auditLog.js";
 
 const SORTERS = {
@@ -33,9 +33,22 @@ export async function getSite(id) {
   return dbGet("sites", id);
 }
 
-export async function createSite({ name, address = "", clientName = "", startDate = "", endDate = "", memo = "", assignedUserIds = [] }) {
-  const site = stampNew({ name, address, clientName, startDate, endDate, memo, status: "active", assignedUserIds });
+/**
+ * reportTemplateId: この現場だけで使う日報Excel様式のid。null（既定）は「標準テンプレートに従う」
+ * （新規現場は原則こちら。標準を差し替えると自動的に追従する）。
+ */
+export async function createSite({ name, address = "", clientName = "", startDate = "", endDate = "", memo = "", assignedUserIds = [], reportTemplateId = null }) {
+  const site = stampNew({ name, address, clientName, startDate, endDate, memo, status: "active", assignedUserIds, reportTemplateId: reportTemplateId || null });
   await dbPut("sites", site);
+  // 作成した時点の様式（現場の指定→標準→元請名一致）の版に固定する。以後テンプレートを新しい版へ
+  // 差し替えても、この現場は自動では切り替わらない。様式が無い・失敗した場合も現場の作成は続ける
+  try {
+    const { ensureSitePinned } = await import("./report-output/templateResolver.js");
+    const pinned = await ensureSitePinned(site);
+    if (pinned?.templatePin) site.templatePin = pinned.templatePin;
+  } catch (err) {
+    console.warn("様式の版を固定できませんでした（最初の出力時にもう一度固定します）", err);
+  }
   await recordChange({ entityType: "site", entityId: site.id, action: "create", summary: `現場「${site.name}」を作成` });
   return site;
 }
@@ -76,7 +89,8 @@ export async function copySite(sourceSiteId, { newName, copyReports = false } = 
     clientName: source.clientName,
     startDate: "",
     endDate: "",
-    memo: source.memo
+    memo: source.memo,
+    reportTemplateId: source.reportTemplateId || null
   });
 
   if (copyReports) {
@@ -97,4 +111,23 @@ export async function copySite(sourceSiteId, { newName, copyReports = false } = 
   }
 
   return newSite;
+}
+
+/**
+ * 工事完了: 工事期間中の日報をすべて確定（以後は修正不可・閲覧と再出力は可能）し、完了日時を記録する。
+ * アーカイブは別操作（archiveSite）。データは削除しない。
+ */
+export async function completeSite(id) {
+  const count = await setSiteReportsFinalized(id, true);
+  const updated = await applyPatch(id, { completedAt: new Date().toISOString() });
+  await recordChange({ entityType: "site", entityId: id, action: "update", summary: `現場「${updated.name}」を工事完了にし、日報${count}件を確定` });
+  return updated;
+}
+
+/** 工事完了の取り消し（修正が必要になった場合）。日報の確定も解除する */
+export async function reopenSite(id) {
+  const count = await setSiteReportsFinalized(id, false);
+  const updated = await applyPatch(id, { completedAt: null });
+  await recordChange({ entityType: "site", entityId: id, action: "update", summary: `現場「${updated.name}」の工事完了を取り消し、日報${count}件の確定を解除` });
+  return updated;
 }

@@ -83,7 +83,7 @@ function buildLayoutFromTextContent(items) {
     .filter((f) => f.text.trim() !== "");
 
   if (fragments.length === 0) {
-    throw new Error("このPDFにはテキスト情報がありません（スキャン画像PDFの可能性があります）");
+    throw new Error("このPDFにはテキスト情報がありません（スキャン画像PDFの可能性があります。画像PDFのOCR（文字認識）は未対応です）");
   }
 
   const heights = fragments.map((f) => f.height).sort((a, b) => a - b);

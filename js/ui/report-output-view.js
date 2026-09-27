@@ -8,8 +8,8 @@
    ========================================================== */
 
 import { listSites, getSite } from "../sites.js";
-import { listReportsBySite, getReport } from "../reports.js";
-import { listReportTemplates, listCompanyProfiles, generateReportOutput } from "../report-output/index.js";
+import { listReportsBySite, getReport, recordReportOutput, getPrintStatus, PRINT_STATUS_LABELS } from "../reports.js";
+import { listReportTemplates, listCompanyProfiles, generateReportOutput, resolveReportTemplateForSite } from "../report-output/index.js";
 import { escapeHtml } from "../utils.js";
 import { showView, showMessage } from "./common.js";
 import { navigate } from "../router.js";
@@ -30,6 +30,7 @@ const previewArea = document.getElementById("outputPreviewArea");
 const previewText = document.getElementById("outputPreviewText");
 const previewFrame = document.getElementById("outputPreviewFrame");
 const backBtn = document.getElementById("backFromReportOutputBtn");
+const printedRecordBtn = document.getElementById("outputPrintedRecordBtn");
 
 // 現場の元請名(自由記述)と一致する会社プロファイルのid。オリジナルPDFの
 // ロゴ・印影表示に使う（会社指定様式Excel/PDFは.xlsxテンプレート自体に
@@ -63,26 +64,26 @@ async function populateReports(siteId, selectedReportId) {
   return reports;
 }
 
-/** 現場の元請名(自由記述)と会社プロファイル名が一致すれば、その会社の既定Excelテンプレートを推定選択する */
-async function populateTemplates(siteClientName) {
-  const [templates, companies] = await Promise.all([listReportTemplates({ format: "excel" }), listCompanyProfiles()]);
+/** 現場に使う様式（現場の指定 → 標準テンプレート → 元請名と同じ会社の既定）を初期選択する */
+async function populateTemplates(site) {
+  const [templates, companies] = await Promise.all([listReportTemplates({ format: "excel", templateKind: "report" }), listCompanyProfiles()]);
   const companyNameById = new Map(companies.map((c) => [c.id, c.name]));
 
   const options = [`<option value="">汎用フォーマット（会社様式が無い場合の簡易出力）</option>`].concat(
     templates.map((t) => {
       const companyName = companyNameById.get(t.companyProfileId) || "会社未設定";
-      return `<option value="${escapeHtml(t.id)}">${escapeHtml(companyName)} - ${escapeHtml(t.name)}${t.isDefault ? "（使用中）" : ""}</option>`;
+      return `<option value="${escapeHtml(t.id)}">${escapeHtml(companyName)} - ${escapeHtml(t.name)}${t.isAppDefault ? "（標準）" : t.isDefault ? "（使用中）" : ""}</option>`;
     })
   );
   templateSelect.innerHTML = options.join("");
 
-  const matchedCompany = siteClientName && companies.find((c) => c.name.trim() === siteClientName.trim());
-  matchedCompanyProfileId = matchedCompany ? matchedCompany.id : null;
-
-  if (matchedCompany) {
-    const matchedDefault = templates.find((t) => t.companyProfileId === matchedCompany.id && t.isDefault);
-    if (matchedDefault) templateSelect.value = matchedDefault.id;
+  const resolved = site ? await resolveReportTemplateForSite(site) : null;
+  matchedCompanyProfileId = resolved?.companyProfileId || null;
+  if (resolved?.templateId && !templates.some((t) => t.id === resolved.templateId)) {
+    // この現場が固定している過去の版（一覧には現在の版だけが出るため追加する）
+    templateSelect.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(resolved.templateId)}">${escapeHtml(resolved.templateName)} 第${resolved.revision}版（この現場に固定した版）</option>`);
   }
+  if (resolved?.templateId) templateSelect.value = resolved.templateId;
 }
 
 async function renderConfirm() {
@@ -111,6 +112,7 @@ function resetPreview() {
   previewFrame.hidden = true;
   previewFrame.removeAttribute("srcdoc");
   printBtn.hidden = true;
+  printedRecordBtn.hidden = true;
 }
 
 function getSelectedPdfVariant() {
@@ -128,7 +130,7 @@ function updateFormatUi() {
 siteSelect.addEventListener("change", async () => {
   await populateReports(siteSelect.value);
   const confirmed = await renderConfirm();
-  await populateTemplates(confirmed?.site.clientName);
+  await populateTemplates(confirmed?.site);
   resetPreview();
 });
 reportSelect.addEventListener("change", async () => {
@@ -220,6 +222,7 @@ generateBtn.addEventListener("click", async () => {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      await recordReportOutput(reportId, "excel");
       const warningSuffix = warnings?.length ? ` ／ 注意: ${warnings.join(" ")}` : "";
       showMessage(`Excelを出力しました（${filename}）${warningSuffix}`, !!warningSuffix);
     } else {
@@ -241,6 +244,16 @@ printBtn.addEventListener("click", () => {
   }
   previewFrame.contentWindow.focus();
   previewFrame.contentWindow.print();
+  // ブラウザは紙に印刷できたかを知らせないため、利用者の確認で印刷状態を記録する
+  printedRecordBtn.hidden = false;
+});
+
+printedRecordBtn.addEventListener("click", async () => {
+  const reportId = reportSelect.value;
+  if (!reportId) return;
+  const updated = await recordReportOutput(reportId, "print");
+  printedRecordBtn.hidden = true;
+  showMessage(`${PRINT_STATUS_LABELS[getPrintStatus(updated)]}として記録しました（${updated.date || "日付未設定"}）。`);
 });
 
 export async function initReportOutputView(query = {}) {
@@ -252,6 +265,6 @@ export async function initReportOutputView(query = {}) {
   if (!siteSelect.value && siteSelect.options.length) siteSelect.selectedIndex = 0;
   await populateReports(siteSelect.value, query.reportId);
   const confirmed = await renderConfirm();
-  await populateTemplates(confirmed?.site.clientName);
+  await populateTemplates(confirmed?.site);
   updateFormatUi();
 }

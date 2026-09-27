@@ -15,8 +15,12 @@ export {
   listVendorQuoteBatchesBySite,
   getVendorQuoteBatch,
   createVendorQuoteBatch,
-  deleteVendorQuoteBatch
+  deleteVendorQuoteBatch,
+  findDuplicateVendorQuoteBatch,
+  findPreviousVersionCandidate
 } from "./vendorQuoteBatches.js";
+export { carryOverConfirmations } from "./vendorQuoteRevision.js";
+export { sha256Hex, detectLumpSum, buildOriginalText, buildVendorLineKeys, diffVendorQuoteLines, parsePageNumber, LUMP_SUM_LABEL } from "./vendorQuoteTrace.js";
 export {
   listVendorQuoteItemsBySite,
   listVendorQuoteItemsByBatch,

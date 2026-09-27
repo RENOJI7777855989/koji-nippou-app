@@ -1343,3 +1343,291 @@ dialog h3 {
 .master-item-edit-form label:nth-child(2) {
   grid-column: span 2;
 }
+
+/* ---------- 提出金額内訳書 ---------- */
+
+.submission-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.submission-group-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+}
+
+.submission-group-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  background: white;
+}
+
+.submission-group-list .group-symbol {
+  font-weight: bold;
+  min-width: 1.5em;
+}
+
+.submission-group-list .group-name {
+  flex: 1 1 140px;
+}
+
+.submission-group-list button {
+  width: auto;
+  min-height: 36px;
+  padding: 4px 10px;
+}
+
+.submission-preview table {
+  border-collapse: collapse;
+  min-width: 320px;
+  margin-bottom: 12px;
+}
+
+.submission-preview th,
+.submission-preview td {
+  border: 1px solid #e0e0e0;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.submission-preview td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.submission-issue-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+}
+
+.submission-issue-list li {
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.submission-issue-list li.issue-error {
+  background: #fde8e8;
+  color: #9b1c1c;
+}
+
+.submission-issue-list li.issue-warn {
+  background: #fff1cf;
+  color: #8a5a00;
+}
+
+#submissionItemTableBody input[type="text"] {
+  min-width: 120px;
+  margin-top: 0;
+}
+
+#submissionItemTableBody tr.submission-unassigned td {
+  background: #fffaf0;
+}
+
+/* ---------- 提出内訳Excelの取込 ---------- */
+
+.subimp-item-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.subimp-item-list li {
+  padding: 8px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.subimp-item-list li:hover {
+  background: #f0f6ff;
+}
+
+#view-submission-import td.subimp-text {
+  white-space: pre-line;
+  min-width: 200px;
+}
+
+#view-submission-import button.subimp-btn {
+  width: auto;
+  min-height: 32px;
+  padding: 2px 8px;
+  margin: 2px 2px 2px 0;
+  font-size: 13px;
+}
+
+#view-submission-import #subImpItemDialog {
+  width: min(92vw, 640px);
+}
+
+.status-badge.status-exact { background: #dff5e1; color: #1d6b2a; }
+.status-badge.status-candidate { background: #e3efff; color: #1a4d8f; }
+.status-badge.status-review { background: #fff1cf; color: #8a5a00; }
+.status-badge.status-none { background: #fde8e8; color: #9b1c1c; }
+.status-badge.status-note { background: #eee; color: #555; }
+
+#view-submission-import #subImpRegisterDialog {
+  width: min(94vw, 760px);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.subimp-reg-block {
+  border: 1px solid #d8d8d8;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.subimp-reg-block h4 {
+  margin: 0 0 6px;
+}
+
+.subimp-reg-block table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.subimp-reg-block th,
+.subimp-reg-block td {
+  border: 1px solid #e0e0e0;
+  padding: 4px 8px;
+  text-align: left;
+  vertical-align: top;
+  white-space: pre-line;
+}
+
+.subimp-reg-block th {
+  width: 8em;
+  background: #f5f7fa;
+}
+
+.subimp-reg-block textarea {
+  width: 100%;
+  min-height: 3.2em;
+}
+
+.subimp-reg-note {
+  background: #fff8e6;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 6px 0;
+}
+
+/* ---------- 業者見積取込: ファイルのドラッグ＆ドロップ ---------- */
+
+#view-vendor-quote-import.drag-over {
+  outline: 3px dashed #2b6cb0;
+  outline-offset: -6px;
+  background: #f0f6ff;
+}
+
+/* ---------- 日報の印刷状態・再出力 ---------- */
+
+.report-card-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 13px;
+}
+
+.status-badge.print-unprinted { background: #fde8e8; color: #9b1c1c; }
+.status-badge.print-printed { background: #dff5e1; color: #1d6b2a; }
+.status-badge.print-reprinted { background: #e3efff; color: #1a4d8f; }
+.status-badge.input-confirmed { background: #dff5e1; color: #1d6b2a; }
+.status-badge.input-unconfirmed { background: #eee; color: #555; }
+
+.report-missing-card {
+  background: #fffaf0;
+  border: 1px dashed #e0c080;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.report-list-toolbar select,
+.report-list-toolbar input {
+  flex: 1 1 200px;
+}
+
+.report-bulk-panel {
+  margin-top: 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.report-bulk-panel summary {
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.site-completed-notice {
+  background: #e3efff;
+  color: #1a4d8f;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.report-output-panel {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 16px 0;
+}
+
+.report-output-status {
+  font-size: 14px;
+}
+
+#reportPrintDialog {
+  width: min(94vw, 1000px);
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+.report-print-frame {
+  width: 100%;
+  height: 60vh;
+  border: 1px solid #ccc;
+  background: white;
+}
+
+.report-print-record {
+  background: #fff8e6;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-top: 10px;
+}
+
+/* 帳票テンプレート管理: ファイル検査の結果（様式の種類・警告・前の版との違い） */
+.template-inspect-list { list-style: none; margin: 0 0 8px; padding: 0; font-size: 0.9rem; }
+.template-inspect-list li { padding: 4px 8px; margin-bottom: 4px; border-radius: 4px; }
+.template-inspect-ok { background: #e8f5e9; }
+.template-inspect-warn, .template-inspect-diff { background: #fff8e1; }
+.template-inspect-error { background: #fdecea; font-weight: bold; }
+.report-template-versions { margin-top: 4px; }
+
+/* 同梱の標準テンプレート（テンプレート管理画面） */
+.bundled-template-section { border: 1px solid #c9d6e8; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; background: #f5f9ff; }
+.bundled-template-item p { margin: 2px 0; }

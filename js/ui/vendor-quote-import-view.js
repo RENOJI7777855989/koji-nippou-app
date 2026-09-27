@@ -12,7 +12,13 @@ import {
   buildPreviewRows,
   extractEstimateRows,
   createVendorQuoteBatch,
-  createVendorQuoteItems
+  createVendorQuoteItems,
+  findDuplicateVendorQuoteBatch,
+  findPreviousVersionCandidate,
+  carryOverConfirmations,
+  sha256Hex,
+  detectLumpSum,
+  LUMP_SUM_LABEL
 } from "../vendorQuote/index.js";
 import { escapeHtml } from "../utils.js";
 import { showView, showMessage } from "./common.js";
@@ -41,6 +47,7 @@ const cancelBtn = document.getElementById("vendorQuoteImportCancelBtn");
 let currentSite = null;
 let workbook = null;
 let currentSourceFileType = "excel";
+let currentFileSha256 = null;
 let currentSheetName = "";
 let currentLayout = null;
 let lastMapping = {};
@@ -109,6 +116,12 @@ async function loadSheet(sheetName) {
   resultSection.hidden = true;
 }
 
+/** 一式の可能性の目印（確定ではない。数量×単価などの計算はしない） */
+function lumpBadge(item) {
+  const lump = detectLumpSum(item);
+  return lump.isLumpSum ? `<span class="status-badge status-warning" title="${escapeHtml(lump.reasons.join(" / "))}">${LUMP_SUM_LABEL}</span>` : "";
+}
+
 function renderResult() {
   const reviewCount = convertedItems.filter((i) => i.needsReview).length;
   const amountSum = convertedItems.reduce((sum, i) => sum + (i.amount || 0), 0);
@@ -129,7 +142,7 @@ function renderResult() {
         <td>${escapeHtml(item.unit)}</td>
         <td class="num">${fmt(item.unitPrice)}</td>
         <td class="num">${fmt(item.amount)}</td>
-        <td>${item.needsReview ? `<span class="status-badge status-warning" title="${escapeHtml(item.reviewReasons.join(" / "))}">要確認</span>` : ""}</td>
+        <td>${item.needsReview ? `<span class="status-badge status-warning" title="${escapeHtml(item.reviewReasons.join(" / "))}">要確認</span>` : ""}${lumpBadge(item)}</td>
       </tr>`
     )
     .join("");
@@ -137,11 +150,37 @@ function renderResult() {
   resultSection.hidden = false;
 }
 
+// ファイルのドラッグ＆ドロップ（Windows PCでのマウス操作向け）。選択と同じ経路（change）を通す
+const dropZone = document.getElementById("view-vendor-quote-import");
+const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+["dragenter", "dragover"].forEach((type) =>
+  dropZone.addEventListener(type, (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dropZone.classList.add("drag-over");
+  })
+);
+dropZone.addEventListener("dragleave", (e) => {
+  if (e.target === dropZone) dropZone.classList.remove("drag-over");
+});
+dropZone.addEventListener("drop", (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dropZone.classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const transfer = new DataTransfer();
+  transfer.items.add(file);
+  fileInput.files = transfer.files;
+  fileInput.dispatchEvent(new Event("change"));
+});
+
 fileInput.addEventListener("change", async () => {
   const file = fileInput.files[0];
   if (!file) return;
   resetImportState();
   try {
+    currentFileSha256 = await sha256Hex(await file.arrayBuffer());
     workbook = await readVendorQuoteFile(file);
   } catch (err) {
     showMessage(err.message || "ファイルの読み込みに失敗しました。", true);
@@ -196,6 +235,15 @@ commitBtn.addEventListener("click", async () => {
     const mapping = readMappingFromForm();
     const selectedFile = fileInput.files[0] || null;
     const sourceFileName = selectedFile?.name || "";
+    // 同一ファイル・同一シートの重複取込を防ぐ（SHA-256が一致する取込が既にあれば保存しない）
+    const duplicate = await findDuplicateVendorQuoteBatch({ siteId: currentSite.id, sourceFileSha256: currentFileSha256, sheetName: currentSheetName });
+    if (duplicate) {
+      showMessage(`同じファイル・同じシートは取込済みです（${duplicate.vendorName || "業者名未入力"}／${new Date(duplicate.importedAt).toLocaleString("ja-JP")}）。重複取込はしません。`, true);
+      return;
+    }
+    // 同じ業者の別の版（内容が変わった見積）があれば、前の版として扱い、変更のない行の確認結果を引き継ぐか確認する
+    const previous = await findPreviousVersionCandidate({ siteId: currentSite.id, vendorName: vendorNameInput.value, sourceFileSha256: currentFileSha256 });
+    const asRevision = !!previous && confirm(`同じ業者名の前回の取込（${previous.sourceFileName}／${new Date(previous.importedAt).toLocaleString("ja-JP")}）があります。\n\n前の版として扱い、変更のない行の確認結果（見積落とし確認）を引き継ぎますか？\n変更・追加された行は引き継がず、再確認になります。「キャンセル」で引き継がずに取り込みます。`);
     const batch = await createVendorQuoteBatch({
       siteId: currentSite.id,
       vendorName: vendorNameInput.value.trim(),
@@ -205,6 +253,8 @@ commitBtn.addEventListener("click", async () => {
       sourceFileType: currentSourceFileType,
       sourceFileBlob: selectedFile,
       sourceFileMimeType: selectedFile?.type || "",
+      sourceFileSha256: currentFileSha256,
+      revisionOf: asRevision ? previous.id : null,
       sheetName: currentSheetName,
       columnMapping: mapping,
       headerRow: Number(dataStartRowInput.value) || 1,
@@ -215,9 +265,17 @@ commitBtn.addEventListener("click", async () => {
       vendorQuoteBatchId: batch.id,
       sourceFileName,
       sourceSheet: currentSheetName,
-      rows: convertedItems
+      rows: convertedItems,
+      columnMapping: mapping,
+      sourceFileSha256: currentFileSha256,
+      sourceFileType: currentSourceFileType
     });
-    showMessage(`業者見積項目 ${convertedItems.length}件を取り込みました。`);
+    let carryNote = "";
+    if (asRevision) {
+      const r = await carryOverConfirmations({ siteId: currentSite.id, fromBatchId: previous.id, toBatchId: batch.id });
+      carryNote = `（前の版との差分: 追加${r.diff.added}・削除${r.diff.removed}・変更${r.diff.changed}・変更なし${r.diff.unchanged}／確認結果を${r.carried}件引き継ぎ）`;
+    }
+    showMessage(`業者見積項目 ${convertedItems.length}件を取り込みました。${carryNote}`);
     navigate(`/sites/${currentSite.id}/vendor-quotes`);
   } catch (err) {
     showMessage(err.message || "取込の保存に失敗しました。", true);
@@ -246,6 +304,7 @@ export async function initVendorQuoteImportView(params) {
   quoteNumberInput.value = "";
   quoteDateInput.value = "";
   fileInput.value = "";
+  currentFileSha256 = null;
   resetImportState();
   showView("view-vendor-quote-import");
 }

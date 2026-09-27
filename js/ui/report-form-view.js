@@ -5,7 +5,9 @@
    各行のcompanyId（生成後は再利用）で署名レコードと紐付ける。
    ========================================================== */
 
-import { getReport, createReport, updateReport, deleteReport } from "../reports.js";
+import { getReport, createReport, updateReport, getPrintStatus, isEditedAfterPrint, PRINT_STATUS_LABELS, recordReportOutput, setReportConfirmed } from "../reports.js";
+import { exportReportExcel, buildReportPrintHtml } from "../reportPrint.js";
+import { openReportPrintDialog } from "./report-print-dialog.js";
 import { getSite } from "../sites.js";
 import { addPhoto, listPhotosByReport, deletePhoto } from "../photos.js";
 import { saveSignature, listSignaturesByReport, deleteSignature } from "../signatures.js";
@@ -39,6 +41,12 @@ const cancelBtn = document.getElementById("reportCancelBtn");
 const deleteBtn = document.getElementById("deleteReportBtn");
 const backBtn = document.getElementById("backToSiteDetailBtn");
 const goToReportOutputBtn = document.getElementById("goToReportOutputFromReportBtn");
+const outputPanel = document.getElementById("reportOutputPanel");
+const outputStatusEl = document.getElementById("reportOutputStatus");
+const reportExcelBtn = document.getElementById("reportExcelBtn");
+const reportPdfBtn = document.getElementById("reportPdfBtn");
+const reportPrintBtn = document.getElementById("reportPrintBtn");
+const reportConfirmBtn = document.getElementById("reportConfirmBtn");
 
 let currentSiteId = null;
 let editingReportId = null; // 既存日報編集時のみ非null
@@ -273,6 +281,12 @@ export async function initReportFormViewNew(params) {
     navigate("/sites");
     return;
   }
+  if (site.completedAt) {
+    showMessage("工事完了済みの現場には日報を追加できません。", true);
+    navigate(`/sites/${currentSiteId}`);
+    return;
+  }
+  outputPanel.hidden = true;
   showView("view-report-form");
   editingReportId = null;
   draftReportId = createId();
@@ -280,7 +294,11 @@ export async function initReportFormViewNew(params) {
   deleteBtn.hidden = true;
   goToReportOutputBtn.hidden = true; // 保存前（帳票出力対象になる日報がまだ存在しない）
   resetForm();
-  dateInput.value = new Date().toISOString().split("T")[0];
+  // 一覧の「未入力（日報のない日）」から来た場合はその日付を初期値にする
+  // 初期値は端末の日付（toISOString()はUTCのため、日本時間0〜9時に前日になっていた）
+  const now = new Date();
+  const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  dateInput.value = /^\d{4}-\d{2}-\d{2}$/.test(params.date || "") ? params.date : localToday;
   await renderPhotoGrid(draftReportId);
   applyReadOnlyMode(false); // このルートには編集権限があるユーザーしか到達しない
 }
@@ -302,8 +320,8 @@ export async function initReportFormViewEdit(params) {
   showView("view-report-form");
   editingReportId = report.id;
   draftReportId = null;
-  titleEl.textContent = "日報を編集";
-  deleteBtn.hidden = false;
+  titleEl.textContent = report.finalizedAt ? "日報（確定済み・閲覧のみ）" : "日報を編集";
+  deleteBtn.hidden = true; // 日報は削除しない（修正で対応）
   goToReportOutputBtn.hidden = false;
 
   form.reset();
@@ -335,8 +353,87 @@ export async function initReportFormViewEdit(params) {
   recalcWorkerCountTotal();
 
   await renderPhotoGrid(report.id);
-  applyReadOnlyMode(!hasPermission("editReports"));
+  applyReadOnlyMode(!hasPermission("editReports") || !!report.finalizedAt);
+  renderOutputPanel(report);
 }
+
+// ================= 出力・印刷・再印刷 =================
+
+const fmtDateTime = (iso) => (iso ? new Date(iso).toLocaleString("ja-JP") : "なし");
+
+function renderOutputPanel(report) {
+  outputPanel.hidden = false;
+  const status = getPrintStatus(report);
+  const parts = [
+    `印刷状態: <strong>${PRINT_STATUS_LABELS[status]}</strong>${report.printCount > 1 ? `（${report.printCount}回）` : ""}`,
+    `最終印刷: ${escapeHtml(fmtDateTime(report.lastPrintedAt))}`,
+    `最終出力: ${escapeHtml(fmtDateTime(report.lastOutputAt))}${report.lastOutputFormat ? `（${report.lastOutputFormat === "excel" ? "Excel" : "PDF"}）` : ""}`,
+    `確認: ${report.confirmedAt ? `確認済み（${escapeHtml(fmtDateTime(report.confirmedAt))}）` : "未確認"}`
+  ];
+  if (report.finalizedAt) parts.push("工事完了により確定済み（修正不可・再出力は可能）");
+  if (isEditedAfterPrint(report)) parts.push(`<span class="status-badge status-warning">印刷後に内容が修正されています（紙が古い内容の可能性。再印刷を検討してください）</span>`);
+  outputStatusEl.innerHTML = parts.join("　／　");
+  reportPrintBtn.textContent = status === "unprinted" ? "印刷" : "再印刷";
+  reportConfirmBtn.textContent = report.confirmedAt ? "確認済みを解除" : "内容を確認済みにする";
+  reportConfirmBtn.hidden = !hasPermission("editReports");
+}
+
+async function refreshOutputPanel() {
+  renderOutputPanel(await getReport(editingReportId));
+}
+
+reportExcelBtn.addEventListener("click", async () => {
+  reportExcelBtn.disabled = true;
+  try {
+    const r = await exportReportExcel(editingReportId);
+    showMessage(`Excelを出力しました（${r.filename}）${r.usedCompanyTemplate ? "" : " ／ 注意: 会社指定様式が見つからないため汎用フォーマットで出力しました（テンプレート管理で標準テンプレートを登録してください）"}`, !r.usedCompanyTemplate);
+    await refreshOutputPanel();
+  } catch (err) {
+    showMessage(`Excel出力に失敗しました: ${err.message}`, true);
+  } finally {
+    reportExcelBtn.disabled = false;
+  }
+});
+
+async function openPrint(mode) {
+  const reportId = editingReportId;
+  let built;
+  try {
+    built = await buildReportPrintHtml(reportId);
+  } catch (err) {
+    showMessage(`印刷用データの作成に失敗しました: ${err.message}`, true);
+    return;
+  }
+  const report = await getReport(reportId);
+  openReportPrintDialog({
+    html: built.html,
+    mode,
+    title: `${mode === "pdf" ? "PDF出力" : mode === "reprint" ? "再印刷" : "印刷"}（${report.date || "日付未設定"}）`,
+    note: built.usedCompanyTemplate ? `会社指定様式「${built.company.templateName}」のレイアウトで出力します。` : "会社指定様式が見つからないため、アプリ独自のレイアウトで出力します。",
+    onPrinted: async () => {
+      const updated = await recordReportOutput(reportId, "print");
+      showMessage(`${PRINT_STATUS_LABELS[getPrintStatus(updated)]}として記録しました。`);
+      await refreshOutputPanel();
+    },
+    onPdfOpened: async () => {
+      await recordReportOutput(reportId, "pdf");
+      await refreshOutputPanel();
+    }
+  });
+}
+
+reportPdfBtn.addEventListener("click", () => openPrint("pdf"));
+reportPrintBtn.addEventListener("click", async () => {
+  const report = await getReport(editingReportId);
+  openPrint(getPrintStatus(report) === "unprinted" ? "print" : "reprint");
+});
+
+reportConfirmBtn.addEventListener("click", async () => {
+  const report = await getReport(editingReportId);
+  await setReportConfirmed(editingReportId, !report.confirmedAt);
+  showMessage(report.confirmedAt ? "確認済みを解除しました。" : "確認済みにしました。");
+  await refreshOutputPanel();
+});
 
 function addSiteSupervisorRow(name = "") {
   const row = document.createElement("div");
@@ -415,11 +512,16 @@ form.addEventListener("submit", async (e) => {
   };
 
   let report;
-  if (editingReportId) {
-    report = await updateReport(editingReportId, fields);
-  } else {
-    fields.id = draftReportId;
-    report = await createReport(fields);
+  try {
+    if (editingReportId) {
+      report = await updateReport(editingReportId, fields);
+    } else {
+      fields.id = draftReportId;
+      report = await createReport(fields);
+    }
+  } catch (err) {
+    showMessage(err.message, true);
+    return;
   }
 
   for (const row of companiesContainer.querySelectorAll(".company-row")) {
@@ -451,9 +553,7 @@ goToReportOutputBtn.addEventListener("click", () => {
   navigate(`/report-output?siteId=${currentSiteId}&reportId=${editingReportId}`);
 });
 
-deleteBtn.addEventListener("click", async () => {
-  if (!confirm("この日報を削除しますか？")) return;
-  await deleteReport(editingReportId);
-  showMessage("日報を削除しました。");
-  navigate(`/sites/${currentSiteId}`);
+// 日報は通常操作では削除できない（削除ボタンは常に非表示。誤りは修正で対応する）
+deleteBtn.addEventListener("click", () => {
+  showMessage("日報は削除できません。内容に誤りがある場合は修正して保存してください。", true);
 });
