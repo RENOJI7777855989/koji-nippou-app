@@ -17,7 +17,7 @@ import { PATROL_CHECKLIST_ITEMS, PATROL_STATUS_OPTIONS } from "../patrolChecklis
 import { hasPermission, canAccessSite } from "../auth.js";
 import { showView, showMessage } from "./common.js";
 import { navigate } from "../router.js";
-import { FLOW_KINDS, FLOW_STATUSES, DELIVERY_STATUSES, normalizeFlowRow, normalizeDeliveryRow } from "../dashboard/dailyFlow.js";
+import { FLOW_KINDS, FLOW_STATUSES, DELIVERY_DIRECTIONS, DELIVERY_STATUSES, directionOf, normalizeFlowRow, normalizeDeliveryRow } from "../dashboard/dailyFlow.js";
 
 const reportSaveBtn = document.getElementById("reportSaveBtn");
 
@@ -33,6 +33,7 @@ const timelineContainer = document.getElementById("timelineContainer");
 const addTimelineBtn = document.getElementById("addTimelineBtn");
 const deliveriesContainer = document.getElementById("deliveriesContainer");
 const addDeliveryBtn = document.getElementById("addDeliveryBtn");
+const addCarryOutBtn = document.getElementById("addCarryOutBtn");
 const tomorrowPlanInput = document.getElementById("tomorrowPlan");
 const remarksInput = document.getElementById("remarks");
 const siteSupervisorsContainer = document.getElementById("siteSupervisorsContainer");
@@ -225,7 +226,7 @@ companiesContainer.addEventListener("click", async (e) => {
 
 addCompanyBtn.addEventListener("click", () => addCompanyRow());
 
-// ================= 本日の現場の流れ・搬入事項（現場ダッシュボード用。日誌に入力する） =================
+// ================= 本日の現場の流れ・搬入・搬出（現場ダッシュボード用。日誌に入力する） =================
 
 const optionsHtml = (list, selected) => list.map((o) => `<option value="${o.value}"${o.value === selected ? " selected" : ""}>${escapeHtml(o.label)}</option>`).join("");
 
@@ -247,23 +248,41 @@ function addTimelineRow(data = {}) {
   return row;
 }
 
+// 区分（搬入／搬出）に応じた項目名と入力例。保存する項目（origin/destination 等）は共通
+const DELIVERY_TEXTS = {
+  in: { time: "搬入時刻", item: "搬入物", vendor: "搬入業者", origin: "搬入元", destination: "搬入先", remove: "この搬入を削除", ph: { item: "例）鉄筋", origin: "例）〇〇工場", destination: "例）北側ゲート", note: "例）北側道路から進入・誘導員1名配置" } },
+  out: { time: "搬出時刻", item: "搬出物", vendor: "搬出業者", origin: "搬出元", destination: "搬出先", remove: "この搬出を削除", ph: { item: "例）残土", origin: "例）現場", destination: "例）〇〇処分場", note: "例）マニフェスト持参・タイヤ洗浄" } }
+};
+
+function applyDeliveryDirection(row) {
+  const dir = row.querySelector(".dlvDirection").value === "out" ? "out" : "in";
+  const t = DELIVERY_TEXTS[dir];
+  row.classList.toggle("is-out", dir === "out");
+  for (const key of ["time", "item", "vendor", "origin", "destination"]) row.querySelector(`[data-label="${key}"]`).textContent = t[key];
+  for (const [key, cls] of [["item", "dlvItem"], ["origin", "dlvOrigin"], ["destination", "dlvDestination"], ["note", "dlvNote"]]) row.querySelector(`.${cls}`).placeholder = t.ph[key];
+  row.querySelector(".removeRowBtn").textContent = t.remove;
+}
+
 function addDeliveryRow(data = {}) {
   const row = document.createElement("div");
   row.className = "delivery-row";
   row.dataset.rowId = data.id || createId();
   row.innerHTML = `
-    <label>搬入時刻<input type="time" class="dlvTime" step="300"></label>
+    <label>区分<select class="dlvDirection">${optionsHtml(DELIVERY_DIRECTIONS, directionOf(data))}</select></label>
     <label>状況<select class="dlvStatus">${optionsHtml(DELIVERY_STATUSES, data.status || "plan")}</select></label>
-    <label>搬入物<input type="text" class="dlvItem" placeholder="例）鉄筋"></label>
+    <label><span data-label="time"></span><input type="time" class="dlvTime" step="300"></label>
+    <label><span data-label="item"></span><input type="text" class="dlvItem"></label>
     <label>数量<input type="text" class="dlvQuantity" placeholder="例）10t"></label>
-    <label>搬入業者<input type="text" class="dlvVendor" placeholder="例）〇〇建設"></label>
+    <label><span data-label="vendor"></span><input type="text" class="dlvVendor" placeholder="例）〇〇建設"></label>
+    <label><span data-label="origin"></span><input type="text" class="dlvOrigin"></label>
+    <label><span data-label="destination"></span><input type="text" class="dlvDestination"></label>
     <label>車両<input type="text" class="dlvVehicle" placeholder="例）10t車"></label>
-    <label>搬入元<input type="text" class="dlvOrigin" placeholder="例）〇〇工場"></label>
-    <label>搬入先<input type="text" class="dlvDestination" placeholder="例）北側ゲート"></label>
-    <label class="full-row">備考<textarea class="dlvNote" rows="2" placeholder="例）北側道路から進入・誘導員1名配置"></textarea></label>
-    <button type="button" class="removeRowBtn secondary-btn">この搬入を削除</button>`;
+    <label class="full-row">備考<textarea class="dlvNote" rows="2"></textarea></label>
+    <button type="button" class="removeRowBtn secondary-btn"></button>`;
   row.querySelector(".dlvTime").value = data.time || "";
   for (const [cls, key] of [["dlvItem", "item"], ["dlvQuantity", "quantity"], ["dlvVendor", "vendor"], ["dlvVehicle", "vehicle"], ["dlvOrigin", "origin"], ["dlvDestination", "destination"], ["dlvNote", "note"]]) row.querySelector(`.${cls}`).value = data[key] || "";
+  row.querySelector(".dlvDirection").addEventListener("change", () => applyDeliveryDirection(row));
+  applyDeliveryDirection(row);
   deliveriesContainer.appendChild(row);
   return row;
 }
@@ -285,6 +304,7 @@ function collectDeliveries() {
   return [...deliveriesContainer.querySelectorAll(".delivery-row")]
     .map((row) => normalizeDeliveryRow({
       id: row.dataset.rowId,
+      direction: row.querySelector(".dlvDirection").value,
       time: row.querySelector(".dlvTime").value,
       status: row.querySelector(".dlvStatus").value,
       item: row.querySelector(".dlvItem").value,
@@ -306,7 +326,8 @@ function loadFlowAndDeliveries(report = {}) {
 }
 
 addTimelineBtn.addEventListener("click", () => addTimelineRow());
-addDeliveryBtn.addEventListener("click", () => addDeliveryRow());
+addDeliveryBtn.addEventListener("click", () => addDeliveryRow({ direction: "in" }));
+addCarryOutBtn.addEventListener("click", () => addDeliveryRow({ direction: "out" }));
 for (const container of [timelineContainer, deliveriesContainer]) {
   container.addEventListener("click", (e) => {
     const btn = e.target.closest(".removeRowBtn");

@@ -15,7 +15,7 @@
        未印刷   … 印刷状態が未印刷の日報
    ========================================================== */
 
-import { labelOf, DELIVERY_STATUSES, FLOW_STATUSES, FLOW_KINDS } from "./dailyFlow.js";
+import { labelOf, directionOf, DELIVERY_DIRECTIONS, DELIVERY_STATUSES, FLOW_STATUSES, FLOW_KINDS } from "./dailyFlow.js";
 
 const DAY_MS = 86400000;
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
@@ -88,21 +88,28 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date 
     weekday: weekdayOf(date)
   };
 
-  // ---- 本日の現場の流れ（日誌の流れ＋搬入。時刻順、時刻の無いものは最後）----
+  // ---- 本日の現場の流れ（日誌の流れ● ＋ 搬入◆・搬出◇。時刻順、時刻の無いものは最後）----
+  // 搬入・搬出は日誌の搬入・搬出の欄から自動で入れる（流れの欄に二重に入力しない）
   const flow = [];
   for (const f of report?.timeline || []) {
     flow.push({ time: f.time || "", mark: "●", kind: "flow", title: f.title || labelOf(FLOW_KINDS, f.kind), kindLabel: labelOf(FLOW_KINDS, f.kind), status: labelOf(FLOW_STATUSES, f.status), note: f.note || "" });
   }
-  const deliveries = (report?.deliveries || []).map((d) => ({ ...d, statusLabel: labelOf(DELIVERY_STATUSES, d.status) }));
+  // 区分の無い行（区分を追加する前の搬入事項）は搬入として扱う
+  const deliveries = (report?.deliveries || []).map((d) => {
+    const direction = directionOf(d);
+    const dir = DELIVERY_DIRECTIONS.find((x) => x.value === direction);
+    return { ...d, direction, directionLabel: dir.label, mark: dir.mark, statusLabel: labelOf(DELIVERY_STATUSES, d.status) };
+  });
   for (const d of deliveries) {
     flow.push({
       time: d.time || "",
-      mark: "◆",
+      mark: d.mark,
       kind: "delivery",
-      title: `${d.item || "搬入"}${d.quantity ? `　${d.quantity}` : ""} 搬入`,
-      kindLabel: "搬入",
+      direction: d.direction,
+      title: `${d.item || d.directionLabel}${d.quantity ? `　${d.quantity}` : ""} ${d.directionLabel}`,
+      kindLabel: d.directionLabel,
       status: d.statusLabel,
-      note: [d.vendor, d.destination ? `搬入先：${d.destination}` : ""].filter(Boolean).join("　"),
+      note: [d.vendor, d.origin || d.destination ? `${d.origin || "―"} → ${d.destination || "―"}` : ""].filter(Boolean).join("　"),
       cancelled: d.status === "cancelled"
     });
   }

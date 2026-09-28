@@ -1,11 +1,12 @@
 /* ==========================================================
    A3横「今日の現場シート」の印刷用HTML（DOM・DB非依存）
+   流れは ●作業等・◆搬入・◇搬出、右上は「本日の搬入・搬出」の表（時刻・区分・品名・数量・業者・元・先・車両・状況・備考）
    現場ダッシュボードと同じ表示内容（siteDashboardModel.js）から作る。
    会社指定の03-2とは別の帳票で、03-2の仕組み・様式には一切触れない。
 
    ・用紙はA3横（@page）。1枚に収まるよう、各欄の文字が溢れる場合だけ
      表示時・印刷前に文字を小さくする（情報が少ない日は小さくしない）
-   ・下段の「申し送り」「明日の予定」「現場メモ」は、日誌の内容を載せたうえで
+   ・下段の「連絡事項」（日誌の備考）「明日の予定」「現場メモ」は、日誌の内容を載せたうえで
      残りを手書き用の罫線にする（無理に情報を詰め込まない）
    ========================================================== */
 
@@ -21,22 +22,25 @@ export function buildTodaySheetHtml(model) {
   const progress = h.progressPercent != null ? `進捗 ${h.progressPercent}%` : h.elapsedPct != null ? `工期経過 ${h.elapsedPct}%` : "";
   const diary = model.diary;
 
-  const flow = model.flow.length
-    ? `<table class="flow">${model.flow
-        .map((f) => `<tr class="${f.kind === "delivery" ? "dlv" : ""}${f.cancelled ? " cancelled" : ""}"><td class="t">${esc(f.time || "")}</td><td class="mk">${f.mark}</td><td class="ti">${esc(f.title)}${f.note ? `<div class="nt">${esc(f.note)}</div>` : ""}</td><td class="st">${esc(f.status || "")}</td></tr>`)
-        .join("")}</table>`
-    : `<p class="empty">本日の現場の流れ（日誌に未入力）</p>`;
+  // 流れが多い日は2列に分けて並べる（左列→右列の順に時刻順）。
+  // 搬入・搬出の業者・元→先は右の「本日の搬入・搬出」の表に載るので、流れでは1行（時刻・品名・区分）にする
+  const flowRow = (f) => `<tr class="${f.kind === "delivery" ? `dlv${f.direction === "out" ? " out" : ""}` : ""}${f.cancelled ? " cancelled" : ""}"><td class="t">${esc(f.time || "")}</td><td class="mk">${f.mark}</td><td class="ti">${esc(f.title)}${f.note && f.kind !== "delivery" ? `<div class="nt">${esc(f.note)}</div>` : ""}</td><td class="st">${esc(f.status || "")}</td></tr>`;
+  const FLOW_TWO_COLUMNS_FROM = 18;
+  const flowTable = (rows) => `<table class="flow">${rows.map(flowRow).join("")}</table>`;
+  const flow = !model.flow.length
+    ? `<p class="empty">本日の現場の流れ（日誌に未入力）</p>`
+    : model.flow.length >= FLOW_TWO_COLUMNS_FROM
+      ? `<div class="flow-cols">${flowTable(model.flow.slice(0, Math.ceil(model.flow.length / 2)))}${flowTable(model.flow.slice(Math.ceil(model.flow.length / 2)))}</div>`
+      : flowTable(model.flow);
   const flowFill = model.flow.length < 8 ? ruled(8 - model.flow.length) : "";
 
+  // 本日の搬入・搬出（時刻順。区分は ◆搬入／◇搬出）
   const deliveries = model.deliveries.length
-    ? model.deliveries
-        .map((dl) => `<div class="dlv-item${dl.status === "cancelled" ? " cancelled" : ""}">
-          <div class="dlv-head"><b>${esc(dl.time || "--:--")}</b>　<b>${esc(dl.item || "搬入")}</b>${dl.quantity ? `　${esc(dl.quantity)}` : ""}<span class="badge">${esc(dl.statusLabel)}</span></div>
-          <div class="dlv-body">${[["業者", dl.vendor], ["搬入元", dl.origin], ["搬入先", dl.destination], ["車両", dl.vehicle]].filter(([, v]) => v).map(([k, v]) => `${k}：${esc(v)}`).join("　")}</div>
-          ${dl.note ? `<div class="dlv-note">備考：${br(dl.note)}</div>` : ""}
-        </div>`)
-        .join("")
-    : `<p class="empty">本日の搬入なし</p>`;
+    ? `<table class="dlv"><colgroup><col class="c-t"><col class="c-dir"><col class="c-item"><col class="c-q"><col class="c-v"><col class="c-o"><col class="c-d"><col class="c-car"><col class="c-st"><col></colgroup>
+        <thead><tr><th>時刻</th><th>区分</th><th>品名</th><th>数量</th><th>業者</th><th>元</th><th>先</th><th>車両</th><th>状況</th><th>備考</th></tr></thead><tbody>${model.deliveries
+        .map((dl) => `<tr class="${dl.direction === "out" ? "out" : "in"}${dl.status === "cancelled" ? " cancelled" : ""}"><td class="t">${esc(dl.time || "")}</td><td class="dir">${dl.mark}${esc(dl.directionLabel)}</td><td>${esc(dl.item)}</td><td>${esc(dl.quantity)}</td><td>${esc(dl.vendor)}</td><td>${esc(dl.origin)}</td><td>${esc(dl.destination)}</td><td>${esc(dl.vehicle)}</td><td class="st">${esc(dl.statusLabel)}</td><td>${br(dl.note)}</td></tr>`)
+        .join("")}</tbody></table>`
+    : `<p class="empty">本日の搬入・搬出なし</p>`;
 
   const s = model.staff;
   const staff = `<div class="staff">
@@ -77,21 +81,37 @@ export function buildTodaySheetHtml(model) {
     <main class="mid">
       <section class="box flowbox"><h2>本日の現場の流れ</h2><div class="content">${flow}${flowFill}</div></section>
       <div class="right">
-        <section class="box"><h2>本日の搬入</h2><div class="content">${deliveries}</div></section>
+        <section class="box"><h2>本日の搬入・搬出</h2><div class="content">${deliveries}</div></section>
         <section class="box staffbox"><h2>本日の人員</h2><div class="content">${staff}</div></section>
       </div>
     </main>
     ${works ? `<section class="box worksbox"><h2>本日の作業</h2><div class="content">${works}</div></section>` : ""}
     <footer class="bottom">
       <section class="box"><h2>日誌状況（${esc(`${m}/${d}`)}まで）</h2><div class="content">${statusBox}</div></section>
-      <section class="box"><h2>申し送り</h2><div class="content">${notesBox(diary?.remarks, 5)}</div></section>
+      <section class="box"><h2>連絡事項</h2><div class="content">${notesBox(diary?.remarks, 5)}</div></section>
       <section class="box"><h2>明日の予定</h2><div class="content">${notesBox(diary?.tomorrowPlan, 5)}</div></section>
       <section class="box"><h2>現場メモ</h2><div class="content">${ruled(6)}</div></section>
     </footer>
   </div>`;
 
-  // 各欄の中身が溢れる場合だけ、その欄の文字を小さくして1枚に収める
-  const fitScript = `<script>(function(){function fit(){document.querySelectorAll(".box .content").forEach(function(c){var size=10.5;c.style.fontSize=size+"pt";while(c.scrollHeight>c.clientHeight+1&&size>6){size-=0.5;c.style.fontSize=size+"pt";}});}fit();window.addEventListener("load",fit);window.addEventListener("beforeprint",fit);})();</script>`;
+  // 各欄の中身が溢れる場合だけ、その欄の文字を小さくして1枚に収める（最小6pt）。
+  // 本日の作業（業者の表）が最小の文字でも収まらない日は、その欄の高さを少しずつ広げて、
+  // 中段（流れ・搬入・搬出・人員）を詰め直す
+  const fitScript = `<script>(function(){
+    function over(c){return c.scrollHeight>c.clientHeight+1||c.scrollWidth>c.clientWidth+1;}
+    function fitBox(c){var size=10.5;c.style.fontSize=size+"pt";while(over(c)&&size>6){size-=0.5;c.style.fontSize=size+"pt";}return !over(c);}
+    function fitAll(){document.querySelectorAll(".box .content").forEach(fitBox);}
+    function fit(){
+      var works=document.querySelector(".worksbox");
+      var heights=[70,80,90,100,110];
+      if(works){works.style.maxHeight="";works.style.flex="";}
+      fitAll();
+      for(var i=0;works&&over(works.querySelector(".content"))&&i<heights.length;i++){
+        works.style.maxHeight="none";works.style.flex="0 0 "+heights[i]+"mm";
+        fitAll();
+      }
+    }
+    fit();window.addEventListener("load",fit);window.addEventListener("beforeprint",fit);})();</script>`;
 
   return `<!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8"><title>今日の現場シート ${esc(h.siteName)} ${esc(h.date)}</title>
@@ -107,32 +127,39 @@ export function buildTodaySheetHtml(model) {
   .date { font-size: 15pt; font-weight: bold; text-align: right; }
   .date .wx { font-size: 12pt; font-weight: normal; margin-left: 5mm; }
   .meta { grid-column: 1 / -1; font-size: 10.5pt; color: #333; }
-  .mid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 58% 1fr; gap: 3mm; }
+  .mid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 50% 1fr; gap: 3mm; }
   .right { display: grid; grid-template-rows: 1fr auto; gap: 3mm; min-height: 0; }
   .box { border: 0.4mm solid #555; border-radius: 1.5mm; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
   .box h2 { margin: 0; font-size: 11pt; background: #e8eef7; border-bottom: 0.3mm solid #555; padding: 1mm 3mm; }
-  .box .content { flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 2mm 3mm; font-size: 10.5pt; }
+  .box .content { flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 2mm 3mm; font-size: 10.5pt; line-height: 1.3; }
   .flow { width: 100%; border-collapse: collapse; }
-  .flow td { border-bottom: 0.2mm dashed #aaa; padding: 1.2mm 1mm; vertical-align: top; }
-  .flow .t { width: 16mm; font-weight: bold; white-space: nowrap; }
+  .flow td { border-bottom: 0.2mm dashed #aaa; padding: 0.3em 0.3em; vertical-align: top; }
+  .flow-cols { display: grid; grid-template-columns: 1fr 1fr; column-gap: 3mm; align-items: start; }
+  .flow .t { width: 3.6em; font-weight: bold; white-space: nowrap; }
   .flow .mk { width: 6mm; text-align: center; color: #2b6cb0; }
   .flow .dlv .mk { color: #b7791f; }
   .flow .ti { font-size: 1.1em; }
   .flow .nt { font-size: 0.85em; color: #444; }
-  .flow .st { width: 16mm; text-align: right; color: #555; white-space: nowrap; }
+  .flow .st { width: 3.4em; text-align: right; color: #555; white-space: nowrap; }
   .cancelled { text-decoration: line-through; color: #888; }
-  .dlv-item { border-bottom: 0.2mm dashed #aaa; padding: 1mm 0; }
-  .dlv-head .badge { margin-left: 3mm; border: 0.2mm solid #777; border-radius: 1mm; padding: 0 1.5mm; font-size: 0.85em; }
-  .dlv-body, .dlv-note { font-size: 0.9em; color: #333; }
+  .flow .dlv.out .mk { color: #2c7a7b; }
+  table.dlv { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 0.9em; }
+  table.dlv th, table.dlv td { border: 0.2mm solid #999; padding: 0.2em 0.4em; vertical-align: top; overflow-wrap: anywhere; }
+  table.dlv th { background: #f2f2f2; font-weight: normal; white-space: nowrap; }
+  table.dlv .c-t { width: 11mm; } table.dlv .c-dir { width: 12mm; } table.dlv .c-item { width: 22mm; } table.dlv .c-q { width: 13mm; }
+  table.dlv .c-v { width: 22mm; } table.dlv .c-o, table.dlv .c-d { width: 20mm; } table.dlv .c-car { width: 13mm; } table.dlv .c-st { width: 11mm; }
+  table.dlv td.t { font-weight: bold; white-space: nowrap; }
+  table.dlv td.dir { white-space: nowrap; color: #8a5a12; font-weight: bold; }
+  table.dlv tr.out td.dir { color: #22605f; }
   .staff { display: flex; gap: 6mm; align-items: center; }
   .staff .big { font-size: 30pt; font-weight: bold; line-height: 1; }
   .staff .big small { font-size: 12pt; margin-left: 1mm; }
   .kv { border-collapse: collapse; width: 100%; }
-  .kv th { text-align: left; font-weight: normal; color: #444; padding: 0.6mm 2mm 0.6mm 0; white-space: nowrap; }
-  .kv td { text-align: right; font-weight: bold; padding: 0.6mm 0; }
+  .kv th { text-align: left; font-weight: normal; color: #444; padding: 0.2em 0.6em 0.2em 0; white-space: nowrap; }
+  .kv td { text-align: right; font-weight: bold; padding: 0.2em 0; }
   .worksbox { flex: 0 1 auto; max-height: 60mm; }
   .works { width: 100%; border-collapse: collapse; font-size: 0.95em; }
-  .works th, .works td { border: 0.2mm solid #999; padding: 0.8mm 1.5mm; vertical-align: top; }
+  .works th, .works td { border: 0.2mm solid #999; padding: 0.25em 0.5em; vertical-align: top; overflow-wrap: anywhere; }
   .works th { background: #f2f2f2; font-weight: normal; white-space: nowrap; }
   .works .c { text-align: center; white-space: nowrap; }
   .bottom { flex: 0 0 62mm; display: grid; grid-template-columns: 1fr 1.4fr 1.4fr 1.4fr; gap: 3mm; }

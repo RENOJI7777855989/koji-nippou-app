@@ -40,7 +40,7 @@ export async function createReport(fields) {
     signatureIds: fields.signatureIds || [],
     // 現場ダッシュボード・A3「今日の現場シート」用（日誌に入力し、ダッシュボードは表示するだけ）
     //   timeline   … 本日の現場の流れ [{ id, time:"HH:MM", title, kind, status:"plan"|"done", note }]
-    //   deliveries … 搬入事項 [{ id, time, item, quantity, vendor, origin, destination, vehicle, status, note }]
+    //   deliveries … 搬入・搬出 [{ id, direction("in"=搬入/"out"=搬出。無い行は搬入), time, item, quantity, vendor, origin, destination, vehicle, status, note }]
     timeline: fields.timeline || [],
     deliveries: fields.deliveries || []
   };

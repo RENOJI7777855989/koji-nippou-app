@@ -1,6 +1,6 @@
 /* ==========================================================
    現場ダッシュボード（現場詳細画面の上部）
-   日誌に入力した内容を、その日の「現場の流れ・搬入・作業・人員・日誌状況」として
+   日誌に入力した内容を、その日の「現場の流れ・搬入・搬出・作業・人員・日誌状況」として
    見やすく表示する。ダッシュボード専用の入力は無い（編集は日誌で行う）。
    集計は js/dashboard/siteDashboardModel.js、A3「今日の現場シート」は todaySheetHtml.js。
    ========================================================== */
@@ -54,29 +54,34 @@ function render(model) {
 
   const flowHtml = model.flow.length
     ? `<ol class="dash-flow">${model.flow
-        .map((f) => `<li class="dash-flow-item${f.kind === "delivery" ? " is-delivery" : ""}${f.cancelled ? " is-cancelled" : ""}">
+        .map((f) => `<li class="dash-flow-item${f.kind === "delivery" ? ` is-delivery${f.direction === "out" ? " is-out" : ""}` : ""}${f.cancelled ? " is-cancelled" : ""}">
           <span class="dash-flow-time">${escapeHtml(f.time || "--:--")}</span>
           <span class="dash-flow-mark" aria-hidden="true">${f.mark}</span>
           <span class="dash-flow-body"><span class="dash-flow-title">${escapeHtml(f.title)}</span>${f.note ? `<span class="dash-flow-note">${escapeHtml(f.note)}</span>` : ""}</span>
           ${f.status ? `<span class="dash-badge">${escapeHtml(f.status)}</span>` : ""}
         </li>`)
         .join("")}</ol>`
-    : empty(model.reportId ? "日誌の「本日の現場の流れ」「搬入事項」に入力すると、ここに時刻順で表示されます。" : "この日の日誌はまだありません。");
+    : empty(model.reportId ? "日誌の「本日の現場の流れ」「搬入・搬出」に入力すると、ここに時刻順で表示されます。" : "この日の日誌はまだありません。");
 
+  // 1行目: 時刻・区分（◆搬入／◇搬出）・品名・数量・状況、2行目: 業者、3行目: 元 → 先。タップで車両・備考まで開く
   const deliveryHtml = model.deliveries.length
     ? model.deliveries
-        .map((d) => `<details class="dash-delivery${d.status === "cancelled" ? " is-cancelled" : ""}">
-          <summary><span class="dash-flow-time">${escapeHtml(d.time || "--:--")}</span> <b>${escapeHtml(d.item || "搬入")}</b>${d.quantity ? ` ${escapeHtml(d.quantity)}` : ""}
-            <span class="dash-badge">${escapeHtml(d.statusLabel)}</span><br><span class="dash-sub">${escapeHtml([d.vendor, d.destination].filter(Boolean).join("／"))}</span></summary>
+        .map((d) => `<details class="dash-delivery${d.direction === "out" ? " is-out" : ""}${d.status === "cancelled" ? " is-cancelled" : ""}">
+          <summary><span class="dash-flow-time">${escapeHtml(d.time || "--:--")}</span><span class="dash-dir">${d.mark} ${escapeHtml(d.directionLabel)}</span>
+            <span class="dash-dlv-main"><b>${escapeHtml(d.item || d.directionLabel)}</b>${d.quantity ? ` ${escapeHtml(d.quantity)}` : ""}</span><span class="dash-badge">${escapeHtml(d.statusLabel)}</span>
+            ${d.vendor ? `<span class="dash-sub">${escapeHtml(d.vendor)}</span>` : ""}
+            ${d.origin || d.destination ? `<span class="dash-sub">${escapeHtml(d.origin || "―")} → ${escapeHtml(d.destination || "―")}</span>` : ""}</summary>
           <dl class="dash-dl">
-            ${[["搬入業者", d.vendor], ["数量", d.quantity], ["搬入元", d.origin], ["搬入先", d.destination], ["車両", d.vehicle], ["備考", d.note]]
+            ${[[`${d.directionLabel}業者`, d.vendor], ["数量", d.quantity], [`${d.directionLabel}元`, d.origin], [`${d.directionLabel}先`, d.destination], ["車両", d.vehicle], ["備考", d.note]]
               .filter(([, v]) => v)
               .map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(v).replace(/\n/g, "<br>")}</dd>`)
               .join("")}
           </dl>
         </details>`)
         .join("")
-    : empty("本日の搬入はありません。");
+    : empty("本日の搬入・搬出はありません。");
+  const inCount = model.deliveries.filter((d) => d.direction === "in").length;
+  const outCount = model.deliveries.length - inCount;
 
   const s = model.staff;
   const staffHtml = `
@@ -142,14 +147,14 @@ function render(model) {
     </div>
     <div class="dash-grid">
       <section class="dash-card dash-card-flow"><h3>本日の現場の流れ</h3>${flowHtml}</section>
-      <section class="dash-card"><h3>🚚 本日の搬入</h3>${deliveryHtml}</section>
+      <section class="dash-card"><h3>🚚 本日の搬入・搬出${model.deliveries.length ? `<span class="dash-dlv-count">搬入${inCount}件・搬出${outCount}件</span>` : ""}</h3>${deliveryHtml}</section>
       <section class="dash-card"><h3>👷 本日の人員</h3>${staffHtml}</section>
       <section class="dash-card"><h3>📋 今日の日誌</h3>${diaryHtml}</section>
       <section class="dash-card"><h3>📊 日誌状況</h3>${statusHtml}</section>
       <section class="dash-card dash-card-wide"><h3>本日の作業</h3>${worksHtml}</section>
     </div>
     <div class="dash-actions">
-      ${canEdit ? `<button type="button" data-action="diary">＋日誌</button><button type="button" data-action="deliveries" class="secondary-btn">🚚搬入</button><button type="button" data-action="companies" class="secondary-btn">👷業者</button>` : ""}
+      ${canEdit ? `<button type="button" data-action="diary">＋日誌</button><button type="button" data-action="deliveries" class="secondary-btn">🚚搬入・搬出</button><button type="button" data-action="companies" class="secondary-btn">👷業者</button>` : ""}
       <button type="button" data-action="print" class="secondary-btn">🖨A3印刷</button>
     </div>`;
   root.hidden = false;
