@@ -11,6 +11,7 @@
 //    「（確認用第2版）」と付けて同じ鍵で暗号化。リポジトリの外に作り、本番の同梱ファイルは変えない）。
 //    同じサイト（同じ保存領域）なので、既存現場は旧版のまま・新規現場は新しい版になることを確かめられる
 //  ・http://<MacのIP>:8080/checklist でiPad実機確認のチェック表を開ける（結果はその端末に保存）
+//  ・https://<MacのIP>:8444/print-test/ で印刷方式（A 画面全体／B 共有メニュー／C 枠）の試験ページを開ける（別origin・データに触れない）
 //  ・確認用のセットアップリンク（鍵を含む）は ~/.koji-nippou-app/setup-link-staging.txt に保存し、
 //    画面・ログには出さない（# 以降はサーバーに送られないので、サーバーのログにも残らない）
 // 使い方: node tools/build-site.js && node tools/serve-staging.js [--ip <MacのLAN内のIPアドレス>] [--port 8443]
@@ -107,6 +108,23 @@ https.createServer({ key: fs.readFileSync(path.join(DIR, "server.key")), cert: f
   fs.createReadStream(file).pipe(res);
 }).listen(PORT, "0.0.0.0");
 
+// ---- 印刷方式の試験ページ（確認用サイト専用・本番には配信しない） ----
+// アプリと別のポート（＝別のorigin）で配信するので、アプリのデータ（IndexedDB）・Service Worker とは完全に分かれる。
+// 配るのは試験ページと、A3シートを作る純粋な部品（js/dashboard/。DBを使わない）・アイコンだけ。
+const PRINT_TEST_PORT = Number(opt("print-test-port", 8444));
+https.createServer({ key: fs.readFileSync(path.join(DIR, "server.key")), cert: fs.readFileSync(path.join(DIR, "server.crt")) }, (req, res) => {
+  const urlPath = decodeURIComponent(new URL(req.url, "https://x").pathname);
+  const send = (file, type) => { res.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store" }); fs.createReadStream(file).pipe(res); };
+  if (urlPath === "/" || urlPath === "/print-test") { res.writeHead(302, { Location: "/print-test/" }); res.end(); return; }
+  if (urlPath === "/print-test/" || urlPath === "/print-test/index.html") return send(path.join(__dirname, "print-test.html"), TYPES[".html"]);
+  if (urlPath === "/print-test/manifest.webmanifest") return send(path.join(__dirname, "print-test.webmanifest"), "application/manifest+json; charset=utf-8");
+  if (/^\/js\/dashboard\/[\w-]+\.js$/.test(urlPath) || /^\/icons\/[\w-]+\.png$/.test(urlPath)) {
+    const file = path.join(DIST, urlPath);
+    if (fs.existsSync(file)) return send(file, TYPES[path.extname(file)]);
+  }
+  res.writeHead(404); res.end("Not Found");
+}).listen(PRINT_TEST_PORT, "0.0.0.0");
+
 http.createServer((req, res) => {
   if (req.url === "/checklist" || req.url === "/checklist.html") {
     const html = fs.readFileSync(path.join(__dirname, "staging-checklist.html"), "utf8").split("{{SITE}}").join(siteUrl).split("{{SITE_V2}}").join(`https://${IP}:${PORT}/v2/index.html`).split("{{HTTP}}").join(`http://${IP}:${HTTP_PORT}/`);
@@ -122,7 +140,7 @@ http.createServer((req, res) => {
 <li>「設定」→「一般」→「情報」→「証明書信頼設定」で「Koji Nippou Staging CA」をオンにする</li>
 <li>Safariで <b>${siteUrl}</b> を開く</li>
 <li>確認が終わったら「設定」→「一般」→「VPNとデバイス管理」から、このプロファイルを削除する</li></ol>
-<p><a href="/checklist">iPad実機確認チェック表</a></p><p>このページと証明書には鍵・様式は含まれていません。セットアップリンクは別途（管理者から）受け取ってください。</p></body>`);
+<p><a href="/checklist">iPad実機確認チェック表</a></p><p>印刷方式の試験ページ: <b>https://${IP}:${PRINT_TEST_PORT}/print-test/</b>（Safariで開いて「ホーム画面に追加」→ホーム画面のアイコンから開く。アプリのデータには触れません）</p><p>このページと証明書には鍵・様式は含まれていません。セットアップリンクは別途（管理者から）受け取ってください。</p></body>`);
 }).listen(HTTP_PORT, "0.0.0.0");
 
 // 確認用のセットアップリンク（鍵を含む）はファイルにだけ保存し、画面には出さない
@@ -134,5 +152,6 @@ if (fs.existsSync(keyFile)) {
 console.log(`確認用サイト（同じWi‑Fi内だけ）: ${siteUrl}`);
 console.log(`証明書と手順: http://${IP}:${HTTP_PORT}/　チェック表: http://${IP}:${HTTP_PORT}/checklist`);
 console.log(hasV2 ? `確認用第2版（新しい版が届いた状態）: https://${IP}:${PORT}/v2/index.html` : "確認用第2版は作れませんでした（鍵がありません）");
+console.log(`印刷方式の試験ページ（アプリのデータとは別のorigin）: https://${IP}:${PRINT_TEST_PORT}/print-test/`);
 console.log(`確認用のセットアップリンク: ${path.join(SECRET, "setup-link-staging.txt")} に保存（画面には表示しません）`);
 console.log("終了するには Ctrl+C。確認が終わったらiPadから証明書のプロファイルを削除してください。");

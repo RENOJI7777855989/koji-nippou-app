@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 確認用サイト専用（本番には配信しない）。iPadのホーム画面アプリでの印刷方式を試す -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="印刷試験">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<!-- アプリとは別のポート（別のorigin）で配信するので、アプリのデータ（IndexedDB）やService Workerとは完全に分かれている -->
+<title>印刷方式の試験</title>
+<style>
+  .pt-page { font-family: -apple-system, "Hiragino Sans", sans-serif; max-width: 860px; margin: 0 auto; padding: 16px; line-height: 1.6; color: #1f2933; }
+  .pt-page h1 { font-size: 22px; margin: 0 0 8px; }
+  .pt-note { background: #fff8e1; border: 1px solid #f0d9a8; border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+  .pt-env { font-size: 14px; background: #f5f9ff; border: 1px solid #c9d6e8; border-radius: 8px; padding: 8px 12px; margin: 12px 0; }
+  .pt-env b.pt-ok { color: #1f7a3f; } .pt-env b.pt-ng { color: #b42318; }
+  .pt-method { border: 1px solid #d9dee5; border-radius: 10px; padding: 12px; margin: 14px 0; background: #fff; }
+  .pt-method h2 { font-size: 18px; margin: 0 0 4px; }
+  .pt-method p { margin: 4px 0 8px; font-size: 14px; color: #444; }
+  .pt-btn { display: block; width: 100%; min-height: 52px; font-size: 18px; font-weight: bold; border: none; border-radius: 8px; background: #2b6cb0; color: #fff; margin: 6px 0 10px; }
+  .pt-btn.pt-sub { background: #fff; color: #2b6cb0; border: 1px solid #2b6cb0; font-size: 16px; min-height: 44px; }
+  .pt-msg { font-size: 15px; padding: 8px 10px; border-radius: 6px; margin: 6px 0; }
+  .pt-msg.pt-warn { background: #fdecea; color: #8a1c12; border: 1px solid #f3b4ab; }
+  .pt-msg.pt-info { background: #eef6ee; color: #1f5f2f; border: 1px solid #b8dcbf; }
+  .pt-checks { display: grid; grid-template-columns: 1fr; gap: 4px; font-size: 15px; }
+  .pt-checks label { display: flex; align-items: center; gap: 8px; min-height: 40px; border-bottom: 1px solid #f0f0f0; }
+  .pt-checks input { width: 22px; height: 22px; }
+  .pt-memo { width: 100%; box-sizing: border-box; min-height: 44px; font-size: 15px; margin-top: 6px; }
+  .pt-log { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #f6f6f6; border-radius: 6px; padding: 6px 8px; white-space: pre-wrap; max-height: 160px; overflow: auto; margin: 6px 0 0; }
+  .pt-frame { width: 100%; height: 260px; border: 1px solid #ccc; background: #fff; }
+  .pt-result { width: 100%; box-sizing: border-box; min-height: 140px; font-size: 13px; }
+  @media (min-width: 700px) { .pt-checks { grid-template-columns: 1fr 1fr; column-gap: 16px; } }
+  /* A: 画面全体で印刷するときは、試験ページ自体を隠して印刷対象だけを出す */
+  #ptPrintRoot { display: none; }
+  body.pt-printing-a #ptPrintRoot { display: block; }
+  @media print {
+    body.pt-printing-a > *:not(#ptPrintRoot) { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="pt-page" id="ptPage">
+  <h1>印刷方式の試験（確認用サイト専用）</h1>
+  <div class="pt-note">
+    このページは印刷のしかたを試すだけのページです。<b>現場・日誌・写真・署名などのデータには一切アクセスしません</b>（印刷するのは架空のサンプルの「今日の現場シート」です）。本番のアプリには入っていません。<br>
+    iPadでは、Safariの共有ボタン（□↑）→「ホーム画面に追加」でこのページを追加し、<b>ホーム画面のアイコンから開いて</b>A・B・Cを順に試してください。
+  </div>
+  <div class="pt-env" id="ptEnv"></div>
+
+  <section class="pt-method" data-method="A">
+    <h2>A：画面全体で印刷</h2>
+    <p>印刷用のシートをこの画面そのものに表示し、画面全体に印刷を命令します（ボタン類は印刷時に隠します）。</p>
+    <button type="button" class="pt-btn" id="ptBtnA">A で印刷する</button>
+    <div class="pt-status"></div>
+  </section>
+
+  <section class="pt-method" data-method="B">
+    <h2>B：共有メニューへ渡して印刷</h2>
+    <p>印刷用のシートを1つのファイル（HTML）にして、iPadの共有メニューへ渡します。共有メニューに「プリント」があれば押してください。</p>
+    <button type="button" class="pt-btn" id="ptBtnB">B で共有する</button>
+    <div class="pt-status"></div>
+  </section>
+
+  <section class="pt-method" data-method="C">
+    <h2>C：現在の方式（画面内の枠に印刷を命令）</h2>
+    <p>今のアプリと同じ方式です。下の枠に印刷用のシートを入れ、その枠に印刷を命令します。</p>
+    <iframe class="pt-frame" id="ptFrame" title="印刷プレビュー（C）"></iframe>
+    <button type="button" class="pt-btn" id="ptBtnC">C で印刷する</button>
+    <div class="pt-status"></div>
+  </section>
+
+  <section class="pt-method" data-method="E">
+    <h2>E：今のアプリと全く同じ（ダイアログの中の枠）</h2>
+    <p>今のアプリの印刷ダイアログと同じく、画面の上に重なる窓（ダイアログ）の中の枠に印刷を命令します。窓が開いたら「印刷画面を開く」を押してください。</p>
+    <button type="button" class="pt-btn" id="ptBtnE">E の窓を開く</button>
+    <div class="pt-status"></div>
+  </section>
+  <dialog id="ptDialog" style="width:min(94vw,1000px);max-height:92vh;overflow-y:auto">
+    <h2 style="margin-top:0">印刷プレビュー（E）</h2>
+    <iframe id="ptDialogFrame" class="pt-frame" style="height:50vh" title="印刷プレビュー（E）"></iframe>
+    <button type="button" class="pt-btn" id="ptDialogPrint">印刷画面を開く</button>
+    <button type="button" class="pt-btn pt-sub" id="ptDialogClose">閉じる</button>
+  </dialog>
+
+  <section class="pt-method" data-method="D">
+    <h2>（参考）D：ファイルとして保存</h2>
+    <p>印刷用のシートをファイルとしてダウンロードします。開けた場合は、その画面の共有メニューから「プリント」を試してください。</p>
+    <button type="button" class="pt-btn pt-sub" id="ptBtnD">D でファイルを保存する</button>
+    <div class="pt-status"></div>
+  </section>
+
+  <section class="pt-method">
+    <h2>結果を送る</h2>
+    <p>各方式の確認欄に印を付けたら、下のボタンで結果をコピーし、チャットに貼り付けてください（自動の記録も一緒にコピーされます）。</p>
+    <button type="button" class="pt-btn pt-sub" id="ptCopy">結果をコピー</button>
+    <textarea class="pt-result" id="ptResult" readonly></textarea>
+    <button type="button" class="pt-btn pt-sub" id="ptClear">確認欄を空にする</button>
+  </section>
+</div>
+<div id="ptPrintRoot"></div>
+
+<script type="module">
+import { buildDashboardModel } from "/js/dashboard/siteDashboardModel.js";
+import { buildTodaySheetHtml } from "/js/dashboard/todaySheetHtml.js";
+
+// ---- 架空のサンプル（DBは使わない） ----
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const today = iso(new Date());
+const site = { id: "print-test", name: "印刷試験用の現場（サンプル）", constructionNumber: "TEST-001", startDate: iso(new Date(Date.now() - 9 * 86400000)), endDate: iso(new Date(Date.now() + 80 * 86400000)), progressPercent: 35 };
+const report = {
+  id: "print-test-report", siteId: site.id, date: today, weather: "晴れ", temperature: "22",
+  companies: [
+    { companyId: "a", companyName: "サンプル型枠", occupation: "型枠工", plannedWorkerCount: "6", actualWorkerCount: "5", workHours: "8:00～17:00", workContent: "2階型枠建込", foremanName: "職長A" },
+    { companyId: "b", companyName: "サンプル鉄筋", occupation: "鉄筋工", actualWorkerCount: "4", workContent: "2階配筋" }
+  ],
+  timeline: [{ time: "08:00", title: "朝礼・KY", kind: "meeting", status: "done" }, { time: "13:00", title: "配筋検査", kind: "inspection", status: "plan" }],
+  deliveries: [
+    { direction: "in", time: "10:00", item: "鉄筋", quantity: "5t", vendor: "サンプル鋼材", origin: "サンプル工場", destination: "北側ゲート", vehicle: "10t車", status: "plan" },
+    { direction: "out", time: "15:30", item: "残土", quantity: "8m3", vendor: "サンプル運送", origin: "現場", destination: "サンプル処分場", vehicle: "10tダンプ", status: "plan" }
+  ],
+  tomorrowPlan: "3階床配筋", remarks: "これは印刷試験用のサンプルです"
+};
+const html = buildTodaySheetHtml(buildDashboardModel({ site, reports: [report], signatures: [], date: today }));
+const FILE_NAME = "今日の現場シート（印刷試験）.html";
+
+// ---- 環境の表示 ----
+const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+// iPadのSafariは既定で「Mac」と名乗る（UAがMacintosh）ので、タッチ操作の有無で iPad かどうかを見分ける
+const isIPad = /iPad/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && (navigator.maxTouchPoints > 1 || "ontouchend" in document));
+const env = {
+  device: isIPad ? "iPad" : /iPhone/.test(navigator.userAgent) ? "iPhone" : /Macintosh/.test(navigator.userAgent) ? "Mac" : "その他",
+  mode: standalone ? "ホーム画面のアプリ" : "ブラウザのタブ",
+  ua: navigator.userAgent,
+  share: typeof navigator.share === "function",
+  canShareFiles: (() => { try { return !!navigator.canShare && navigator.canShare({ files: [new File([html], FILE_NAME, { type: "text/html" })] }); } catch { return false; } })()
+};
+document.getElementById("ptEnv").innerHTML =
+  `端末: <b>${env.device}</b><br>表示のしかた: <b class="${standalone ? "pt-ok" : "pt-ng"}">${env.mode}</b>${standalone ? "" : "（ホーム画面のアイコンから開くと、ホーム画面アプリでの試験になります）"}<br>` +
+  `共有メニューの機能: ${env.share ? "あり" : "なし"}／ファイルの共有: ${env.canShareFiles ? "できる" : "できない"}<br><small>${env.ua.replace(/[<>&]/g, "")}</small>`;
+
+// ---- 確認欄（この端末のこのページ専用の保存場所。アプリのデータとは別） ----
+const STORE_KEY = "koji-print-test-v1";
+const CHECKS = ["何か表示された", "印刷画面が開いた", "共有メニューが開いた", "「プリント」が表示された", "PDFとして保存できた", "紙に印刷できた", "何も起きなかった"];
+const state = (() => { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch { return {}; } })();
+const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch {} };
+const logs = { A: [], B: [], C: [], E: [], D: [] };
+for (const sec of document.querySelectorAll(".pt-method[data-method]")) {
+  const m = sec.dataset.method;
+  state[m] = state[m] || { checks: {}, memo: "" };
+  const box = document.createElement("div");
+  box.innerHTML = `<div class="pt-checks">${CHECKS.map((c, i) => `<label><input type="checkbox" data-i="${i}"${state[m].checks[i] ? " checked" : ""}>${c}</label>`).join("")}</div>
+    <input type="text" class="pt-memo" placeholder="気づいたこと（任意）"><pre class="pt-log"></pre>`;
+  sec.appendChild(box);
+  box.querySelector(".pt-memo").value = state[m].memo || "";
+  box.addEventListener("change", (e) => {
+    if (e.target.matches("input[type=checkbox]")) state[m].checks[e.target.dataset.i] = e.target.checked;
+    save();
+  });
+  box.querySelector(".pt-memo").addEventListener("input", (e) => { state[m].memo = e.target.value; save(); });
+}
+const sectionOf = (m) => document.querySelector(`.pt-method[data-method="${m}"]`);
+const log = (m, text) => {
+  const line = `${new Date().toLocaleTimeString("ja-JP")} ${text}`;
+  logs[m].push(line);
+  sectionOf(m).querySelector(".pt-log").textContent = logs[m].join("\n");
+};
+const status = (m, text, kind = "pt-info") => { sectionOf(m).querySelector(".pt-status").innerHTML = text ? `<div class="pt-msg ${kind}">${text}</div>` : ""; };
+
+// 印刷画面が本当に開いたかを見張る（beforeprint が来ない・print() がすぐ戻る＝開けなかった可能性）
+function watchPrint(m, win, run) {
+  let fired = false;
+  const onBefore = () => { fired = true; log(m, "beforeprint（印刷の準備）を受け取りました"); };
+  const onAfter = () => log(m, "afterprint（印刷画面が閉じた）を受け取りました");
+  win.addEventListener("beforeprint", onBefore);
+  win.addEventListener("afterprint", onAfter);
+  const t0 = performance.now();
+  try { run(); } catch (err) { log(m, `エラー: ${err?.name || ""} ${err?.message || err}`); }
+  const ms = Math.round(performance.now() - t0);
+  log(m, `print() が ${ms}ミリ秒で戻りました`);
+  setTimeout(() => {
+    win.removeEventListener("beforeprint", onBefore);
+    win.removeEventListener("afterprint", onAfter);
+    if (!fired && ms < 300) {
+      log(m, "印刷の合図（beforeprint）は来ませんでした（Safariでは印刷画面が開いても来ないことがあります）");
+      status(m, "印刷画面が開かない場合は、共有メニューから印刷してください（B を試してください）。実際に開いたかどうかを確認欄に記録してください。", "pt-warn");
+    } else {
+      status(m, "印刷画面が開いた可能性があります。結果を下の確認欄に記録してください。");
+    }
+  }, 1500);
+}
+
+// ---- A: 画面全体で印刷 ----
+const printRoot = document.getElementById("ptPrintRoot");
+function prepareA() {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  printRoot.innerHTML = "";
+  for (const s of doc.querySelectorAll("style")) {
+    const st = document.createElement("style");
+    st.dataset.ptA = "1";
+    st.textContent = s.textContent;
+    document.head.appendChild(st);
+  }
+  for (const node of [...doc.body.children]) if (node.tagName !== "SCRIPT") printRoot.appendChild(document.importNode(node, true));
+  document.body.classList.add("pt-printing-a");
+  // シートの縮小処理（文字が溢れた欄だけ縮める）を、この画面で実行する
+  const script = doc.querySelector("script");
+  if (script) { const sc = document.createElement("script"); sc.textContent = script.textContent; printRoot.appendChild(sc); }
+}
+function cleanupA() {
+  document.body.classList.remove("pt-printing-a");
+  printRoot.innerHTML = "";
+  for (const st of document.head.querySelectorAll("style[data-pt-a]")) st.remove();
+}
+document.getElementById("ptBtnA").addEventListener("click", () => {
+  status("A", "");
+  prepareA();
+  log("A", "シートを画面に表示し、画面全体に印刷を命令します");
+  window.addEventListener("afterprint", cleanupA, { once: true });
+  watchPrint("A", window, () => window.print());
+  setTimeout(() => { if (document.body.classList.contains("pt-printing-a")) cleanupA(); }, 60000);
+});
+
+// ---- B: 共有メニューへ渡す ----
+document.getElementById("ptBtnB").addEventListener("click", async () => {
+  status("B", "");
+  const file = new File([html], FILE_NAME, { type: "text/html" });
+  if (!navigator.share) { log("B", "この環境には共有メニューの機能がありません"); status("B", "この環境では共有メニューを使えません。", "pt-warn"); return; }
+  let can = false;
+  try { can = !!navigator.canShare && navigator.canShare({ files: [file] }); } catch (err) { log("B", `canShare エラー: ${err?.name}`); }
+  log("B", `ファイルの共有: ${can ? "できる" : "できない"}`);
+  if (!can) { status("B", "この環境ではファイルを共有メニューへ渡せません。", "pt-warn"); return; }
+  try {
+    await navigator.share({ files: [file], title: "今日の現場シート（印刷試験）" });
+    log("B", "共有メニューが閉じました（共有先を選んで完了）");
+    status("B", "共有が完了しました。結果を確認欄に記録してください。");
+  } catch (err) {
+    log("B", `共有の結果: ${err?.name || ""} ${err?.message || ""}`);
+    status("B", err?.name === "AbortError" ? "共有メニューが閉じられました（キャンセル）。" : "共有メニューを開けませんでした。", err?.name === "AbortError" ? "pt-info" : "pt-warn");
+  }
+});
+
+// ---- C: 現在の方式（枠に印刷を命令） ----
+const frame = document.getElementById("ptFrame");
+frame.srcdoc = html;
+frame.addEventListener("load", () => log("C", "枠にシートを読み込みました"), { once: true });
+document.getElementById("ptBtnC").addEventListener("click", () => {
+  status("C", "");
+  if (!frame.contentWindow) { log("C", "枠がありません"); return; }
+  frame.contentWindow.focus();
+  watchPrint("C", frame.contentWindow, () => frame.contentWindow.print());
+});
+
+// ---- E: 今のアプリと同じ（dialog の中の iframe） ----
+const dlg = document.getElementById("ptDialog");
+const dlgFrame = document.getElementById("ptDialogFrame");
+document.getElementById("ptBtnE").addEventListener("click", () => {
+  status("E", "");
+  dlgFrame.srcdoc = html;
+  dlg.showModal();
+  log("E", "窓を開いてシートを読み込みました");
+});
+document.getElementById("ptDialogPrint").addEventListener("click", () => {
+  if (!dlgFrame.contentWindow) { log("E", "枠がありません"); return; }
+  dlgFrame.contentWindow.focus();
+  watchPrint("E", dlgFrame.contentWindow, () => dlgFrame.contentWindow.print());
+});
+document.getElementById("ptDialogClose").addEventListener("click", () => dlg.close());
+
+// ---- D: ファイルとして保存（参考） ----
+document.getElementById("ptBtnD").addEventListener("click", () => {
+  const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = FILE_NAME;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  log("D", "ファイルの保存を命令しました");
+  status("D", "保存の画面が出た場合は結果を記録してください。何も出ない場合は「何も起きなかった」に印を付けてください。");
+});
+
+// ---- 結果のコピー ----
+function resultText() {
+  const lines = [`印刷方式の試験結果（${new Date().toLocaleString("ja-JP")}）`, `端末: ${env.device}`, `表示のしかた: ${env.mode}`, `共有: ${env.share ? "あり" : "なし"}／ファイル共有: ${env.canShareFiles ? "できる" : "できない"}`, `UA: ${env.ua}`];
+  for (const m of ["A", "B", "C", "E", "D"]) {
+    const s = state[m];
+    lines.push("", `【${m}】${CHECKS.filter((_, i) => s.checks[i]).join("・") || "（印なし）"}`);
+    if (s.memo) lines.push(`メモ: ${s.memo}`);
+    if (logs[m].length) lines.push(...logs[m].map((l) => `  ${l}`));
+  }
+  return lines.join("\n");
+}
+const resultEl = document.getElementById("ptResult");
+document.getElementById("ptCopy").addEventListener("click", async () => {
+  const text = resultText();
+  resultEl.value = text;
+  try { await navigator.clipboard.writeText(text); alert("結果をコピーしました。チャットに貼り付けてください。"); }
+  catch { resultEl.focus(); resultEl.select(); alert("自動でコピーできませんでした。下の欄の文字を長押しして全選択→コピーしてください。"); }
+});
+document.getElementById("ptClear").addEventListener("click", () => {
+  if (!confirm("確認欄の印とメモを空にしますか？（アプリのデータには関係ありません）")) return;
+  for (const m of ["A", "B", "C", "E", "D"]) state[m] = { checks: {}, memo: "" };
+  save();
+  location.reload();
+});
+</script>
+</body>
+</html>
