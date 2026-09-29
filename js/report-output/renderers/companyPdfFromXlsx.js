@@ -202,11 +202,25 @@ export function cellStyleToCss(style) {
   return parts.join(";");
 }
 
+/**
+ * 表のHTML。PDF（印刷）でExcelの見た目を保つため、各セルの中身を「Excelの行の高さ・列の幅の箱」（div.xc）に入れる。
+ *  ・行の高さを固定する: 表の行（tr）の高さは「最低の高さ」でしかなく、文字の高さや長い文章で伸びてしまい、
+ *    Excelの行の高さで位置を計算して重ねる職長サイン・様式の図がずれて重なっていた。箱の高さを固定して防ぐ。
+ *  ・折り返し指定の無いセル: Excelと同じく、右隣の空いたセル（data-spill の幅）までは1行ではみ出して表示する。
+ *    それでも収まらない長い文字は、隣の欄に重ねず、そのセルの中で折り返す（下のPDF_CELL_FIT_SCRIPT）。
+ *  ・折り返し指定のセル・折り返したセルは、箱に収まるまで文字を小さくする（省略しない。最小5px）。
+ *  ・真下のセルが空で、間に罫線が無い（見た目は1つの欄）場合は、その高さも箱に含める（例: 03-2の協力会社欄は
+ *    1社ごとに1行空けており、作業内容の欄は罫線の無い2行分に見える）。罫線をまたいで他の欄に重ねることはしない。
+ *  ・箱はセルの上に重ねて置く（position:absolute）ので、中身が多くても表の行は伸びない。
+ * 様式のセル・結合・罫線・列幅・行の高さは変えない（表示のしかただけ）。
+ */
 function buildTableHtml(layout, styles) {
   const covered = new Set(); // "r,c" 形式で、結合セルに覆われて描画をスキップする位置
   const spanAt = new Map(); // "r,c" -> {rowspan, colspan}（結合の左上セルのみ）
+  const mergeAnchorOf = new Map(); // "r,c" -> 結合の左上セルの "r,c"（結合に含まれる全セル）
   layout.merges.forEach((m) => {
     spanAt.set(`${m.r1},${m.c1}`, { rowspan: m.r2 - m.r1 + 1, colspan: m.c2 - m.c1 + 1 });
+    for (let r = m.r1; r <= m.r2; r++) for (let c = m.c1; c <= m.c2; c++) mergeAnchorOf.set(`${r},${c}`, [m.r1, m.c1]);
     for (let r = m.r1; r <= m.r2; r++) {
       for (let c = m.c1; c <= m.c2; c++) {
         if (r === m.r1 && c === m.c1) continue;
@@ -216,6 +230,38 @@ function buildTableHtml(layout, styles) {
   });
 
   const colWidths = layout.colWidthPx.slice(1, layout.maxCol + 1);
+  const hasText = (r, c) => !!String(layout.cells.get(`${colIndexToLetters(c)}${r}`)?.text || "").length;
+  const styleAt = (r, c) => styles.resolveStyle(layout.cells.get(`${colIndexToLetters(c)}${r}`)?.styleIndex || 0);
+  // 真下の空いたセルへ、罫線で区切られていない範囲だけ箱を下に伸ばせる高さ（列 c1〜c2 のすべてで空いていること）
+  const extendDown = (rBelow, c1, c2) => {
+    let h = 0;
+    for (let k = rBelow; k <= layout.maxRow; k++) {
+      let ok = true;
+      for (let cc = c1; cc <= c2; cc++) {
+        const key = `${k},${cc}`;
+        if (covered.has(key) || spanAt.has(key) || hasText(k, cc) || styleAt(k - 1, cc).border.bottom || styleAt(k, cc).border.top) { ok = false; break; }
+      }
+      if (!ok) break;
+      h += layout.rowHeightPx[k] || 0;
+    }
+    return h;
+  };
+  // 折り返さないセルが、隣の空いたセルへはみ出せる幅（Excelと同じく、左寄せは右へ・右寄せは左へ・中央は左右へ。
+  // 文字のあるセル・文字のある結合セルで止まる。中が空欄の結合セル（例: 03-2の印鑑欄）へは、従来の表示どおりはみ出してよい）
+  const freeWidth = (r, from, step) => {
+    let w = 0;
+    for (let k = from; k >= 1 && k <= layout.maxCol; k += step) {
+      const anchor = mergeAnchorOf.get(`${r},${k}`);
+      if (anchor ? hasText(anchor[0], anchor[1]) : hasText(r, k)) break;
+      w += layout.colWidthPx[k] || 0;
+    }
+    return w;
+  };
+  const spillWidth = (r, cFirst, cLast, ownWidth, horizontal) => {
+    if (horizontal === "right") return ownWidth + freeWidth(r, cFirst - 1, -1);
+    if (horizontal === "center") return ownWidth + 2 * Math.min(freeWidth(r, cFirst - 1, -1), freeWidth(r, cLast + 1, 1));
+    return ownWidth + freeWidth(r, cLast + 1, 1);
+  };
   const totalWidthPx = colWidths.reduce((a, b) => a + b, 0);
   const colGroup = colWidths.map((w) => `<col style="width:${w}px">`).join("");
 
@@ -232,8 +278,23 @@ function buildTableHtml(layout, styles) {
       const span = spanAt.get(key);
       const spanAttrs = span ? ` rowspan="${span.rowspan}" colspan="${span.colspan}"` : "";
       const text = escapeHtml(cellData?.text || "").replace(/\n/g, "<br>");
+      const rows = span?.rowspan || 1;
+      const cols = span?.colspan || 1;
+      let boxH = 0;
+      for (let k = r; k < r + rows; k++) boxH += layout.rowHeightPx[k] || 0;
+      if (text) boxH += extendDown(r + rows, c, c + cols - 1);
+      let boxW = 0;
+      for (let k = c; k < c + cols; k++) boxW += layout.colWidthPx[k] || 0;
+      const wrap = !!style.alignment.wrapText;
+      const spill = !wrap && text ? spillWidth(r, c, c + cols - 1, boxW, style.alignment.horizontal) : boxW;
+      const valign = style.alignment.vertical === "center" ? "center" : style.alignment.vertical === "top" ? "flex-start" : "flex-end";
+      // 文字の幅を測れるよう、中身は伸ばさず文字の幅にする（左右の寄せはここで指定）
+      const halign = style.alignment.horizontal === "center" ? "center" : style.alignment.horizontal === "right" ? "flex-end" : "flex-start";
+      const inner = text
+        ? `<div class="xc" data-w="${Math.round(boxW)}" data-spill="${Math.round(spill)}" data-wrap="${wrap ? 1 : 0}" style="width:${Math.max(1, Math.round(boxW) - 4)}px;height:${Math.max(0, boxH - 1)}px;justify-content:${valign};align-items:${halign}"><span>${text}</span></div>`
+        : "";
       // styles.xmlの色・フォント名は外部提供の.xlsxテンプレート由来のためHTML属性値として無害化する
-      cellsHtml.push(`<td${spanAttrs} style="${escapeHtml(cellStyleToCss(style))}">${text}</td>`);
+      cellsHtml.push(`<td${spanAttrs} style="${escapeHtml(cellStyleToCss(style))}">${inner}</td>`);
     }
     rowsHtml.push(`<tr style="height:${layout.rowHeightPx[r]}px">${cellsHtml.join("")}</tr>`);
   }
@@ -250,6 +311,31 @@ function colIndexToLetters(n) {
   }
   return letters;
 }
+
+/**
+ * セルの箱に文字を収める（印刷用HTMLの中で表示時・印刷前に実行。何度実行しても同じ結果）。
+ *  ・折り返さないセル: 1行ではみ出せる幅（data-spill）に収まればそのまま。収まらなければそのセルの中で折り返す
+ *  ・折り返したセル: 箱（高さ・幅）に収まるまで文字を小さくする（最小5px）。それでも収まらないセルの数を
+ *    window.__xlsxCellsClipped に残す（検証用）
+ * まとめて印刷（複数の日報を1文書に結合）でも各シートに効くよう、文書全体の .xc を対象にする。
+ */
+export const PDF_CELL_FIT_SCRIPT = `(function(){
+  var MIN=5;
+  function fitCell(c){
+    var sp=c.firstElementChild; if(!sp) return true;
+    c.classList.remove("xc-fit"); c.style.fontSize="";
+    var own=+c.getAttribute("data-w"), spill=+c.getAttribute("data-spill"), wrap=c.getAttribute("data-wrap")==="1";
+    if(!wrap && sp.offsetWidth<=spill+0.5 && sp.offsetHeight<=c.clientHeight+1) return true;
+    c.classList.add("xc-fit");
+    var size=parseFloat(getComputedStyle(c).fontSize)||14;
+    function over(){return c.scrollHeight>c.clientHeight||c.scrollWidth>c.clientWidth;}
+    while(over()&&size>MIN){size-=0.5;c.style.fontSize=size+"px";}
+    return !over();
+  }
+  // 全体の縮小（下の fitScript）は、この後に計算し直す。縮小したまま測ると幅・高さを誤るので一度戻す
+  function fitAll(){var ws=document.querySelectorAll(".xlsx-sheet-wrap");for(var j=0;j<ws.length;j++)ws[j].style.zoom="1";var n=0,cs=document.querySelectorAll("table.xlsx-sheet .xc[data-w]");for(var i=0;i<cs.length;i++){if(!fitCell(cs[i]))n++;}window.__xlsxCellsClipped=n;}
+  fitAll();window.addEventListener("load",fitAll);window.addEventListener("beforeprint",fitAll);
+})();`;
 
 async function render(model, mapping, companyProfile, template) {
   const cfg = mapping || getLayoutProfile(template?.layoutId)?.dailyMapping || ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING;
@@ -317,6 +403,7 @@ async function render(model, mapping, companyProfile, template) {
     : "";
 
   const imagesHtml = [...templateImages, ...signatureImages].map(overlayImageHtml).join("");
+  const cellFitScript = `<script>${PDF_CELL_FIT_SCRIPT}</script>`;
   const textShapesHtml = textShapes
     .map((s) => `<div class="xlsx-overlay-text" style="left:${s.left}px;top:${s.top}px;width:${s.width}px;height:${s.height}px;font-size:${s.fontSizePx}px">${escapeHtml(s.text)}</div>`)
     .join("");
@@ -332,7 +419,10 @@ async function render(model, mapping, companyProfile, template) {
   body { margin: 0; }
   .xlsx-sheet-wrap { position: relative; }
   table.xlsx-sheet { border-collapse: collapse; table-layout: fixed; }
-  table.xlsx-sheet td { padding: 1px 2px; }
+  table.xlsx-sheet td { padding: 0 2px; position: relative; }
+  /* セルの中身の箱: Excelの行の高さに固定し、セルの上に重ねて置く（行が伸びて重ね描きの図・サインがずれるのを防ぐ） */
+  table.xlsx-sheet td .xc { position: absolute; left: 2px; top: 0; display: flex; flex-direction: column; overflow: visible; line-height: 1.15; }
+  table.xlsx-sheet td .xc.xc-fit { overflow: hidden; white-space: pre-wrap; word-break: break-all; align-items: stretch; }
   .xlsx-overlay-img { position: absolute; object-fit: contain; }
   .xlsx-overlay-crop { position: absolute; overflow: hidden; }
   .xlsx-overlay-text { position: absolute; display: flex; align-items: center; justify-content: center; text-align: center; }
@@ -344,6 +434,7 @@ async function render(model, mapping, companyProfile, template) {
     ${imagesHtml}
     ${textShapesHtml}
   </div>
+  ${cellFitScript}
   ${fitScript}
 </body>
 </html>`;
