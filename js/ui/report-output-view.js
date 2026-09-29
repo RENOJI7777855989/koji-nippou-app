@@ -12,6 +12,7 @@ import { listReportsBySite, getReport, recordReportOutput, getPrintStatus, PRINT
 import { listReportTemplates, listCompanyProfiles, generateReportOutput, resolveReportTemplateForSite } from "../report-output/index.js";
 import { escapeHtml } from "../utils.js";
 import { showView, showMessage } from "./common.js";
+import { waitFrameLoaded, printFrame, canSharePrintFile, sharePrintHtml, downloadPrintHtml, PRINT_NOT_OPENED_MESSAGE, PRINT_NOT_OPENED_MESSAGE_NO_SHARE } from "../printSupport.js";
 import { navigate } from "../router.js";
 
 const siteSelect = document.getElementById("outputSiteSelect");
@@ -26,6 +27,8 @@ const pdfVariantRadios = document.querySelectorAll('input[name="pdfVariant"]');
 const previewBtn = document.getElementById("outputPreviewBtn");
 const generateBtn = document.getElementById("outputGenerateBtn");
 const printBtn = document.getElementById("outputPrintBtn");
+const printShareBtn = document.getElementById("outputPrintShareBtn");
+let previewHtml = ""; // 共有メニューから印刷するときに渡す印刷用HTML
 const previewArea = document.getElementById("outputPreviewArea");
 const previewText = document.getElementById("outputPreviewText");
 const previewFrame = document.getElementById("outputPreviewFrame");
@@ -112,6 +115,8 @@ function resetPreview() {
   previewFrame.hidden = true;
   previewFrame.removeAttribute("srcdoc");
   printBtn.hidden = true;
+  printShareBtn.hidden = true;
+  previewHtml = "";
   printedRecordBtn.hidden = true;
 }
 
@@ -174,6 +179,9 @@ async function showPdfPreview(reportId) {
   previewFrame.srcdoc = html;
   previewArea.hidden = false;
   printBtn.hidden = false;
+  previewHtml = html;
+  printShareBtn.hidden = false;
+  printShareBtn.textContent = canSharePrintFile() ? "共有メニューから印刷" : "印刷用ファイルを保存";
   return { html, warnings: warnings || [] };
 }
 
@@ -195,6 +203,7 @@ previewBtn.addEventListener("click", async () => {
       previewText.textContent = buildExcelTextPreview(site, report);
       previewArea.hidden = false;
       printBtn.hidden = true;
+      printShareBtn.hidden = true;
     }
   } catch (err) {
     showMessage(`プレビューの生成に失敗しました: ${err.message}`, true);
@@ -237,15 +246,36 @@ generateBtn.addEventListener("click", async () => {
   }
 });
 
-printBtn.addEventListener("click", () => {
-  if (!previewFrame.contentWindow) {
+printBtn.addEventListener("click", async () => {
+  if (!previewFrame.contentWindow || !previewHtml) {
     showMessage("印刷対象がありません。先にプレビューまたは出力を行ってください。", true);
     return;
   }
-  previewFrame.contentWindow.focus();
-  previewFrame.contentWindow.print();
+  await waitFrameLoaded(previewFrame);
+  const result = await printFrame(previewFrame);
+  // 印刷画面が開いた形跡が無ければ、何も起きないままにせず案内する（js/printSupport.js）
+  if (!result.opened) showMessage(canSharePrintFile() ? PRINT_NOT_OPENED_MESSAGE : PRINT_NOT_OPENED_MESSAGE_NO_SHARE, true);
   // ブラウザは紙に印刷できたかを知らせないため、利用者の確認で印刷状態を記録する
   printedRecordBtn.hidden = false;
+});
+
+// iPadのホーム画面アプリ等で印刷画面が開かない場合: 共有メニュー（→プリント）へ渡す。使えない環境ではファイルとして保存
+printShareBtn.addEventListener("click", async () => {
+  if (!previewHtml) return;
+  const title = `日報_${reportSelect.selectedOptions[0]?.textContent || ""}`;
+  const r = await sharePrintHtml(previewHtml, title);
+  if (r === "shared") {
+    showMessage("共有メニューを閉じました。「プリント」から印刷した場合は「紙に印刷できた」で記録してください。");
+    printedRecordBtn.hidden = false;
+  } else if (r === "cancelled") {
+    showMessage("共有メニューが閉じられました。");
+  } else if (r === "unsupported") {
+    downloadPrintHtml(previewHtml, title);
+    showMessage("印刷用ファイルを保存しました。保存したファイルを開き、そこから印刷してください。");
+  } else {
+    downloadPrintHtml(previewHtml, title);
+    showMessage("共有メニューを開けなかったため、印刷用ファイルを保存しました。保存したファイルから印刷してください。", true);
+  }
 });
 
 printedRecordBtn.addEventListener("click", async () => {

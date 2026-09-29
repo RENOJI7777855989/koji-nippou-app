@@ -1710,3 +1710,11 @@ dialog h3 {
   .dash-grid { grid-template-columns: 1fr 1fr; }
   .dash-card-flow, .dash-card-wide { grid-column: 1 / -1; }
 }
+
+/* ===== 印刷（印刷画面が開いたかの案内・共有メニューから印刷） js/printSupport.js ===== */
+.print-status { margin: 8px 0; padding: 8px 10px; border-radius: 6px; background: #eef6ee; color: #1f5f2f; border: 1px solid #b8dcbf; font-size: 15px; }
+.print-status.is-warn { background: #fdecea; color: #8a1c12; border-color: #f3b4ab; font-weight: bold; }
+.print-actions { flex-wrap: wrap; }
+.print-actions button { min-height: 44px; }
+.print-fallback-hint { margin: 4px 0; }
+#reportPrintDialog .report-print-frame { height: 50vh; }

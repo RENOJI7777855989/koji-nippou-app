@@ -37,6 +37,7 @@ import {
 } from "../vendorQuote/index.js";
 import { escapeHtml } from "../utils.js";
 import { showView, showMessage } from "./common.js";
+import { waitFrameLoaded, printFrame, canSharePrintFile, sharePrintHtml, downloadPrintHtml, PRINT_NOT_OPENED_MESSAGE, PRINT_NOT_OPENED_MESSAGE_NO_SHARE } from "../printSupport.js";
 import { navigate } from "../router.js";
 import { canAccessSite } from "../auth.js";
 
@@ -81,6 +82,8 @@ const exportCsvBtn = document.getElementById("comparisonExportCsvBtn");
 const exportPdfBtn = document.getElementById("comparisonExportPdfBtn");
 const printBtn = document.getElementById("comparisonPrintBtn");
 const pdfPreviewFrame = document.getElementById("comparisonPdfPreviewFrame");
+const printShareBtn = document.getElementById("comparisonPrintShareBtn");
+let printHtml = ""; // 共有メニューから印刷するときに渡す印刷用HTML
 
 let currentSite = null;
 let allBatches = [];
@@ -593,16 +596,34 @@ exportPdfBtn.addEventListener("click", () => {
   pdfPreviewFrame.srcdoc = html;
   pdfPreviewFrame.hidden = false;
   printBtn.hidden = false;
+  printHtml = html;
+  printShareBtn.hidden = false;
+  printShareBtn.textContent = canSharePrintFile() ? "共有メニューから印刷" : "印刷用ファイルを保存";
   showMessage("PDF出力用のプレビューを表示しました。印刷ボタンから印刷・PDF保存してください。");
 });
 
-printBtn.addEventListener("click", () => {
-  if (!pdfPreviewFrame.contentWindow) {
+printBtn.addEventListener("click", async () => {
+  if (!pdfPreviewFrame.contentWindow || !printHtml) {
     showMessage("印刷対象がありません。先にPDF出力ボタンを押してください。", true);
     return;
   }
-  pdfPreviewFrame.contentWindow.focus();
-  pdfPreviewFrame.contentWindow.print();
+  await waitFrameLoaded(pdfPreviewFrame);
+  const result = await printFrame(pdfPreviewFrame);
+  // 印刷画面が開いた形跡が無ければ、何も起きないままにせず案内する（js/printSupport.js）
+  if (!result.opened) showMessage(canSharePrintFile() ? PRINT_NOT_OPENED_MESSAGE : PRINT_NOT_OPENED_MESSAGE_NO_SHARE, true);
+});
+
+// iPadのホーム画面アプリ等で印刷画面が開かない場合: 共有メニュー（→プリント）へ渡す。使えない環境ではファイルとして保存
+printShareBtn.addEventListener("click", async () => {
+  if (!printHtml) return;
+  const title = `積算チェック結果_${currentSite?.name || ""}`;
+  const r = await sharePrintHtml(printHtml, title);
+  if (r === "shared") showMessage("共有メニューを閉じました。");
+  else if (r === "cancelled") showMessage("共有メニューが閉じられました。");
+  else {
+    downloadPrintHtml(printHtml, title);
+    showMessage(r === "unsupported" ? "印刷用ファイルを保存しました。保存したファイルを開き、そこから印刷してください。" : "共有メニューを開けなかったため、印刷用ファイルを保存しました。", r !== "unsupported");
+  }
 });
 
 export async function initComparisonView(params) {
@@ -626,6 +647,8 @@ export async function initComparisonView(params) {
   pdfPreviewFrame.hidden = true;
   pdfPreviewFrame.removeAttribute("srcdoc");
   printBtn.hidden = true;
+  printShareBtn.hidden = true;
+  printHtml = "";
 
   [estimateItems, allBatches, masterItems] = await Promise.all([
     listEstimateItemsBySite(site.id),

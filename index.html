@@ -341,6 +341,7 @@
         <button type="button" id="outputPreviewBtn" class="secondary-btn">プレビュー</button>
         <button type="button" id="outputGenerateBtn">出力する</button>
         <button type="button" id="outputPrintBtn" class="secondary-btn" hidden>印刷する</button>
+        <button type="button" id="outputPrintShareBtn" class="secondary-btn print-share-btn" hidden>共有メニューから印刷</button>
         <button type="button" id="outputPrintedRecordBtn" class="secondary-btn" hidden>紙に印刷できた（印刷状態に記録）</button>
       </div>
 
@@ -836,6 +837,7 @@
           <button type="button" id="comparisonExportCsvBtn" class="secondary-btn">Excel(CSV)で出力</button>
           <button type="button" id="comparisonExportPdfBtn" class="secondary-btn">PDF出力用プレビュー</button>
           <button type="button" id="comparisonPrintBtn" class="secondary-btn" hidden>印刷する</button>
+          <button type="button" id="comparisonPrintShareBtn" class="secondary-btn print-share-btn" hidden>共有メニューから印刷</button>
         </div>
 
         <p id="comparisonEmpty" class="empty-message">比較結果がありません。</p>
@@ -947,10 +949,14 @@
     <h3 id="reportPrintTitle">印刷</h3>
     <p id="reportPrintNote" class="app-subtitle"></p>
     <iframe id="reportPrintFrame" class="report-print-frame" title="印刷プレビュー"></iframe>
-    <div class="form-actions">
+    <div class="form-actions print-actions">
       <button type="button" id="reportPrintOpenBtn">印刷画面を開く</button>
+      <button type="button" id="reportPrintShareBtn" class="secondary-btn print-share-btn">共有メニューから印刷</button>
+      <button type="button" id="reportPrintSaveBtn" class="secondary-btn print-save-btn">印刷用ファイルを保存</button>
       <button type="button" id="reportPrintCloseBtn" class="secondary-btn">閉じる</button>
     </div>
+    <p class="app-subtitle print-fallback-hint">印刷画面が開かない場合（iPadのホーム画面アプリなど）は「共有メニューから印刷」→「プリント」で印刷できます。</p>
+    <p id="reportPrintStatus" class="print-status" role="status" hidden></p>
     <div id="reportPrintRecordArea" class="report-print-record" hidden>
       <p>紙に印刷できましたか？（「印刷できた」を押すと印刷状態に記録します）</p>
       <div class="form-actions">
