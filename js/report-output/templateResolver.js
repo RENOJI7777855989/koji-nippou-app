@@ -203,10 +203,14 @@ export async function pinUnpinnedSites() {
   return pinned;
 }
 
-/** この現場の固定を、指定したテンプレート（または現場の指定／標準）の現在の版へ付け替える（手動） */
+/** 工事完了の現場は、日報が確定済みのため様式を切り替えない（再出力は固定した様式・版で行う）。工事完了を解除すれば切り替えられる */
+export const COMPLETED_SITE_MESSAGE = "工事完了の現場は、日報のExcel様式を切り替えられません（工事完了を解除すると切り替えられます）。";
+
+/** この現場の固定を、指定したテンプレート（または現場の指定／標準）の現在の版へ付け替える（手動）。工事完了の現場は拒否する */
 export async function repinSite(siteId, { templateId = undefined, reason = "manual" } = {}) {
   const site = await dbGet("sites", siteId);
   if (!site) throw new Error("現場が見つかりません");
+  if (site.completedAt) throw new Error(COMPLETED_SITE_MESSAGE);
   let target;
   let source;
   if (templateId) {
@@ -251,6 +255,7 @@ export async function upgradeSiteTemplate(siteId) {
 /** 手動: 直前の固定（切り替える前の版）に戻す。その版が残っていなければ戻さない */
 export async function revertSiteTemplate(siteId) {
   const site = await dbGet("sites", siteId);
+  if (site?.completedAt) throw new Error(COMPLETED_SITE_MESSAGE);
   const [previous, ...rest] = site?.templatePinHistory || [];
   if (!previous) throw new Error("戻せる前の版がありません");
   const version = await findTemplateVersion(previous.templateId, previous.sha256);

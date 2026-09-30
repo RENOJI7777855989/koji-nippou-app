@@ -1718,3 +1718,6 @@ dialog h3 {
 .print-actions button { min-height: 44px; }
 .print-fallback-hint { margin: 4px 0; }
 #reportPrintDialog .report-print-frame { height: 50vh; }
+
+/* 現場フォーム: 日報のExcel様式の説明（今使っている様式・保存するとどうなるか） */
+#siteFormReportTemplateHint { display: block; white-space: pre-line; margin-top: 4px; }

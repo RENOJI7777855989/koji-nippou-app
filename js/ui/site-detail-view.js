@@ -7,6 +7,7 @@ import { getSite, copySite, archiveSite, unarchiveSite, completeSite, reopenSite
 import { listReportsBySite, getPrintStatus, isEditedAfterPrint, PRINT_STATUS_LABELS, recordReportOutput } from "../reports.js";
 import { exportReportsExcelZip, buildReportsPrintHtml, exportSiteLedgerExcel, buildSiteLedgerPrintHtml, resolveCompanyTemplateForSite } from "../reportPrint.js";
 import { previewSiteTemplateUpgrade, upgradeSiteTemplate, revertSiteTemplate } from "../report-output/templateResolver.js";
+import { getReportTemplate } from "../report-output/reportTemplates.js";
 import { renderSiteDashboard } from "./site-dashboard.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
 import { escapeHtml } from "../utils.js";
@@ -316,6 +317,13 @@ toggleArchiveBtn.addEventListener("click", async () => {
   renderSiteInfo();
 });
 
+/** 「前に戻す」ボタンの文言。前が別の様式なら様式名も出す（同じ様式の版違いなら「前の版」） */
+async function revertLabel(prev, resolved) {
+  if (prev.templateId === resolved.baseTemplateId) return `前の版（第${prev.revision || "?"}版）に戻す`;
+  const t = await getReportTemplate(prev.templateId).catch(() => null);
+  return `前の様式（${t?.name || "切り替える前の様式"} 第${prev.revision || "?"}版）に戻す`;
+}
+
 /** 日報のExcel様式（どの様式の、何版を、なぜ使うか）を表示する。最新版への切り替え・元に戻すボタンも出す */
 async function renderSiteTemplateInfo() {
   const site = currentSite;
@@ -327,7 +335,7 @@ async function renderSiteTemplateInfo() {
     return;
   }
   const parts = [];
-  parts.push(`<span class="site-template-name">${escapeHtml(resolved.templateName)}</span> 第${resolved.revision || "?"}版`);
+  parts.push(`使用中: <span class="site-template-name">${escapeHtml(resolved.templateName)}</span> 第${resolved.revision || "?"}版`);
   parts.push(resolved.pinned ? `（${escapeHtml(resolved.sourceLabel)}・この現場に固定）` : `（${escapeHtml(resolved.sourceLabel)}・最初の出力時にこの版に固定されます）`);
   if (resolved.sha256) parts.push(`<br><small class="site-template-sha">SHA-256: ${escapeHtml(resolved.sha256.slice(0, 16))}…</small>`);
   if (resolved.notice) parts.push(`<br><span class="status-badge status-warning">${escapeHtml(resolved.notice)}</span>`);
@@ -338,7 +346,7 @@ async function renderSiteTemplateInfo() {
   }
   if (resolved.pinned && (currentSite.templatePinHistory || []).length > 0 && !currentSite.completedAt) {
     const prev = currentSite.templatePinHistory[0];
-    buttons.push(`<button type="button" class="secondary-btn" id="siteTemplateRevertBtn">前の版（第${prev.revision || "?"}版）に戻す</button>`);
+    buttons.push(`<button type="button" class="secondary-btn" id="siteTemplateRevertBtn">${escapeHtml(await revertLabel(prev, resolved))}</button>`);
   }
   reportTemplateEl.innerHTML = parts.join("") + (buttons.length ? `<div class="toolbar site-template-actions">${buttons.join("")}</div>` : "");
 }
@@ -362,10 +370,14 @@ reportTemplateEl.addEventListener("click", async (e) => {
   }
   if (e.target.closest("#siteTemplateRevertBtn")) {
     const prev = currentSite.templatePinHistory?.[0];
-    if (!confirm(`この現場の日報Excel様式を、前の版（第${prev?.revision || "?"}版）に戻しますか？`)) return;
+    const label = e.target.closest("#siteTemplateRevertBtn").textContent.replace(/に戻す$/, "");
+    if (!confirm(`この現場の日報Excel様式を、${label}に戻しますか？
+
+戻すと、この現場の日報のExcel・PDF・印刷・台帳はその様式で出力されます（出力済みのファイルは変わりません）。`)) return;
+    void prev;
     try {
       currentSite = await revertSiteTemplate(currentSite.id);
-      showMessage("この現場の様式を前の版に戻しました。");
+      showMessage("この現場の日報Excel様式を元に戻しました。");
     } catch (err) {
       showMessage(`戻せませんでした: ${err.message}`, true);
     }
