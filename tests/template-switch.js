@@ -148,6 +148,29 @@ const sha = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
   const reverted = await page.evaluate(async (id) => (await (await import("/js/db.js")).dbGet("sites", id)).templatePin, ids.siteId);
   check("G 「前の様式に戻す」で会社の03-2（直接登録）第1版に戻る", reverted.templateId === ids.tplId && reverted.sha256 === ids.pin.sha256);
 
+  // ---- G2 戻した後: 様式の指定もそろい、現場フォームで03-2を直接選び直すだけで切り替わる（「標準に従う」を経由しない）----
+  const afterRevert = await page.evaluate(async (id) => (await (await import("/js/db.js")).dbGet("sites", id)).reportTemplateId || null, ids.siteId);
+  check("G2 戻すと、様式の指定もそろう（元請名の一致で決まっていた固定に戻したので、指定なし＝標準に従う）", afterRevert === null, String(afterRevert));
+  const pickDirect = async () => {
+    await page.goto(`${BASE}#/sites/${ids.siteId}/edit`); await page.waitForSelector("#view-site-form:not([hidden])");
+    for (let i = 0; i < 20; i++) { await page.waitForTimeout(250); await page.selectOption("#siteFormReportTemplate", bundledValue); await page.waitForTimeout(200); if ((await page.inputValue("#siteFormReportTemplate")) === bundledValue && (await page.textContent("#siteFormReportTemplateHint")).includes("保存すると")) break; }
+    const hint = await page.textContent("#siteFormReportTemplateHint");
+    await page.click("#siteForm button[type=submit]"); await page.waitForSelector("#view-site-detail:not([hidden])");
+    return { hint, pin: await page.evaluate(async (id) => (await (await import("/js/db.js")).dbGet("sites", id)).templatePin, ids.siteId) };
+  };
+  const re = await pickDirect();
+  check("G2 戻した後、現場フォームで「03-2 … ― この現場をこの様式に固定」を直接選んで保存すると03-2へ切り替わる", re.pin.templateId === bundledValue && re.pin.revision === 1);
+  const [dl3] = await Promise.all([page.waitForEvent("download"), page.evaluate(async (id) => { const r = await (await import("/js/reportPrint.js")).exportReportExcel(id); window.__usedTpl = r.company?.templateId; }, ids.reportId)]);
+  const f3 = path.join(dir, "again.xlsx"); await dl3.saveAs(f3);
+  const pdf3 = await page.evaluate(async (id) => { const r = await (await import("/js/reportPrint.js")).buildReportPrintHtml(id); return { tpl: r.company?.templateId, a3: r.html.includes("size: 420mm 297mm") }; }, ids.reportId);
+  const [ld3] = await Promise.all([page.waitForEvent("download"), page.evaluate(async (sid) => { const r = await (await import("/js/reportPrint.js")).exportSiteLedgerExcel(sid); window.__ledTpl = r.company?.templateId; }, ids.siteId)]);
+  check("G2 切り替え直した後も、Excel・PDF（印刷と同じ印刷用ページ・A3横）・台帳が03-2で出力される", (await page.evaluate(() => window.__usedTpl)) === bundledValue && fs.readFileSync(f3).subarray(0, 2).toString() === "PK" && pdf3.tpl === bundledValue && pdf3.a3 && (await page.evaluate(() => window.__ledTpl)) === bundledValue && /\.xlsx$/.test(ld3.suggestedFilename()));
+  check("G2 戻す・切り替え直しをしても、日報（業者・署名・搬入・搬出・流れ・作業時間）は変わらない", (await snapshot()) === dataBefore);
+  // 以前の版で「戻す」をして、指定（03-2）と固定（旧様式）が食い違ったままの現場でも、03-2を直接選べば切り替わる
+  await page.evaluate(async ({ id, tpl, oldPin }) => { const { dbGet, dbPut } = await import("/js/db.js"); const s = await dbGet("sites", id); await dbPut("sites", { ...s, reportTemplateId: tpl, templatePin: { ...oldPin, pinnedAt: new Date().toISOString() } }); }, { id: ids.siteId, tpl: bundledValue, oldPin: ids.pin });
+  const stuck = await pickDirect();
+  check("G2 指定が03-2のまま旧様式に固定されている現場（以前の版で戻した場合）でも、03-2を選んで保存すると切り替わる", stuck.pin.templateId === bundledValue && stuck.hint.includes("第1版で出力されます"), stuck.hint.replace(/\n/g, " / ").slice(0, 90));
+
   // ---- H 工事完了の現場は切り替えられない ----
   await page.goto(`${BASE}#/sites/${ids.doneId}/edit`); await page.waitForSelector("#view-site-form:not([hidden])");
   await page.waitForFunction(() => document.getElementById("siteFormReportTemplateHint").textContent.includes("工事完了"));

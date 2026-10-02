@@ -166,10 +166,11 @@ function pinOf(template, sha256, source) {
 /**
  * 現場の記録に版の固定だけを書き込む（現場の他の内容・更新日時は変えない）。
  * 画面での編集と同時に動いても上書きしないよう、書き込む直前に読み直す。
+ * extra: 固定と一緒にそろえる項目（「前の様式に戻す」での様式の指定 reportTemplateId だけ）
  */
-async function writePin(site, pin, history) {
+async function writePin(site, pin, history, extra = undefined) {
   const fresh = (await dbGet("sites", site.id)) || site;
-  const next = { ...fresh, templatePin: pin };
+  const next = { ...fresh, templatePin: pin, ...(extra || {}) };
   if (history !== undefined) next.templatePinHistory = history;
   await dbPut("sites", next);
   return next;
@@ -263,7 +264,12 @@ export async function revertSiteTemplate(siteId) {
   const { replacedAt, reason, ...pin } = previous;
   void replacedAt;
   void reason;
-  const next = await writePin(site, { ...pin, pinnedAt: new Date().toISOString() }, rest);
+  // 様式の指定（現場フォームの選択欄）も、戻した固定に合わせる。前の固定が「この現場で指定した様式」なら
+  // その様式を指定し、元請名の一致・標準で決まっていた固定なら指定を外す（「標準テンプレートに従う」）。
+  // そろえないと、戻した後も選択欄が切り替え後の様式のままになり、同じ様式を選び直しても切り替わらなかった。
+  const designation = previous.source === "site" ? previous.templateId : null;
+  const extra = (site.reportTemplateId || null) !== designation ? { reportTemplateId: designation } : undefined;
+  const next = await writePin(site, { ...pin, pinnedAt: new Date().toISOString() }, rest, extra);
   await recordChange({ entityType: "site", entityId: siteId, action: "update", summary: `現場「${site.name}」の日報Excel様式を第${version.revision || 1}版に戻しました` });
   return next;
 }

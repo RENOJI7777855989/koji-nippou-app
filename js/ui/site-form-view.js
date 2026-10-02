@@ -75,7 +75,7 @@ function updateTemplateHint() {
   if (currentUse) lines.push(`この現場が今使っている様式: ${currentUse.templateName} 第${currentUse.revision || "?"}版`);
   if (editingCompleted) {
     lines.push("工事完了の現場は、日報のExcel様式を切り替えられません（工事完了を解除すると切り替えられます）。");
-  } else if (editingSiteId && templateSelect.value !== originalTemplateSelection) {
+  } else if (editingSiteId && (templateSelect.value !== originalTemplateSelection || (templateSelect.value && currentUse && templateSelect.value !== currentUse.baseTemplateId))) {
     const t = templateChoices.find((x) => x.id === templateSelect.value);
     if (t) lines.push(`保存すると、この現場の日報（過去の日の分も含む）のExcel・PDF・印刷・台帳は「${t.name}」第${t.revision || 1}版で出力されます（出力済みのファイルは変わりません。現場詳細の「前の様式に戻す」で戻せます）。`);
     else lines.push("保存すると、標準テンプレート（無ければ元請名と同じ会社の様式）の現在の版に切り替わります。");
@@ -154,8 +154,11 @@ form.addEventListener("submit", async (e) => {
   if (editingSiteId) {
     await updateSite(editingSiteId, fields);
     let pinNote = "";
-    if (!editingCompleted && templateSelect.value !== originalTemplateSelection) {
-      // 様式の指定を変えたときだけ、選んだ様式の現在の版に固定し直す（元に戻せるよう前の固定は履歴に残す）
+    // 様式の指定を変えたとき、または選んだ様式が今実際に使っている様式と違うときに、選んだ様式の現在の版に
+    // 固定し直す（元に戻せるよう前の固定は履歴に残す）。同じ様式・同じ版なら repinSite は何もしない。
+    // 「標準テンプレートに従う」のままの場合は、従来どおり指定を変えたときだけ切り替える。
+    const pickedDiffersFromUse = !!templateSelect.value && !!currentUse && templateSelect.value !== currentUse.baseTemplateId;
+    if (!editingCompleted && (templateSelect.value !== originalTemplateSelection || pickedDiffersFromUse)) {
       try {
         const repinned = await repinSite(editingSiteId, { templateId: templateSelect.value || undefined, reason: "form" });
         const now = await resolveReportTemplateForSite(repinned).catch(() => null);
