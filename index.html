@@ -113,9 +113,7 @@
           <label>工事番号
             <input type="text" id="siteFormConstructionNumber" placeholder="例）2026-015">
           </label>
-          <label>進捗率（％・任意）
-            <input type="number" id="siteFormProgressPercent" min="0" max="100" step="1" inputmode="numeric" placeholder="例）62">
-          </label>
+          <p id="siteFormProgressNote" class="empty-message full-width">進捗率は日誌ごとに入力します（日誌の入力画面の「進捗率（％）」）。</p>
           <label class="full-width">メモ
             <textarea id="siteFormMemo" rows="3"></textarea>
           </label>
@@ -217,6 +215,10 @@
         <div class="field-grid">
           <label>日付 <span class="required">必須</span>
             <input type="date" id="date" required>
+          </label>
+          <label class="progress-field">進捗率（％）
+            <input type="number" id="progressPercent" min="0" max="100" step="1" inputmode="numeric" placeholder="例）40">
+            <small id="progressPercentHint" class="progress-hint"></small>
           </label>
           <label>天気
             <select id="weather">

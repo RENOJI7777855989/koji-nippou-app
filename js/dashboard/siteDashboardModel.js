@@ -4,7 +4,9 @@
    集計・整理するだけなので、日誌とダッシュボードの内容が食い違わない。
 
    定義（利用者と確定した仕様）:
-     進捗率     … 現場の手入力（0〜100）。未入力なら「工期経過率」を別の表示として出す
+     進捗率     … 日誌ごとに入力した値（report.progressPercent）。表示する日までで一番新しい日誌の値を出し、
+                  その日誌が未入力なら過去の日誌の値は使わず「未入力」にする（工期経過率は別の表示）。
+                  現場に以前入力した進捗率（site.progressPercent）は使わない（データは消さずに残している）
      累計       … 工事開始から表示日までの、日誌の実績人数（業者の実績人数）の合計
      延べ労働時間 … 累計 × 8時間（03-2台帳と同じ「1人＝8時間」）
      日誌状況（表示日まで）:
@@ -78,13 +80,19 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date 
       remainingDays = Math.max(0, daysBetween(date, end));
     }
   }
+  // ---- 進捗率（日誌ごとの記録から）----
+  const upToDate = live.filter((r) => r.date && r.date <= date).sort((a, b) => b.date.localeCompare(a.date) || (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+  const latestReport = upToDate[0] || null;
+  const progressHistory = upToDate.filter((r) => r.progressPercent != null).slice(0, 5).reverse().map((r) => ({ date: r.date, value: r.progressPercent }));
   const header = {
     siteName: site?.name || "",
     constructionNumber: site?.constructionNumber || "",
     clientName: site?.clientName || "",
     startDate: start,
     endDate: end,
-    progressPercent: site?.progressPercent ?? null,
+    progressPercent: latestReport?.progressPercent ?? null,
+    progressDate: latestReport?.date || null, // 進捗率を読んだ日誌の日付（日誌が無ければ null）
+    progressHistory,
     elapsedPct,
     remainingDays,
     dayNumber: dayNumber != null && dayNumber >= 1 ? dayNumber : null,

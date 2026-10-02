@@ -114,7 +114,7 @@ function reportCardHtml(report) {
   ].filter(Boolean).join("");
   return `
       <p class="report-card-date">${escapeHtml(report.date) || "日付未設定"}</p>
-      <p class="report-card-meta">${escapeHtml(report.weather)}／作業人数 ${escapeHtml(report.workerCountTotal) || "-"}人</p>
+      <p class="report-card-meta">${escapeHtml(report.weather)}／作業人数 ${escapeHtml(report.workerCountTotal) || "-"}人／進捗 ${report.progressPercent != null ? `${report.progressPercent}%` : "未入力"}</p>
       <p class="report-card-status">${badges}</p>`;
 }
 

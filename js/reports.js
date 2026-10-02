@@ -42,7 +42,9 @@ export async function createReport(fields) {
     //   timeline   … 本日の現場の流れ [{ id, time:"HH:MM", title, kind, status:"plan"|"done", note }]
     //   deliveries … 搬入・搬出 [{ id, direction("in"=搬入/"out"=搬出。無い行は搬入), time, item, quantity, vendor, origin, destination, vehicle, status, note }]
     timeline: fields.timeline || [],
-    deliveries: fields.deliveries || []
+    deliveries: fields.deliveries || [],
+    // 進捗率（％、0〜100の整数。未入力は null）。その日の日誌に記録した値で、現場の現在値を上書きする項目ではない
+    progressPercent: fields.progressPercent ?? null
   };
   if (fields.id) base.id = fields.id; // 新規作成前に写真/署名を紐付けるため、事前発行IDを許容する
   const report = stampNew(base);

@@ -5,7 +5,7 @@
    各行のcompanyId（生成後は再利用）で署名レコードと紐付ける。
    ========================================================== */
 
-import { getReport, createReport, updateReport, getPrintStatus, isEditedAfterPrint, PRINT_STATUS_LABELS, recordReportOutput, setReportConfirmed } from "../reports.js";
+import { getReport, listReportsBySite, createReport, updateReport, getPrintStatus, isEditedAfterPrint, PRINT_STATUS_LABELS, recordReportOutput, setReportConfirmed } from "../reports.js";
 import { exportReportExcel, buildReportPrintHtml } from "../reportPrint.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
 import { getSite } from "../sites.js";
@@ -26,6 +26,9 @@ const form = document.getElementById("reportForm");
 const dateInput = document.getElementById("date");
 const weatherSelect = document.getElementById("weather");
 const temperatureInput = document.getElementById("temperature");
+const progressInput = document.getElementById("progressPercent");
+const progressHint = document.getElementById("progressPercentHint");
+let previousProgress = null; // 参考表示: この日より前の日誌で最後に入力した進捗率 { date, value }
 const workerCountTotalInput = document.getElementById("workerCountTotal");
 const companiesContainer = document.getElementById("companiesContainer");
 const addCompanyBtn = document.getElementById("addCompanyBtn");
@@ -425,6 +428,39 @@ photoInput.addEventListener("change", async () => {
   await renderPhotoGrid(reportId);
 });
 
+/* ---------- 進捗率（その日の日誌ごとに記録。0〜100の整数・空欄も保存できるが「未入力」と目立たせる）---------- */
+
+/** 入力値を確かめる。空欄は null、正しい値は整数、不正な値は { error } */
+function readProgress() {
+  if (progressInput.validity.badInput) return { error: "進捗率は数字（0〜100の整数）で入力してください。" };
+  const raw = progressInput.value.trim();
+  if (raw === "") return { value: null };
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0 || n > 100) return { error: "進捗率は0〜100の整数（％）で入力してください。" };
+  return { value: n };
+}
+
+function updateProgressHint() {
+  const r = readProgress();
+  const prev = previousProgress ? `前回の日誌（${previousProgress.date}）は ${previousProgress.value}%` : "";
+  progressInput.classList.toggle("is-missing", !r.error && r.value == null);
+  progressInput.classList.toggle("is-invalid", !!r.error);
+  progressHint.classList.toggle("is-warn", !!r.error || r.value == null);
+  progressHint.textContent = r.error ? r.error : r.value == null ? `進捗率が未入力です${prev ? `（${prev}）` : ""}` : prev;
+}
+progressInput.addEventListener("input", updateProgressHint);
+
+/** この日より前で、進捗率を入力した一番新しい日誌（参考表示用。値を自動で入れることはしない） */
+async function loadPreviousProgress(siteId, date, excludeId) {
+  const reports = siteId ? await listReportsBySite(siteId) : [];
+  const prev = reports
+    .filter((r) => !r.isDeleted && r.id !== excludeId && r.progressPercent != null && r.date && (!date || r.date < date))
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  previousProgress = prev ? { date: prev.date, value: prev.progressPercent } : null;
+  updateProgressHint();
+}
+dateInput.addEventListener("change", () => loadPreviousProgress(currentSiteId, dateInput.value, editingReportId));
+
 function resetForm() {
   form.reset();
   companiesContainer.innerHTML = "";
@@ -476,6 +512,8 @@ export async function initReportFormViewNew(params) {
   const now = new Date();
   const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   dateInput.value = /^\d{4}-\d{2}-\d{2}$/.test(params.date || "") ? params.date : localToday;
+  progressInput.value = "";
+  await loadPreviousProgress(currentSiteId, dateInput.value, null);
   await renderPhotoGrid(draftReportId);
   applyReadOnlyMode(false); // このルートには編集権限があるユーザーしか到達しない
   focusRequestedSection();
@@ -506,6 +544,7 @@ export async function initReportFormViewEdit(params) {
   dateInput.value = report.date || "";
   weatherSelect.value = report.weather || "晴れ";
   temperatureInput.value = report.temperature || "";
+  progressInput.value = report.progressPercent ?? "";
   tomorrowPlanInput.value = report.tomorrowPlan || "";
   remarksInput.value = report.remarks || "";
   siteSupervisorsContainer.innerHTML = "";
@@ -514,6 +553,7 @@ export async function initReportFormViewEdit(params) {
   patrolCommentInput.value = report.patrolComment || "";
   loadPatrolChecklist(report.patrolChecklist);
   loadFlowAndDeliveries(report);
+  await loadPreviousProgress(report.siteId, report.date, report.id);
 
   companiesContainer.innerHTML = "";
   const signatures = await listSignaturesByReport(report.id);
@@ -684,6 +724,13 @@ form.addEventListener("submit", async (e) => {
     return;
   }
 
+  const progress = readProgress();
+  if (progress.error) {
+    showMessage(progress.error, true);
+    progressInput.focus();
+    return;
+  }
+
   let workerCountTotal = workerCountTotalInput.value.trim();
   if (workerCountTotal !== "" && Number(workerCountTotal) < 0) workerCountTotal = "";
 
@@ -692,6 +739,7 @@ form.addEventListener("submit", async (e) => {
     date: dateInput.value,
     weather: weatherSelect.value,
     temperature: temperatureInput.value.trim(),
+    progressPercent: progress.value,
     workerCountTotal,
     companies: collectCompanies(),
     tomorrowPlan: tomorrowPlanInput.value.trim(),
@@ -725,7 +773,7 @@ form.addEventListener("submit", async (e) => {
     await saveSignature({ reportId: report.id, companyId: row.dataset.companyId, blob });
   }
 
-  showMessage(`保存しました（${report.date}）`);
+  showMessage(`保存しました（${report.date}）${progress.value == null ? "。進捗率が未入力です（日誌を開いて入力できます）" : ""}`);
   navigate(`/sites/${currentSiteId}`);
 });
 

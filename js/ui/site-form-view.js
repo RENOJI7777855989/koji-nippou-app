@@ -2,7 +2,7 @@
    現場フォーム画面（新規作成／編集）
    ========================================================== */
 
-import { createSite, updateSite, getSite, normalizeProgress } from "../sites.js";
+import { createSite, updateSite, getSite } from "../sites.js";
 import { listUsers, ROLES } from "../auth.js";
 import { escapeHtml } from "../utils.js";
 import { showView, showMessage } from "./common.js";
@@ -17,7 +17,8 @@ const addressInput = document.getElementById("siteFormAddress");
 const startDateInput = document.getElementById("siteFormStartDate");
 const endDateInput = document.getElementById("siteFormEndDate");
 const constructionNumberInput = document.getElementById("siteFormConstructionNumber");
-const progressPercentInput = document.getElementById("siteFormProgressPercent");
+const progressNote = document.getElementById("siteFormProgressNote");
+const PROGRESS_NOTE = "進捗率は日誌ごとに入力します（日誌の入力画面の「進捗率（％）」）。";
 const memoInput = document.getElementById("siteFormMemo");
 const assignedWrap = document.getElementById("siteFormAssignedWrap");
 const assignedSelect = document.getElementById("siteFormAssignedUsers");
@@ -91,6 +92,7 @@ export async function initSiteFormViewNew() {
   editingSiteId = null;
   titleEl.textContent = "新しい現場";
   form.reset();
+  progressNote.textContent = PROGRESS_NOTE;
   originalTemplateSelection = "";
   currentUse = null;
   editingCompleted = false;
@@ -116,7 +118,8 @@ export async function initSiteFormViewEdit(params) {
   startDateInput.value = site.startDate || "";
   endDateInput.value = site.endDate || "";
   constructionNumberInput.value = site.constructionNumber || "";
-  progressPercentInput.value = site.progressPercent ?? "";
+  // 以前この画面で入力した進捗率（site.progressPercent）は、消さずに残す（画面からは入力しない・保存でも上書きしない）
+  progressNote.textContent = site.progressPercent != null ? `${PROGRESS_NOTE}以前この画面で入力した値（${site.progressPercent}%）は消さずに残しています。` : PROGRESS_NOTE;
   memoInput.value = site.memo || "";
   await populateAssignedSelect(site.assignedUserIds || []);
   originalTemplateSelection = site.reportTemplateId || "";
@@ -144,7 +147,6 @@ form.addEventListener("submit", async (e) => {
     startDate: startDateInput.value,
     endDate: endDateInput.value,
     constructionNumber: constructionNumberInput.value.trim(),
-    progressPercent: normalizeProgress(progressPercentInput.value),
     memo: memoInput.value.trim(),
     assignedUserIds: Array.from(assignedSelect.selectedOptions).map((opt) => opt.value),
     // 工事完了の現場は様式の指定を変えない（選択欄は操作できないが、念のため元の指定を保つ）

@@ -1735,3 +1735,10 @@ dialog h3 {
 .dash-safety ul, .dash-bad { margin: 4px 0 0; padding-left: 1.3em; }
 .dash-notice { margin: 4px 0; font-size: 15px; }
 .dash-bad li { color: #b42318; }
+
+/* 日報: 進捗率（その日の日誌ごと。未入力・不正な値を目立たせる） */
+.progress-field input.is-missing { border-color: #d69e2e; background: #fffbea; }
+.progress-field input.is-invalid { border-color: #c53030; background: #fff5f5; }
+.progress-hint { display: block; margin-top: 4px; color: #4a5568; }
+.progress-hint.is-warn { color: #b7791f; font-weight: bold; }
+.dash-chip.is-missing { border-color: #d69e2e; background: #fffbea; color: #8a5a12; }

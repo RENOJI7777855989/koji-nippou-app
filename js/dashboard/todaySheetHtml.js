@@ -19,7 +19,8 @@ export function buildTodaySheetHtml(model) {
   const h = model.header;
   const [y, m, d] = h.date.split("-").map(Number);
   const dateText = `${y}年${m}月${d}日（${h.weekday}）`;
-  const progress = h.progressPercent != null ? `進捗 ${h.progressPercent}%` : h.elapsedPct != null ? `工期経過 ${h.elapsedPct}%` : "";
+  // 進捗率は日誌に記録した値（一番新しい日誌が未入力なら「未入力」）。工期経過率は別に出す
+  const progress = [h.progressPercent != null ? `進捗 ${h.progressPercent}%` : "進捗 未入力", h.elapsedPct != null ? `工期経過 ${h.elapsedPct}%` : ""].filter(Boolean).join("　｜　");
   const diary = model.diary;
 
   // 流れが多い日は2列に分けて並べる（左列→右列の順に時刻順）。

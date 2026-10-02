@@ -31,14 +31,14 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
   // ===== 現場: 工事番号・進捗率 =====
   await page.goto(`${BASE}#/sites/new`); await page.waitForSelector("#view-site-form:not([hidden])");
   await page.fill("#siteFormName", "ダッシュボード検証現場"); await page.fill("#siteFormStartDate", start); await page.fill("#siteFormEndDate", end);
-  await page.fill("#siteFormConstructionNumber", "2026-015"); await page.fill("#siteFormProgressPercent", "62");
+  await page.fill("#siteFormConstructionNumber", "2026-015");
   await page.click("#siteForm button[type=submit]"); await page.waitForSelector("#view-site-detail:not([hidden])");
   const site = await page.evaluate(async () => (await (await import("/js/db.js")).dbGetAll("sites"))[0]);
-  check("1 現場に工事番号・進捗率（手入力）を保存できる", site.constructionNumber === "2026-015" && site.progressPercent === 62);
+  check("1 現場に工事番号を保存できる（進捗率は現場ではなく日誌ごとに入力）", site.constructionNumber === "2026-015" && site.progressPercent == null);
   check("1 現場詳細に工事番号が表示される", (await page.textContent("#siteDetailConstructionNumber")) === "2026-015");
   await page.waitForSelector("#siteDashboard:not([hidden])");
   const emptyDash = await page.textContent("#siteDashboard");
-  check("2 日誌が無い日のダッシュボード: 「この日の日誌はまだありません」・進捗62%・工事番号", emptyDash.includes("この日の日誌はまだありません") && emptyDash.includes("進捗 62%") && emptyDash.includes("工事番号 2026-015"), emptyDash.replace(/\s+/g, " ").slice(0, 120));
+  check("2 日誌が無い日のダッシュボード: 「この日の日誌はまだありません」・進捗は未入力（日誌がありません）・工事番号", emptyDash.includes("この日の日誌はまだありません") && emptyDash.includes("進捗 未入力（日誌がありません）") && emptyDash.includes("工事番号 2026-015"), emptyDash.replace(/\s+/g, " ").slice(0, 120));
 
   // ===== 日誌に入力（ダッシュボードの「＋日誌」から開く）=====
   await page.click("#siteDashboard [data-action=diary]"); await page.waitForSelector("#view-report-form:not([hidden])");

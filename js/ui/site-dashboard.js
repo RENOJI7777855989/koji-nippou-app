@@ -40,11 +40,22 @@ async function loadModel(site, date) {
   return buildDashboardModel({ site, reports, signatures, date });
 }
 
+/** 進捗率: 一番新しい日誌の値。その日誌が未入力なら「未入力」（過去の値を現在値として出さない）。工期経過率は別に出す */
 function progressHtml(h) {
-  if (h.progressPercent != null) {
-    return `<span class="dash-chip">進捗 <b>${h.progressPercent}%</b></span>`;
-  }
-  return h.elapsedPct != null ? `<span class="dash-chip dash-chip-sub">工期経過 ${h.elapsedPct}%（進捗率は現場情報で入力）</span>` : "";
+  const md = (iso) => { const [, m, d] = iso.split("-").map(Number); return `${m}/${d}`; };
+  const chips = [];
+  if (h.progressPercent != null) chips.push(`<span class="dash-chip">進捗 <b>${h.progressPercent}%</b>（${md(h.progressDate)}の日誌）</span>`);
+  else if (h.progressDate) chips.push(`<span class="dash-chip is-missing">進捗 <b>未入力</b>（${md(h.progressDate)}の日誌）</span>`);
+  else chips.push(`<span class="dash-chip is-missing">進捗 <b>未入力</b>（日誌がありません）</span>`);
+  if (h.elapsedPct != null) chips.push(`<span class="dash-chip dash-chip-sub">工期経過 ${h.elapsedPct}%</span>`);
+  return chips.join("");
+}
+
+/** 進捗の推移（日誌に記録した値。直近5件） */
+function progressHistoryHtml(h) {
+  if (!h.progressHistory?.length) return "";
+  const md = (iso) => { const [, m, d] = iso.split("-").map(Number); return `${m}/${d}`; };
+  return `<p class="dash-sub dash-progress-history">進捗の推移: ${h.progressHistory.map((p) => `${md(p.date)} ${p.value}%`).join(" → ")}</p>`;
 }
 
 function render(model) {
@@ -158,6 +169,7 @@ function render(model) {
         ${h.dayNumber != null ? `<span class="dash-chip dash-chip-sub">${h.dayNumber}日目</span>` : ""}
         ${h.startDate || h.endDate ? `<span class="dash-chip dash-chip-sub">工期 ${escapeHtml(h.startDate || "未定")}〜${escapeHtml(h.endDate || "未定")}</span>` : ""}
       </div>
+      ${progressHistoryHtml(h)}
       ${model.sameDayCount > 1 ? `<p class="dash-sub">この日の日誌が${model.sameDayCount}件あります（最後に更新したものを表示）。</p>` : ""}
     </div>
     <div class="dash-grid">
