@@ -125,7 +125,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   check("人工 ケース1: 業者別稼働状況の人工＝稼働人数（1人＝1人工）。塗装2人→2・足場4人→4（請求人工3.5は使わない）・累計人工＝累計の稼働人数", rows[0] === "サンプル塗装|塗装|2人|08:00～17:009時間|2|5" && rows[1] === "サンプル足場|とび|4人|08:00～12:004時間|4|4" && rows[2] === "サンプル緑化|植栽工事|2人|-|2|6", rows.join(" / "));
   const heads = await page.$$eval("#siteDashboard .dash-vendors thead th", (ths) => ths.map((t) => t.textContent.trim()));
   const dashText0 = await page.textContent("#siteDashboard");
-  check("人工 ケース8: ダッシュボードは稼働人数・作業時間・人工を表示し、請求人工は表示しない", heads.join() === "業者,業種,稼働人数,作業時間,人工,累計人工" && !dashText0.includes("請求") && !dashText0.includes("3.5"), heads.join());
+  check("人工 ケース8: ダッシュボードは稼働人数・作業時間・人工を表示し、請求人工は表示しない", heads.join() === "業者,工種,稼働人数,作業時間,人工,累計人工" && !dashText0.includes("請求") && !dashText0.includes("3.5"), heads.join());
   const foot = await page.$eval("#siteDashboard .dash-vendors tfoot tr", (tr) => [...tr.cells].map((c) => c.textContent.replace(/\s+/g, "")).join("|"));
   check("ダッシュボード 業者別稼働状況の合計: 稼働人数8人・人工8", foot === "合計（3社）|8人||8|", foot);
   const dash = (await page.textContent("#siteDashboard")).replace(/\s+/g, " ");

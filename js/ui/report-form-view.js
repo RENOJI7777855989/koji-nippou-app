@@ -29,7 +29,7 @@ const temperatureInput = document.getElementById("temperature");
 const progressInput = document.getElementById("progressPercent");
 const dayStatusSelect = document.getElementById("dayStatus");
 const dayStatusHint = document.getElementById("dayStatusHint");
-const DAY_STATUS_HINT = { work: "", nowork: "作業なしの日は、稼働人数・人工・作業時間・業種別累計に数えません（日報は履歴として残ります）。", holiday: "休工日は、稼働人数・人工・作業時間・業種別累計に数えません（日報は履歴として残ります）。" };
+const DAY_STATUS_HINT = { work: "", nowork: "作業なしの日は、稼働人数・人工・作業時間・工種別累計に数えません（日報は履歴として残ります）。", holiday: "休工日は、稼働人数・人工・作業時間・工種別累計に数えません（日報は履歴として残ります）。" };
 const updateDayStatusHint = () => { dayStatusHint.textContent = DAY_STATUS_HINT[dayStatusSelect.value] || ""; };
 dayStatusSelect.addEventListener("change", updateDayStatusHint);
 const progressHint = document.getElementById("progressPercentHint");

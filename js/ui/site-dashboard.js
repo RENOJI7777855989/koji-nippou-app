@@ -124,7 +124,7 @@ function render(model) {
   const totalManDays = vendorRows.reduce((s, w) => s + (w.manDays || 0), 0);
   const vendorHtml = vendorRows.length
     ? `<div class="dash-table-wrap"><table class="dash-table dash-vendors">
-        <thead><tr><th>業者</th><th>業種</th><th class="num">稼働人数</th><th>作業時間</th><th class="num">人工</th><th class="num">累計人工</th></tr></thead>
+        <thead><tr><th>業者</th><th>工種</th><th class="num">稼働人数</th><th>作業時間</th><th class="num">人工</th><th class="num">累計人工</th></tr></thead>
         <tbody>${vendorRows.map((w) => `<tr><td><b>${escapeHtml(w.vendor || "（業者名なし）")}</b></td><td>${escapeHtml(w.occupation)}</td><td class="num dash-workers"><b>${w.actual ?? "-"}</b>人</td><td>${escapeHtml(w.hours || "-")}${w.hoursDuration ? `<br><small class="dash-sub">${escapeHtml(w.hoursDuration)}</small>` : ""}</td><td class="num">${fmtNum(w.manDays)}</td><td class="num">${fmtNum(w.cumulativeManDays)}</td></tr>`).join("")}</tbody>
         <tfoot><tr><th colspan="2">合計（${vendorRows.length}社）</th><th class="num"><b>${totalWorkers}</b>人</th><th></th><th class="num">${fmtNum(totalManDays)}</th><th></th></tr></tfoot>
       </table></div><p class="dash-sub">人工は稼働人数を1人＝1人工として数えた現場集計の値です。</p>`
