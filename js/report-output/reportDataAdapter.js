@@ -62,7 +62,7 @@ function mapCompanyProfile(profile) {
  * を呼び出し側（generateReportOutput.js）で計算して渡す。ここでは集計を
  * 行わない（このアダプターは1件の日報の変換に閉じているため）。
  */
-export function buildReportOutputModel({ site, report, photos = [], signatures = [], companyProfile = null, cumulativeSiteSupervisorCount = null }) {
+export function buildReportOutputModel({ site, report, photos = [], signatures = [], companyProfile = null, cumulativeSiteSupervisorCount = null, attendance = null }) {
   const foremanSignatureByCompanyId = new Map(
     signatures.filter((s) => s.role === "foreman" && s.companyId).map((s) => [s.companyId, s])
   );
@@ -85,6 +85,13 @@ export function buildReportOutputModel({ site, report, photos = [], signatures =
       workerCountTotal: report?.workerCountTotal || "",
       tomorrowPlan: report?.tomorrowPlan || "",
       remarks: report?.remarks || "",
+      // 本日の重点指示・作業間の連絡・調整（03-2の同名の欄。日誌の入力項目）
+      // 日の状態（"work"/"nowork"/"holiday"。無ければ通常作業）。作業なし・休工日は稼動人数表に数えない
+      dayStatus: report?.dayStatus === "nowork" || report?.dayStatus === "holiday" ? report.dayStatus : "work",
+      focusInstructions: report?.focusInstructions || "",
+      workCoordination: report?.workCoordination || "",
+      // 搬入・搬出（03-2の「資材・機材搬入（ＡＭ／ＰＭ）」へ、ダッシュボードと同じく搬入・搬出の両方を書く。direction の無い行は搬入）
+      deliveries: (report?.deliveries || []).map((d) => ({ direction: d.direction === "out" ? "out" : "in", time: d.time || "", item: d.item || "", quantity: d.quantity || "", vendor: d.vendor || "", status: d.status || "" })),
       patrolInspectorName: report?.patrolInspectorName || "",
       // 巡回点検の各項目キー→ステータス("good"/"bad"/"na")のマップ。
       // キーはjs/patrolChecklist.jsのPATROL_CHECKLIST_ITEMSと対応する。
@@ -98,6 +105,9 @@ export function buildReportOutputModel({ site, report, photos = [], signatures =
       cumulativeSiteSupervisorCount
     },
     companies: (report?.companies || []).map((c) => mapCompany(c, foremanSignatureByCompanyId.get(c.companyId))),
+    // 稼動人数表（業種別の累計）用: 現場の日報全体（業種の行の割り当て）と、その日までの日報（累計）。
+    // 呼び出し側（generateReportOutput.js）で集めて渡す。無ければ稼動人数表の業種別は書かない
+    attendance,
     photos: photos.map(mapPhoto),
     signatures: signatures.map(mapSignature),
     companyProfile: mapCompanyProfile(companyProfile)

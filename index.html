@@ -154,6 +154,7 @@
       <h2 id="reportListHeading">工事日報</h2>
       <p id="siteCompletedNotice" class="site-completed-notice" hidden></p>
       <button type="button" id="newReportBtn">＋ 新しい日報を作成</button>
+      <section id="reportCalendar" class="report-calendar" aria-label="日報カレンダー"></section>
       <div class="toolbar report-list-toolbar">
         <select id="reportListFilter" aria-label="日報の絞り込み">
           <option value="all">全日報</option>
@@ -164,6 +165,8 @@
           <option value="confirmed">確認済み</option>
           <option value="unconfirmed">未確認</option>
           <option value="missing">未入力（日報のない日）</option>
+          <option value="nowork">作業なし</option>
+          <option value="holiday">休工日</option>
         </select>
         <input type="search" id="reportListSearch" placeholder="日付・業者名・作業内容で検索" aria-label="日報の検索">
       </div>
@@ -220,6 +223,14 @@
             <input type="number" id="progressPercent" min="0" max="100" step="1" inputmode="numeric" placeholder="例）40">
             <small id="progressPercentHint" class="progress-hint"></small>
           </label>
+          <label>日の状態
+            <select id="dayStatus">
+              <option value="work">通常作業</option>
+              <option value="nowork">作業なし</option>
+              <option value="holiday">休工日</option>
+            </select>
+            <small id="dayStatusHint" class="empty-message"></small>
+          </label>
           <label>天気
             <select id="weather">
               <option value="晴れ">晴れ</option>
@@ -258,6 +269,14 @@
 
         <label>明日の予定
           <textarea id="tomorrowPlan" rows="3"></textarea>
+        </label>
+        <label>本日の重点指示
+          <textarea id="focusInstructions" rows="3" placeholder="例）開口部の養生確認を徹底、重機作業時は誘導員を配置"></textarea>
+          <small class="empty-message">03-2の「本日の重点指示」欄（5行）に1行ずつ出力し、ダッシュボードにも表示します。</small>
+        </label>
+        <label>作業間の連絡・調整
+          <textarea id="workCoordination" rows="3" placeholder="例）午後は塗装と足場解体が同じ区画のため時間をずらす"></textarea>
+          <small class="empty-message">03-2の「作業間の連絡・調整」欄（6行）に1行ずつ出力し、ダッシュボードにも表示します。</small>
         </label>
         <label>連絡事項
           <textarea id="remarks" rows="3" placeholder="例）○○搬入予定、明日の作業変更、元請からの連絡など"></textarea>

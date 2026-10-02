@@ -37,6 +37,14 @@ async function sumCumulativeSiteSupervisorCount(siteId, uptoDate) {
     .reduce((sum, r) => sum + (r.siteSupervisorNames || []).filter((n) => n && n.trim()).length, 0);
 }
 
+/** 稼動人数表（業種別の累計）用: 現場の日報全体と、その日までの日報（削除済みを除く。業種と人数だけ） */
+export async function siteAttendance(siteId, uptoDate) {
+  // 作業なし・休工日の日報は稼働人数に数えない（業種の行の割り当て・累計とも）
+  const reports = (await listReportsBySite(siteId)).filter((r) => !r.isDeleted && r.date && (r.dayStatus || "work") === "work");
+  const slim = reports.map((r) => ({ date: r.date, companies: (r.companies || []).map((c) => ({ occupation: c.occupation || "", actualWorkerCount: c.actualWorkerCount || "" })) }));
+  return { siteReports: slim, historyReports: slim.filter((r) => r.date <= (uptoDate || "")) };
+}
+
 async function resolveTemplate({ format, companyProfileId, templateId }) {
   if (templateId) {
     const template = await getReportTemplate(templateId);
@@ -79,8 +87,9 @@ export async function generateReportOutput({ reportId, format, companyProfileId,
     resolveTemplate({ format: lookupFormat, companyProfileId, templateId }),
     sumCumulativeSiteSupervisorCount(report.siteId, report.date)
   ]);
+  const attendance = await siteAttendance(report.siteId, report.date);
 
-  const model = buildReportOutputModel({ site, report, photos, signatures, companyProfile, cumulativeSiteSupervisorCount });
+  const model = buildReportOutputModel({ site, report, photos, signatures, companyProfile, cumulativeSiteSupervisorCount, attendance });
 
   if (format === "excel") {
     const renderer = getExcelRenderer(template.rendererId);

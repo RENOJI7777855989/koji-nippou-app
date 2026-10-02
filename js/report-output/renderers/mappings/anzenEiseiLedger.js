@@ -52,6 +52,11 @@ export const ANZEN_EISEI_LEDGER_MAPPING = {
     // 本文の配置は手書印刷用と同じ（原本で位置・文言の一致を確認済み）
     companiesTable: FORM.companiesTable,
     patrolChecklist: FORM.patrolChecklist,
-    staffAttendance: { headcountCell: FORM.staffAttendance.headcountCell }
+    staffAttendance: { headcountCell: FORM.staffAttendance.headcountCell },
+    // 稼動人数の業種別（台帳シートは累計・計・延労働時間が数式なので、その日の人数と空き行の業種名だけ書く）。
+    // 本日の重点指示・作業間の連絡・調整・資材・機材搬入も手書印刷用と同じ位置（台帳シートで確認済み）
+    tradeAttendance: { ...FORM.tradeAttendance, cumulative: false },
+    textLines: FORM.textLines,
+    deliveriesAmPm: FORM.deliveriesAmPm
   }
 };

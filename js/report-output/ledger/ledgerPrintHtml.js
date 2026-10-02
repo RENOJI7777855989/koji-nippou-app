@@ -246,7 +246,9 @@ function buildPageTable(layout, classOf, inlineImages = []) {
       const spanAttrs = span ? ` rowspan="${span.rowspan}" colspan="${span.colspan}"` : "";
       const inline = inlineAt.get(`${r},${c}`);
       const inlineHtml = inline ? `<img src="${inline.dataUrl}" alt="" style="display:block;max-width:100%;max-height:${layout.rowHeightPx[r]}px;object-fit:contain">` : "";
-      tds.push(`<td class="${classOf(cell?.styleIndex || 0)}"${spanAttrs}>${escapeHtml(cell?.text || "").replace(/\n/g, "<br>")}${inlineHtml}</td>`);
+      const text = escapeHtml(cell?.text || "").replace(/\n/g, "<br>");
+      // 文字は span.tx に入れる（縦書きのセルは CSS で span を縦書きにする）
+      tds.push(`<td class="${classOf(cell?.styleIndex || 0)}"${spanAttrs}>${text ? `<span class="tx">${text}</span>` : ""}${inlineHtml}</td>`);
     }
     rows.push(`<tr style="height:${layout.rowHeightPx[r]}px">${tds.join("")}</tr>`);
   }
@@ -318,7 +320,14 @@ export async function buildLedgerPrintHtml({ ledgerBlob, templateBuffer = null, 
   const totalWidthPx = colWidths.reduce((a, b) => a + b, 0);
   const colGroup = colWidths.map((w) => `<col style="width:${w}px">`).join("");
   const styleCss = [...classNames]
-    .map(([idx, cls]) => `table.xlsx-sheet td.${cls}{${cellStyleToCss(styles.resolveStyle(idx)).replace(/[<>]/g, "")}}`)
+    .map(([idx, cls]) => {
+      const st = styles.resolveStyle(idx);
+      const base = `table.xlsx-sheet td.${cls}{${cellStyleToCss(st).replace(/[<>]/g, "")}}`;
+      // 縦書き（textRotation=255）のセル（巡回点検の分類名など）は縦書きで表示する（横書きだと細い枠からはみ出す）
+      return st.alignment?.textRotation === 255
+        ? `${base}\ntable.xlsx-sheet td.${cls}{text-align:center;vertical-align:middle;white-space:normal}table.xlsx-sheet td.${cls}>.tx{writing-mode:vertical-rl;text-orientation:upright;display:inline-block;max-height:100%}`
+        : base;
+    })
     .join("\n");
 
   const [paperW, paperH] = PAPER_SIZE_MM[pageLayout.pageSetup.paperSize] || [297, 420];

@@ -27,6 +27,11 @@ const dateInput = document.getElementById("date");
 const weatherSelect = document.getElementById("weather");
 const temperatureInput = document.getElementById("temperature");
 const progressInput = document.getElementById("progressPercent");
+const dayStatusSelect = document.getElementById("dayStatus");
+const dayStatusHint = document.getElementById("dayStatusHint");
+const DAY_STATUS_HINT = { work: "", nowork: "作業なしの日は、稼働人数・人工・作業時間・業種別累計に数えません（日報は履歴として残ります）。", holiday: "休工日は、稼働人数・人工・作業時間・業種別累計に数えません（日報は履歴として残ります）。" };
+const updateDayStatusHint = () => { dayStatusHint.textContent = DAY_STATUS_HINT[dayStatusSelect.value] || ""; };
+dayStatusSelect.addEventListener("change", updateDayStatusHint);
 const progressHint = document.getElementById("progressPercentHint");
 let previousProgress = null; // 参考表示: この日より前の日誌で最後に入力した進捗率 { date, value }
 const workerCountTotalInput = document.getElementById("workerCountTotal");
@@ -39,6 +44,8 @@ const addDeliveryBtn = document.getElementById("addDeliveryBtn");
 const addCarryOutBtn = document.getElementById("addCarryOutBtn");
 const tomorrowPlanInput = document.getElementById("tomorrowPlan");
 const remarksInput = document.getElementById("remarks");
+const focusInstructionsInput = document.getElementById("focusInstructions");
+const workCoordinationInput = document.getElementById("workCoordination");
 const siteSupervisorsContainer = document.getElementById("siteSupervisorsContainer");
 const addSiteSupervisorBtn = document.getElementById("addSiteSupervisorBtn");
 const patrolInspectorNameInput = document.getElementById("patrolInspectorName");
@@ -197,6 +204,9 @@ function addCompanyRow(data = {}) {
       <small class="workHoursInfo"></small>
       <input type="hidden" class="workHours">
     </div>
+    <label>人工（請求用・任意）
+      <input type="number" class="manDays" min="0" step="0.25" inputmode="decimal" placeholder="未入力可（人数からは計算しません）">
+    </label>
     <label class="full-row">使用機械
       <input type="text" class="machinery" placeholder="例）バックホウ">
     </label>
@@ -226,6 +236,7 @@ function addCompanyRow(data = {}) {
   row.querySelector(".plannedWorkerCount").value = data.plannedWorkerCount || "";
   row.querySelector(".actualWorkerCount").value = data.actualWorkerCount || "";
   row.querySelector(".machinery").value = data.machinery || "";
+  row.querySelector(".manDays").value = data.manDays ?? "";
   setupWorkHours(row, data.workHours || "");
   row.querySelector(".workContent").value = data.workContent || "";
   row.querySelector(".safetyNotes").value = data.safetyNotes || "";
@@ -513,6 +524,8 @@ export async function initReportFormViewNew(params) {
   const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   dateInput.value = /^\d{4}-\d{2}-\d{2}$/.test(params.date || "") ? params.date : localToday;
   progressInput.value = "";
+  dayStatusSelect.value = "work";
+  updateDayStatusHint();
   await loadPreviousProgress(currentSiteId, dateInput.value, null);
   await renderPhotoGrid(draftReportId);
   applyReadOnlyMode(false); // このルートには編集権限があるユーザーしか到達しない
@@ -545,8 +558,12 @@ export async function initReportFormViewEdit(params) {
   weatherSelect.value = report.weather || "晴れ";
   temperatureInput.value = report.temperature || "";
   progressInput.value = report.progressPercent ?? "";
+  dayStatusSelect.value = report.dayStatus === "nowork" || report.dayStatus === "holiday" ? report.dayStatus : "work";
+  updateDayStatusHint();
   tomorrowPlanInput.value = report.tomorrowPlan || "";
   remarksInput.value = report.remarks || "";
+  focusInstructionsInput.value = report.focusInstructions || "";
+  workCoordinationInput.value = report.workCoordination || "";
   siteSupervisorsContainer.innerHTML = "";
   (report.siteSupervisorNames || []).forEach((name) => addSiteSupervisorRow(name));
   patrolInspectorNameInput.value = report.patrolInspectorName || "";
@@ -707,6 +724,8 @@ function collectCompanies() {
       plannedWorkerCount,
       actualWorkerCount,
       machinery: row.querySelector(".machinery").value.trim(),
+      // 人工（請求用）。未入力は ""（ダッシュボードでは「未入力」。稼働人数から人工は計算しない）
+      manDays: row.querySelector(".manDays").value.trim(),
       workHours: row.querySelector(".workHours").value.trim(),
       workContent: row.querySelector(".workContent").value.trim(),
       safetyNotes: row.querySelector(".safetyNotes").value.trim(),
@@ -731,6 +750,14 @@ form.addEventListener("submit", async (e) => {
     return;
   }
 
+  // 人工（請求用・任意）は0以上の数字だけ
+  const badManDays = [...companiesContainer.querySelectorAll(".manDays")].find((el) => el.validity.badInput || (el.value.trim() !== "" && !(Number(el.value) >= 0)));
+  if (badManDays) {
+    showMessage("人工は0以上の数字で入力してください（わからない場合は空欄のままにしてください）。", true);
+    badManDays.focus();
+    return;
+  }
+
   let workerCountTotal = workerCountTotalInput.value.trim();
   if (workerCountTotal !== "" && Number(workerCountTotal) < 0) workerCountTotal = "";
 
@@ -740,10 +767,13 @@ form.addEventListener("submit", async (e) => {
     weather: weatherSelect.value,
     temperature: temperatureInput.value.trim(),
     progressPercent: progress.value,
+    dayStatus: dayStatusSelect.value,
     workerCountTotal,
     companies: collectCompanies(),
     tomorrowPlan: tomorrowPlanInput.value.trim(),
     remarks: remarksInput.value.trim(),
+    focusInstructions: focusInstructionsInput.value.trim(),
+    workCoordination: workCoordinationInput.value.trim(),
     siteSupervisorNames: collectSiteSupervisorNames(),
     patrolInspectorName: patrolInspectorNameInput.value.trim(),
     patrolChecklist: collectPatrolChecklist(),

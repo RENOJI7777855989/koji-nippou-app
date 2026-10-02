@@ -1742,3 +1742,53 @@ dialog h3 {
 .progress-hint { display: block; margin-top: 4px; color: #4a5568; }
 .progress-hint.is-warn { color: #b7791f; font-weight: bold; }
 .dash-chip.is-missing { border-color: #d69e2e; background: #fffbea; color: #8a5a12; }
+
+/* ダッシュボード: 業者別 稼働状況（稼働人数をいちばん大きく） */
+.dash-vendors td.dash-workers b { font-size: 22px; }
+.dash-vendors tfoot th { border-top: 2px solid #c9d6e8; font-weight: bold; color: #1f2933; }
+.dash-vendors td.num, .dash-vendors th.num { text-align: right; white-space: nowrap; }
+
+/* ダッシュボード: 今日の状態・今日の確認事項（要確認）・昨日→今日 */
+.dash-state { font-size: 17px; padding: 8px 12px; border-radius: 6px; margin-bottom: 8px; }
+.dash-state.is-missing { background: #fdecea; color: #8a1c12; border: 1px solid #f3b4ab; }
+.dash-state.is-nowork { background: #eef2f7; color: #2d3748; border: 1px solid #cbd5e0; }
+.dash-state.is-holiday { background: #f3e8ff; color: #553c9a; border: 1px solid #d6bcfa; }
+.dash-attention { border-radius: 6px; padding: 6px 10px; background: #f0fff4; border: 1px solid #b8dcbf; margin-bottom: 8px; }
+.dash-attention.has-items { background: #fffaf0; border-color: #f0b35a; }
+.dash-attention h4 { margin: 0 0 4px; font-size: 16px; }
+.dash-attention.has-items h4 { color: #b45309; }
+.dash-attention ul { margin: 0; padding-left: 1.3em; }
+.dash-attention li { padding: 3px 0; font-size: 15px; }
+.dash-checks { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: 14px; }
+.dash-checks dt { color: #5b6573; }
+.dash-checks dd { margin: 0; }
+.dash-checks dd.lv-warn { color: #b45309; font-weight: bold; }
+.dash-checks dd.lv-ok { color: #1f7a3f; }
+.dash-compare { width: 100%; border-collapse: collapse; font-size: 15px; }
+.dash-compare th, .dash-compare td { padding: 4px 6px; border-bottom: 1px solid #eee; text-align: right; white-space: nowrap; }
+.dash-compare th:first-child { text-align: left; color: #5b6573; font-weight: normal; }
+.dash-compare thead th { font-size: 13px; color: #5b6573; font-weight: normal; }
+
+/* 日報カレンダー（現場詳細） */
+.report-calendar { margin: 12px 0; padding: 10px; border: 1px solid #d9dee5; border-radius: 8px; background: #fff; }
+.cal-head { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.cal-head .cal-nav { min-width: 44px; min-height: 40px; margin: 0; }
+.cal-summary { text-align: center; margin: 6px 0; font-size: 14px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.cal-week { text-align: center; font-size: 12px; color: #5b6573; }
+.cal-cell { min-height: 52px; margin: 0; padding: 3px 2px; border: 1px solid #e2e8f0; border-radius: 5px; background: #fff; color: #1f2933; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; font-size: 12px; line-height: 1.2; }
+.cal-cell .cal-day { font-weight: bold; font-size: 14px; }
+.cal-cell .cal-label { font-size: 10.5px; }
+.cal-blank { border: none; background: none; }
+.cal-ok { background: #f0fff4; border-color: #9ae6b4; }
+.cal-partial { background: #fffaf0; border-color: #f6ad55; }
+.cal-none { background: #fff5f5; border-color: #fc8181; color: #9b2c2c; }
+.cal-nowork { background: #edf2f7; border-color: #a0aec0; }
+.cal-holiday { background: #faf5ff; border-color: #b794f4; }
+.cal-out, .cal-future { background: #fafafa; color: #a0aec0; }
+.cal-today { outline: 2px solid #2b6cb0; outline-offset: -2px; }
+.cal-note { font-size: 12px; color: #5b6573; margin: 6px 0 0; }
+.status-badge.day-nowork { background: #edf2f7; color: #2d3748; }
+.status-badge.day-holiday { background: #faf5ff; color: #553c9a; }
+.dash-patrol-attention { margin-top: 6px; padding: 6px 10px; border: 1px solid #f0b35a; border-radius: 6px; background: #fffaf0; }
+.dash-patrol-attention h4 { margin: 0 0 4px; font-size: 15px; color: #b45309; }

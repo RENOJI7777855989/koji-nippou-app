@@ -68,6 +68,40 @@ export const ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING = {
     cumulativeCell: "P50"
   },
 
+  // 稼動人数表の業種別の人数・累計（tradeAttendance.js）。行の位置と業種名は同梱の03-2（手書印刷用・台帳シート）で確認。
+  // 業種名の無い行（26・31・34・40・42・47行目）は、様式に無い業種を書く空き行として使う。
+  // 計（51行目）は社員を含む合計、延労働時間（52行目）は計×8時間（台帳シートの数式 O52=O51*8 と同じ）
+  tradeAttendance: {
+    countColumn: "O",
+    cumulativeColumn: "P",
+    labelColumn: "M",
+    rows: [
+      { row: 7, label: "鳶工事" }, { row: 8, label: "墨出し" }, { row: 9, label: "クリーニング" },
+      { row: 11, label: "土工事" }, { row: 12, label: "杭打工事" }, { row: 13, label: "鉄筋工事" }, { row: 14, label: "圧接工事" },
+      { row: 15, label: "型枠工事" }, { row: 16, label: "型枠解体工事" }, { row: 17, label: "コンクリート工事" }, { row: 18, label: "鉄骨工事" },
+      { row: 19, label: "組積工事" }, { row: 20, label: "防水工事" }, { row: 21, label: "石工事" }, { row: 22, label: "タイル工事" },
+      { row: 23, label: "木工事" }, { row: 24, label: "屋根・樋工事" }, { row: 25, label: "金属工事" }, { row: 27, label: "左官工事" },
+      { row: 28, label: "木製建具工事" }, { row: 29, label: "鋼製建具工事" }, { row: 30, label: "シャッター工事" }, { row: 32, label: "ガラス工事" },
+      { row: 33, label: "塗装工事" }, { row: 35, label: "軽量下地" }, { row: 36, label: "GL" }, { row: 37, label: "ボード" },
+      { row: 38, label: "クロス" }, { row: 39, label: "床" }, { row: 41, label: "雑工事" }, { row: 43, label: "電気工事" },
+      { row: 44, label: "給排水工事" }, { row: 45, label: "空調工事" }, { row: 46, label: "外構工事" }, { row: 48, label: "解体工事" },
+      { row: 49, label: "警備員" }
+    ],
+    freeRows: [26, 31, 34, 40, 42, 47],
+    totalRow: 51,
+    laborHoursRow: 52,
+    hoursPerPerson: 8
+  },
+
+  // 本日の重点指示（A40の下の41〜45行目）・作業間の連絡・調整（A46の下の47〜52行目）。1行ずつ書く
+  textLines: [
+    { path: "report.focusInstructions", cells: ["A41", "A42", "A43", "A44", "A45"] },
+    { path: "report.workCoordination", cells: ["A47", "A48", "A49", "A50", "A51", "A52"] }
+  ],
+
+  // 資材・機材搬入（ＡＭはA36の下・ＰＭはF36の下の37〜39行目）。ダッシュボードの「本日の搬入・搬出」と同じ内容を時刻で午前・午後に分ける
+  deliveriesAmPm: { amCells: ["A37", "A38", "A39"], pmCells: ["F37", "F38", "F39"], noonTime: "12:00" },
+
   // 協力会社ごとの繰り返し欄。company-table開始行から1社1行で埋める。
   companiesTable: {
     startCell: "A7",

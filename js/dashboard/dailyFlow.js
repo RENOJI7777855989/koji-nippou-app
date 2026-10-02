@@ -47,6 +47,22 @@ export const DELIVERY_STATUSES = [
 
 export const labelOf = (list, value) => list.find((x) => x.value === value)?.label || "";
 
+/**
+ * 日報の「日の状態」。日報が無い日（未入力）とは別。
+ *   work    … 通常作業
+ *   nowork  … 作業なし（稼働対象日だが作業が無かった日）
+ *   holiday … 休工日（休日・休工として現場を止めている日）
+ * 作業なし・休工日の日報は履歴として残すが、稼働人数・人工・作業時間・業種別累計・業者別稼働には数えない。
+ * 項目の無い日報（この項目を追加する前の日報）は通常作業として扱う。
+ */
+export const DAY_STATUSES = [
+  { value: "work", label: "通常作業" },
+  { value: "nowork", label: "作業なし" },
+  { value: "holiday", label: "休工日" }
+];
+export const dayStatusOf = (report) => (report?.dayStatus === "nowork" || report?.dayStatus === "holiday" ? report.dayStatus : "work");
+export const isWorkDay = (report) => dayStatusOf(report) === "work";
+
 /** "8:00" "08:00" "8時" などを "08:00" にそろえる（読めなければ空） */
 export function normalizeTime(text) {
   const m = /^\s*(\d{1,2})\s*[:：時]\s*(\d{1,2})?/.exec(String(text || ""));
@@ -63,15 +79,17 @@ export function normalizeTime(text) {
 export const WORK_TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
 
 /**
- * 保存されている作業時間（"8:00～17:00" "08:00-17:00" "8時～17時" など）から開始・終了を読み取る。
+ * 保存されている作業時間（"8:00～17:00" "08:00-17:00" "8時～17時" "8:00から17:00" "8：00〜17:00" など）から開始・終了を読み取る。
  * 読み取れない自由入力は null（呼び出し側は元の文字をそのまま残す）
  */
 export function parseWorkHours(text) {
-  const m = /^\s*(\d{1,2}\s*[:：時]\s*\d{0,2})\s*(?:分)?\s*[～〜~\-ー－―]\s*(\d{1,2}\s*[:：時]\s*\d{0,2})\s*(?:分)?\s*$/.exec(String(text || ""));
+  // 区切りは「～」「〜」「~」「-」「から」など。開始だけ（"8:00" "8:00～"）も読み、そのときの end は空
+  const m = /^\s*(\d{1,2}\s*[:：時]\s*\d{0,2})\s*(?:分)?\s*(?:(?:[～〜~\-ー－―]|から)\s*(?:(\d{1,2}\s*[:：時]\s*\d{0,2})\s*(?:分)?)?)?\s*$/.exec(String(text || ""));
   if (!m) return null;
   const start = normalizeTime(m[1]);
-  const end = normalizeTime(m[2]);
-  return start && end ? { start, end } : null;
+  const end = m[2] ? normalizeTime(m[2]) : "";
+  if (!start || (m[2] && !end)) return null;
+  return { start, end };
 }
 
 /** 開始・終了から保存用の文字列（どちらかが空なら空） */

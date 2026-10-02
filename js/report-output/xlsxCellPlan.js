@@ -8,6 +8,7 @@
    ========================================================== */
 
 import { renderTemplateString } from "./xlsxTemplateEngine.js";
+import { assignTradeRows, buildTradeAttendanceWrites } from "./tradeAttendance.js";
 
 /**
  * @returns {{
@@ -71,6 +72,60 @@ export function buildXlsxCellPlan(model, cfg) {
     if (staffAttendance.cumulativeCell && model.report.cumulativeSiteSupervisorCount != null) {
       cellWrites.push({ cell: staffAttendance.cumulativeCell, value: model.report.cumulativeSiteSupervisorCount, numeric: true });
     }
+  }
+
+  // 稼動人数表の業種別の人数・累計・計・延労働時間（tradeAttendance.js）。台帳シートは累計等が数式なので人数と業種名だけ
+  const trade = cfg.tradeAttendance;
+  if (trade && model.attendance) {
+    const assignment = model.attendance.assignment || assignTradeRows(trade, model.attendance.siteReports || []);
+    const r = buildTradeAttendanceWrites(trade, {
+      assignment,
+      // 作業なし・休工日の日報は、その日の人数に数えない（累計はそれまでの通常作業の日の合計）
+      todayCompanies: (model.report.dayStatus || "work") === "work" ? model.companies || [] : [],
+      historyReports: model.attendance.historyReports || [],
+      supervisorsToday: model.report.siteSupervisorCount || 0,
+      supervisorsCumulative: model.report.cumulativeSiteSupervisorCount || 0,
+      cumulative: trade.cumulative !== false,
+      writeLabels: trade.cumulative !== false // 台帳は最初の頁にだけ書く（renderLedgerWorkbook.js）
+    });
+    cellWrites.push(...r.writes);
+    warnings.push(...r.warnings);
+  }
+
+  // 複数行の文章（本日の重点指示・作業間の連絡・調整）を、様式の罫線の行ごとに1行ずつ書く。
+  // 行が足りなければ、残りは最後の行につなげる（消さない）
+  for (const { path, cells } of cfg.textLines || []) {
+    const text = String(path.split(".").reduce((o, k) => o?.[k], model) || "").trim();
+    if (!text) continue;
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const out = lines.slice(0, cells.length - 1);
+    const rest = lines.slice(cells.length - 1);
+    if (rest.length) out.push(rest.join("　"));
+    out.forEach((line, i) => cellWrites.push({ cell: cells[i], value: line, numeric: false }));
+  }
+
+  // 資材・機材搬入（ＡＭ／ＰＭ）: ダッシュボードの「本日の搬入・搬出」と同じ内容（搬入・搬出の両方、中止も含む）を、
+  // 時刻で午前・午後に分けて1件1行で書く（「時刻 搬入/搬出 品名 数量（業者）」、中止は末尾に「（中止）」）。
+  // 行が足りなければ最後の行に「ほかn件」
+  const dl = cfg.deliveriesAmPm;
+  if (dl && Array.isArray(model.report.deliveries)) {
+    const items = [...model.report.deliveries].sort((a, b) => (a.time ? 0 : 1) - (b.time ? 0 : 1) || (a.time || "").localeCompare(b.time || ""));
+    const line = (d) =>
+      [d.time, d.direction === "out" ? "搬出" : "搬入", [d.item, d.quantity].filter(Boolean).join(" ")].filter(Boolean).join(" ") +
+      (d.vendor ? `（${d.vendor}）` : "") +
+      (d.status === "cancelled" ? "（中止）" : "");
+    const put = (list, cells) => {
+      const shown = list.slice(0, cells.length);
+      shown.forEach((d, i) => cellWrites.push({ cell: cells[i], value: line(d), numeric: false }));
+      if (list.length > cells.length) {
+        const last = cells.length - 1;
+        cellWrites[cellWrites.length - 1] = { cell: cells[last], value: `${line(list[last])}　ほか${list.length - cells.length}件`, numeric: false };
+        warnings.push(`搬入・搬出が${list.length}件あり、様式の${cells.length}行に収まらないため「ほか${list.length - cells.length}件」と書きました`);
+      }
+    };
+    const noon = dl.noonTime || "12:00";
+    put(items.filter((d) => d.time && d.time < noon), dl.amCells);
+    put(items.filter((d) => !d.time || d.time >= noon), dl.pmCells);
   }
 
   const patrolChecklist = cfg.patrolChecklist;

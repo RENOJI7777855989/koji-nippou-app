@@ -106,7 +106,7 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
   check("6 搬出をタップすると詳細（搬出業者・搬出元・搬出先・車両・備考）が見える", outDetail.includes("搬出元現場") && outDetail.includes("搬出先○○処分場") && outDetail.includes("10tダンプ") && outDetail.includes("マニフェスト持参"), outDetail.replace(/\s+/g, " ").slice(0, 120));
   const detail = await page.locator("#siteDashboard .dash-delivery").first().textContent();
   check("6 搬入をタップすると詳細（搬入元・搬入先・車両・備考）が見える", detail.includes("○○工場") && detail.includes("10t車") && detail.includes("誘導員1名配置"), detail.replace(/\s+/g, " ").slice(0, 100));
-  check("7 本日の人員: 実績9人（予定6）・職長1人・業者2社・累計9人・延べ労働時間72時間", /9人/.test(dash) && dash.includes("予定 6人") && dash.includes("職長1人") && dash.includes("業者2社") && dash.includes("累計9人") && dash.includes("延べ労働時間72時間"), dash.match(/本日の人員[\s\S]{0,120}/)?.[0].replace(/\s+/g, " "));
+  check("7 本日の人員: 実績9人（予定6）・職長1人・業者2社・累計9人・延べ労働時間72時間", /9人/.test(dash) && dash.includes("予定 6人") && dash.includes("職長1人") && dash.includes("業者2社") && dash.includes("累計（社員を含む）9人") && dash.includes("延べ労働時間72時間"), dash.match(/本日の人員[\s\S]{0,120}/)?.[0].replace(/\s+/g, " "));
   check("8 本日の作業: 業者・職種・予定/実績・作業時間・作業内容・職長", dash.includes("山田型枠") && dash.includes("08:00～17:00") && dash.includes("9時間") && dash.includes("2階型枠建込") && dash.includes("6 / 5"));
   check("9 今日の日誌: 天候・気温・作業・明日の予定", dash.includes("晴れ　25℃") && dash.includes("3階床配筋"));
   const status = await page.$$eval("#siteDashboard .dash-status-row", (els) => Object.fromEntries(els.map((e) => [e.querySelector("span").textContent, e.querySelector("b").textContent])));
@@ -179,9 +179,9 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
       const { WorkbookPackage } = await import("/js/report-output/ledger/workbookPackage.js");
       const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
       const pkg = await WorkbookPackage.open(u.buffer); const sheet = await pkg.getText((await pkg.listSheets())[0].path);
-      return { sheets: (await pkg.listSheets()).map((s) => s.name), work: sheet.includes("2階型枠建込"), flowLeak: ["朝礼・KY", "北側ゲート", "○○工場", "8:00～17:00", "残土", "○○処分場", "10tダンプ", "搬出"].filter((w) => sheet.includes(w)) };
+      return { sheets: (await pkg.listSheets()).map((s) => s.name), work: sheet.includes("2階型枠建込"), flowLeak: ["朝礼・KY", "午後作業", "8:00～17:00", "08:00～17:00"].filter((w) => sheet.includes(w)), deliveries: ["搬入 鉄筋", "搬出 残土"].filter((w) => sheet.includes(w)) };
     }, fs.readFileSync(f).toString("base64"));
-    check("15 03-2のExcel出力は従来どおり（1日分の様式・業者欄が入る）で、流れ・搬入・搬出・作業時間は03-2に書き込まない", x.sheets[0] === "手書印刷用" && x.work && x.flowLeak.length === 0, JSON.stringify(x));
+    check("15 03-2のExcel出力（1日分の様式・業者欄が入る）。流れ・作業時間は03-2に書き込まず、搬入・搬出はダッシュボードと同じく資材・機材搬入の欄に入る", x.sheets[0] === "手書印刷用" && x.work && x.flowLeak.length === 0 && x.deliveries.length === 2, JSON.stringify(x));
   } else {
     check("15 03-2への影響（鍵ファイルが無いため確認できず）", false);
   }

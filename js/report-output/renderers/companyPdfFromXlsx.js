@@ -285,13 +285,15 @@ function buildTableHtml(layout, styles) {
       if (text) boxH += extendDown(r + rows, c, c + cols - 1);
       let boxW = 0;
       for (let k = c; k < c + cols; k++) boxW += layout.colWidthPx[k] || 0;
-      const wrap = !!style.alignment.wrapText;
+      // 縦書き（textRotation=255）のセルは縦書きで表示し、箱に収まるよう縮める（横書きだと細い枠からはみ出していた）
+      const vertical = style.alignment.textRotation === 255;
+      const wrap = !!style.alignment.wrapText || vertical;
       const spill = !wrap && text ? spillWidth(r, c, c + cols - 1, boxW, style.alignment.horizontal) : boxW;
-      const valign = style.alignment.vertical === "center" ? "center" : style.alignment.vertical === "top" ? "flex-start" : "flex-end";
+      const valign = vertical || style.alignment.vertical === "center" ? "center" : style.alignment.vertical === "top" ? "flex-start" : "flex-end";
       // 文字の幅を測れるよう、中身は伸ばさず文字の幅にする（左右の寄せはここで指定）
-      const halign = style.alignment.horizontal === "center" ? "center" : style.alignment.horizontal === "right" ? "flex-end" : "flex-start";
+      const halign = vertical ? "center" : style.alignment.horizontal === "center" ? "center" : style.alignment.horizontal === "right" ? "flex-end" : "flex-start";
       const inner = text
-        ? `<div class="xc" data-w="${Math.round(boxW)}" data-spill="${Math.round(spill)}" data-wrap="${wrap ? 1 : 0}" style="width:${Math.max(1, Math.round(boxW) - 4)}px;height:${Math.max(0, boxH - 1)}px;justify-content:${valign};align-items:${halign}"><span>${text}</span></div>`
+        ? `<div class="xc${vertical ? " xc-vert" : ""}" data-w="${Math.round(boxW)}" data-spill="${Math.round(spill)}" data-wrap="${wrap ? 1 : 0}" style="width:${Math.max(1, Math.round(boxW) - 4)}px;height:${Math.max(0, boxH - 1)}px;justify-content:${valign};align-items:${halign}"><span>${text}</span></div>`
         : "";
       // styles.xmlの色・フォント名は外部提供の.xlsxテンプレート由来のためHTML属性値として無害化する
       cellsHtml.push(`<td${spanAttrs} style="${escapeHtml(cellStyleToCss(style))}">${inner}</td>`);
@@ -423,6 +425,9 @@ async function render(model, mapping, companyProfile, template) {
   /* セルの中身の箱: Excelの行の高さに固定し、セルの上に重ねて置く（行が伸びて重ね描きの図・サインがずれるのを防ぐ） */
   table.xlsx-sheet td .xc { position: absolute; left: 2px; top: 0; display: flex; flex-direction: column; overflow: visible; line-height: 1.15; }
   table.xlsx-sheet td .xc.xc-fit { overflow: hidden; white-space: pre-wrap; word-break: break-all; align-items: stretch; }
+  /* 縦書きのセル（様式の textRotation=255）: 文字を縦に並べ、箱の中央に置く */
+  table.xlsx-sheet td .xc.xc-vert > span { writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 0.05em; }
+  table.xlsx-sheet td .xc.xc-vert, table.xlsx-sheet td .xc.xc-vert.xc-fit { align-items: center; justify-content: center; }
   .xlsx-overlay-img { position: absolute; object-fit: contain; }
   .xlsx-overlay-crop { position: absolute; overflow: hidden; }
   .xlsx-overlay-text { position: absolute; display: flex; align-items: center; justify-content: center; text-align: center; }

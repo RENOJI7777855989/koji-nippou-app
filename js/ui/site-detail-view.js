@@ -9,6 +9,9 @@ import { exportReportsExcelZip, buildReportsPrintHtml, exportSiteLedgerExcel, bu
 import { previewSiteTemplateUpgrade, upgradeSiteTemplate, revertSiteTemplate } from "../report-output/templateResolver.js";
 import { getReportTemplate } from "../report-output/reportTemplates.js";
 import { renderSiteDashboard } from "./site-dashboard.js";
+import { calendarDayState } from "../dashboard/siteDashboardModel.js";
+import { dayStatusOf } from "../dashboard/dailyFlow.js";
+import { dbGetAll } from "../db.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
 import { escapeHtml } from "../utils.js";
 import { showView, showMessage } from "./common.js";
@@ -90,6 +93,7 @@ function matchesFilter(report, filter) {
     case "editedAfterPrint": return isEditedAfterPrint(report);
     case "confirmed": return !!report.confirmedAt;
     case "unconfirmed": return !report.confirmedAt;
+    case "nowork": case "holiday": return dayStatusOf(report) === filter;
     default: return true;
   }
 }
@@ -110,7 +114,8 @@ function reportCardHtml(report) {
     report.lastPrintedAt ? `<span>最終印刷 ${escapeHtml(fmtDateTime(report.lastPrintedAt))}</span>` : "",
     report.lastOutputAt ? `<span>最終出力 ${escapeHtml(fmtDateTime(report.lastOutputAt))}</span>` : "",
     isEditedAfterPrint(report) ? `<span class="status-badge status-warning">印刷後に修正あり</span>` : "",
-    report.finalizedAt ? `<span class="status-badge status-default">確定済み</span>` : ""
+    report.finalizedAt ? `<span class="status-badge status-default">確定済み</span>` : "",
+    dayStatusOf(report) !== "work" ? `<span class="status-badge day-${dayStatusOf(report)}">${dayStatusOf(report) === "nowork" ? "作業なし" : "休工日"}</span>` : ""
   ].filter(Boolean).join("");
   return `
       <p class="report-card-date">${escapeHtml(report.date) || "日付未設定"}</p>
@@ -118,8 +123,80 @@ function reportCardHtml(report) {
       <p class="report-card-status">${badges}</p>`;
 }
 
+/* ---------- 日報カレンダー（日報あり／一部未入力／日報なし／作業なし／休工日。推測で補わない）---------- */
+const reportCalendarEl = document.getElementById("reportCalendar");
+let calendarMonth = null; // "YYYY-MM"
+let calendarSiteId = null;
+const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const CAL_LABEL = { ok: "日報あり", partial: "一部未入力", none: "日報なし", nowork: "作業なし", holiday: "休工日", out: "", future: "" };
+
+async function renderReportCalendar(reports) {
+  if (!reportCalendarEl) return;
+  const site = currentSite;
+  const today = todayIso();
+  if (calendarSiteId !== site.id || !calendarMonth) {
+    calendarSiteId = site.id;
+    const inPeriod = site.startDate && today >= site.startDate && (!site.endDate || today <= site.endDate);
+    calendarMonth = (inPeriod || !reports.length ? today : reports[0].date || today).slice(0, 7);
+  }
+  const ids = new Set(reports.map((r) => r.id));
+  const signed = new Map();
+  for (const sg of await dbGetAll("signatures")) {
+    if (sg.isDeleted || sg.role !== "foreman" || !ids.has(sg.reportId) || !sg.companyId) continue;
+    if (!signed.has(sg.reportId)) signed.set(sg.reportId, new Set());
+    signed.get(sg.reportId).add(sg.companyId);
+  }
+  const byDate = new Map();
+  for (const r of reports) if (r.date && !byDate.has(r.date)) byDate.set(r.date, r); // 新しい順に並んでいるので最初が最後に更新したもの
+  const [y, m] = calendarMonth.split("-").map(Number);
+  const first = new Date(y, m - 1, 1);
+  const days = new Date(y, m, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < first.getDay(); i++) cells.push(`<div class="cal-cell cal-blank"></div>`);
+  const counts = { ok: 0, partial: 0, none: 0, nowork: 0, holiday: 0 };
+  for (let d = 1; d <= days; d++) {
+    const iso = isoOf(new Date(y, m - 1, d));
+    const report = byDate.get(iso) || null;
+    let state;
+    let missing = [];
+    if (report) ({ state, missing } = calendarDayState(report, signed.get(report.id)));
+    else if (!site.startDate || iso < site.startDate || (site.endDate && iso > site.endDate)) state = "out";
+    else if (iso > today) state = "future";
+    else state = "none";
+    if (counts[state] != null) counts[state]++;
+    const title = state === "partial" ? `一部未入力（${missing.join("・")}）` : CAL_LABEL[state] || (state === "out" ? "工期外" : "");
+    const clickable = report || state === "none";
+    cells.push(`<button type="button" class="cal-cell cal-${state}${iso === today ? " cal-today" : ""}" data-date="${iso}"${report ? ` data-report-id="${report.id}"` : ""}${clickable ? "" : " disabled"} title="${escapeHtml(title)}"><span class="cal-day">${d}</span><span class="cal-label">${escapeHtml(state === "partial" ? "一部未入力" : CAL_LABEL[state] || "")}</span></button>`);
+  }
+  reportCalendarEl.innerHTML = `
+    <div class="cal-head">
+      <button type="button" class="secondary-btn cal-nav" data-shift="-1" aria-label="前の月">◀</button>
+      <b>${y}年${m}月の日報</b>
+      <button type="button" class="secondary-btn cal-nav" data-shift="1" aria-label="次の月">▶</button>
+    </div>
+    <p class="cal-summary">日報あり ${counts.ok}・一部未入力 ${counts.partial}・<b>日報なし ${counts.none}</b>・作業なし ${counts.nowork}・休工日 ${counts.holiday}</p>
+    <div class="cal-grid">${["日", "月", "火", "水", "木", "金", "土"].map((w) => `<div class="cal-week">${w}</div>`).join("")}${cells.join("")}</div>
+    <p class="cal-note">「日報なし」は工期内で日報が無い日です（作業なし・休工日とは別。日報で「作業なし」「休工日」を選んだ日だけがその表示になります）。日付を押すと日報を開きます（日報なしの日は新しく作成）。</p>`;
+}
+
+reportCalendarEl?.addEventListener("click", async (e) => {
+  const nav = e.target.closest(".cal-nav");
+  if (nav) {
+    const [y, m] = calendarMonth.split("-").map(Number);
+    const d = new Date(y, m - 1 + Number(nav.dataset.shift), 1);
+    calendarMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    await renderReportCalendar(await listReportsBySite(currentSite.id));
+    return;
+  }
+  const cell = e.target.closest(".cal-cell[data-date]:not([disabled])");
+  if (!cell) return;
+  if (cell.dataset.reportId) navigate(`/sites/${currentSite.id}/report/${cell.dataset.reportId}`);
+  else if (!currentSite.completedAt && hasPermission("editReports")) navigate(`/sites/${currentSite.id}/report/new?date=${cell.dataset.date}`);
+});
+
 async function renderReportList() {
   allReports = await listReportsBySite(currentSite.id);
+  await renderReportCalendar(allReports);
   const filter = reportListFilter.value;
   const q = reportListSearch.value.trim().toLowerCase();
   reportListEl.innerHTML = "";

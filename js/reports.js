@@ -44,7 +44,12 @@ export async function createReport(fields) {
     timeline: fields.timeline || [],
     deliveries: fields.deliveries || [],
     // 進捗率（％、0〜100の整数。未入力は null）。その日の日誌に記録した値で、現場の現在値を上書きする項目ではない
-    progressPercent: fields.progressPercent ?? null
+    progressPercent: fields.progressPercent ?? null,
+    // 本日の重点指示・作業間の連絡・調整（03-2の同名の欄へ出力。連絡事項 remarks とは別の項目）
+    // 日の状態: "work"（通常作業）/"nowork"（作業なし）/"holiday"（休工日）。無い日報は通常作業として扱う
+    dayStatus: fields.dayStatus || "work",
+    focusInstructions: fields.focusInstructions || "",
+    workCoordination: fields.workCoordination || ""
   };
   if (fields.id) base.id = fields.id; // 新規作成前に写真/署名を紐付けるため、事前発行IDを許容する
   const report = stampNew(base);

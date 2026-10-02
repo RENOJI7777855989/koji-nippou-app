@@ -101,7 +101,9 @@ function parseXfEl(xfEl) {
     alignment: {
       horizontal: alignEl?.getAttribute("horizontal") || null,
       vertical: alignEl?.getAttribute("vertical") || null,
-      wrapText: alignEl?.getAttribute("wrapText") === "1"
+      wrapText: alignEl?.getAttribute("wrapText") === "1",
+      // 文字の向き。255 は縦書き（1文字ずつ縦に並べる）。03-2の巡回点検の分類名（管理・環境…）や「仮設工事」
+      textRotation: Number(alignEl?.getAttribute("textRotation")) || 0
     }
   };
 }

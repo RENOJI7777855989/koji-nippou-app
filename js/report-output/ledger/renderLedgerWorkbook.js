@@ -25,6 +25,7 @@ import { analyzeLedgerTemplate, readFormLabels, clearLedgerSampleInputs, scrubWo
 import { parseSharedStringsXml, readSheetCells, mapSheetCells, colToIndex, indexToCol } from "./sheetCells.js";
 import { WorkbookCalculator } from "./formulaCache.js";
 import { buildXlsxCellPlan } from "../xlsxCellPlan.js";
+import { assignTradeRows, freeLabelWrites } from "../tradeAttendance.js";
 import {
   renderTemplateString,
   setCellInSheetXml,
@@ -335,6 +336,12 @@ export async function renderLedgerWorkbook({ templateBuffer, mapping, site, entr
   // 5. 日報ごとの書き込み
   const imagesBySheet = new Map();
   const pageCfgBase = mapping.page;
+  // 稼動人数表の業種の行の割り当ては、台帳全体（全頁）で固定する（累計の数式が前頁の同じ行を参照するため）
+  const tradeAssignment = pageCfgBase.tradeAttendance
+    ? assignTradeRows(pageCfgBase.tradeAttendance, placements.filter(({ entry }) => (entry.model.report?.dayStatus || "work") === "work").map(({ entry }) => ({ date: entry.date, companies: entry.model.companies || [] })))
+    : null;
+  // 空き行の業種名は台帳の最初の頁（先頭シートの1頁目）にだけ書く。2頁目以降は様式の数式が前の頁の業種名を映す
+  if (tradeAssignment) writesBySheet.get(sheetNames[0]).push(...freeLabelWrites(pageCfgBase.tradeAttendance, tradeAssignment));
   for (const { entry, sheetIndex, pageIndex } of placements) {
     const model = entry.model;
     const rowOffset = pageIndex * profile.pageRows;
@@ -346,9 +353,12 @@ export async function renderLedgerWorkbook({ templateBuffer, mapping, site, entr
       })),
       companiesTable: pageCfgBase.companiesTable,
       patrolChecklist: pageCfgBase.patrolChecklist,
-      staffAttendance: pageCfgBase.staffAttendance
+      staffAttendance: pageCfgBase.staffAttendance,
+      tradeAttendance: pageCfgBase.tradeAttendance,
+      textLines: pageCfgBase.textLines,
+      deliveriesAmPm: pageCfgBase.deliveriesAmPm
     };
-    const plan = buildXlsxCellPlan(model, cfg);
+    const plan = buildXlsxCellPlan(tradeAssignment ? { ...model, attendance: { assignment: tradeAssignment } } : model, cfg);
     for (const w of plan.warnings) warnings.push(`${entry.date}: ${w}`);
     const list = writesBySheet.get(cfg.sheetName) || [];
     for (const w of plan.cellWrites) list.push({ ...w, cell: shiftRef(w.cell, rowOffset), date: entry.date });
