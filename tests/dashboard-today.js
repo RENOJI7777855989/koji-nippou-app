@@ -23,9 +23,9 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
     const { createSite } = await import("/js/sites.js"); const { dbPut } = await import("/js/db.js"); const { stampNew } = await import("/js/utils.js");
     const site = await createSite({ name: "今日の確認現場", startDate: "2026-09-01", endDate: "2026-09-30", constructionNumber: "T-001" });
     const mk = (date, extra) => stampNew({ siteId: site.id, date, weather: "晴れ", ...extra });
-    const d2 = mk("2026-09-02", { progressPercent: 38, companies: [{ companyId: "a", companyName: "サンプル塗装", occupation: "塗装工", actualWorkerCount: "10", workHours: "08:00～17:00" }, { companyId: "b", companyName: "サンプル足場", occupation: "とび工", actualWorkerCount: "8", workHours: "08:00～17:00", manDays: "7.5" }], patrolChecklist: { morningMeeting: "good" } });
+    const d2 = mk("2026-09-02", { progressPercent: 38, companies: [{ companyId: "a", companyName: "サンプル塗装", occupation: "塗装工", actualWorkerCount: "10", workHours: "08:00～17:00" }, { companyId: "b", companyName: "サンプル足場", occupation: "とび工", actualWorkerCount: "8", workHours: "08:00～17:00", billingManDays: "7.5" }], patrolChecklist: { morningMeeting: "good" } });
     const d3 = mk("2026-09-03", { progressPercent: 41, focusInstructions: "開口部の養生確認", workCoordination: "午後は区画を分ける", remarks: "元請から連絡あり",
-      companies: [{ companyId: "a", companyName: "サンプル塗装", occupation: "塗装工", actualWorkerCount: "12", workHours: "08:00～17:00" }, { companyId: "b", companyName: "サンプル足場", occupation: "とび工", actualWorkerCount: "8", workHours: "08:00～12:00", manDays: "4" }, { companyId: "c", companyName: "サンプル電気", occupation: "電工", actualWorkerCount: "2" }],
+      companies: [{ companyId: "a", companyName: "サンプル塗装", occupation: "塗装工", actualWorkerCount: "12", workHours: "08:00～17:00" }, { companyId: "b", companyName: "サンプル足場", occupation: "とび工", actualWorkerCount: "8", workHours: "08:00～12:00", billingManDays: "4" }, { companyId: "c", companyName: "サンプル電気", occupation: "電工", actualWorkerCount: "2" }],
       patrolChecklist: { morningMeeting: "good", openingUsage: "bad" }, patrolComment: "3階開口部を復旧",
       deliveries: [{ id: "x", direction: "in", time: "09:00", item: "塗料", status: "done" }, { id: "y", direction: "out", time: "15:00", item: "残材", status: "plan" }] });
     const d4 = mk("2026-09-04", { dayStatus: "nowork", companies: [{ companyId: "a", companyName: "サンプル塗装", occupation: "塗装工", actualWorkerCount: "3" }] });
@@ -46,8 +46,8 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   check("配置: ダッシュボードの最初のカードが「今日の確認事項」", d3.firstCard.includes("今日の確認事項"), d3.firstCard);
   check("今日の確認事項: 日報・進捗率41%・業者3社・作業員22人・作業時間（電気が未入力）・重点指示・連絡調整・搬入", d3.checks["日報"] === "入力済み（通常作業）" && d3.checks["進捗率"] === "41%" && d3.checks["業者"] === "3社" && d3.checks["作業員数"] === "22人" && d3.checks["作業時間"] === "サンプル電気 未入力" && d3.checks["本日の重点指示"] === "入力済み" && d3.checks["作業間の連絡・調整"] === "入力済み" && d3.checks["搬入・搬出"] === "2件（完了1・予定1）", JSON.stringify(d3.checks));
   check("要確認: 作業時間（電気）・署名（電気）・巡回点検・要確認（×1件・是正指示あり）・巡回点検の未記入", d3.att.length === 4 && d3.att.some((a) => a.includes("サンプル電気") && a.includes("署名未入力")) && d3.att.includes("巡回点検・要確認 × 1件・是正指示あり") && d3.att.some((a) => a.startsWith("巡回点検 未記入")), d3.att.join(" / "));
-  check("昨日→今日（9/2→9/3）: 作業員 18→22人・人工は入力分だけ 7.5（未入力1社）→4（未入力2社）・進捗率 38→41%・業者 2→3社", d3.compare.join("|") === "作業員18人→22人|人工7.5（未入力1社）→4（未入力2社）|進捗率38%→41%|業者数2社→3社", d3.compare.join(" | "));
-  check("人工: 未入力の業者を稼働人数から人工として数えない（現場概要は「人工4（未入力2社）」）", d3.text.includes("人工4（未入力2社）") && !/人工\s*(18|22)\b/.test(d3.text), (d3.text.match(/人工[^業]{0,20}/g) || []).join(" / "));
+  check("昨日→今日（9/2→9/3）: 作業員 18→22人・人工（1人＝1人工）18→22・進捗率 38→41%・業者 2→3社（請求人工7.5・4は使わない）", d3.compare.join("|") === "作業員18人→22人|人工18→22|進捗率38%→41%|業者数2社→3社", d3.compare.join(" | "));
+  check("人工: 現場概要の人工は稼働人数と同じ22・請求人工はダッシュボードに出さない", d3.text.includes("人工22") && !d3.text.includes("請求"), (d3.text.match(/人工[^業]{0,12}/g) || []).join(" / "));
   check("現場概要: 工事番号・進捗率・本日稼働・人工・業者・要確認件数・重点指示", /工事番号T-001/.test(d3.text) && d3.text.includes("本日稼働22人") && d3.text.includes("要確認4件") && d3.text.includes("本日の重点指示: 開口部の養生確認"));
   check("指示・連絡: 本日の重点指示・作業間の連絡・調整・連絡事項が表示される", d3.text.includes("開口部の養生確認") && d3.text.includes("午後は区画を分ける") && d3.text.includes("元請から連絡あり"));
 

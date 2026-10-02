@@ -204,8 +204,8 @@ function addCompanyRow(data = {}) {
       <small class="workHoursInfo"></small>
       <input type="hidden" class="workHours">
     </div>
-    <label>人工（請求用・任意）
-      <input type="number" class="manDays" min="0" step="0.25" inputmode="decimal" placeholder="未入力可（人数からは計算しません）">
+    <label>請求人工（任意）
+      <input type="number" class="billingManDays" min="0" step="0.25" inputmode="decimal" placeholder="未入力">
     </label>
     <label class="full-row">使用機械
       <input type="text" class="machinery" placeholder="例）バックホウ">
@@ -236,7 +236,8 @@ function addCompanyRow(data = {}) {
   row.querySelector(".plannedWorkerCount").value = data.plannedWorkerCount || "";
   row.querySelector(".actualWorkerCount").value = data.actualWorkerCount || "";
   row.querySelector(".machinery").value = data.machinery || "";
-  row.querySelector(".manDays").value = data.manDays ?? "";
+  // 請求人工。以前の版で「人工（請求用）」として保存した manDays も請求人工として読む（同じ入力欄の値）
+  row.querySelector(".billingManDays").value = data.billingManDays ?? data.manDays ?? "";
   setupWorkHours(row, data.workHours || "");
   row.querySelector(".workContent").value = data.workContent || "";
   row.querySelector(".safetyNotes").value = data.safetyNotes || "";
@@ -724,8 +725,9 @@ function collectCompanies() {
       plannedWorkerCount,
       actualWorkerCount,
       machinery: row.querySelector(".machinery").value.trim(),
-      // 人工（請求用）。未入力は ""（ダッシュボードでは「未入力」。稼働人数から人工は計算しない）
-      manDays: row.querySelector(".manDays").value.trim(),
+      // 請求人工（請求・見積・提出用。利用者の入力だけ）。未入力は ""。稼働人数・人工・作業時間からは計算しない。
+      // ダッシュボード・03-2には使わない（人工は稼働人数から1人＝1人工で数える）
+      billingManDays: row.querySelector(".billingManDays").value.trim(),
       workHours: row.querySelector(".workHours").value.trim(),
       workContent: row.querySelector(".workContent").value.trim(),
       safetyNotes: row.querySelector(".safetyNotes").value.trim(),
@@ -750,10 +752,10 @@ form.addEventListener("submit", async (e) => {
     return;
   }
 
-  // 人工（請求用・任意）は0以上の数字だけ
-  const badManDays = [...companiesContainer.querySelectorAll(".manDays")].find((el) => el.validity.badInput || (el.value.trim() !== "" && !(Number(el.value) >= 0)));
+  // 請求人工（任意）は0以上の数字だけ
+  const badManDays = [...companiesContainer.querySelectorAll(".billingManDays")].find((el) => el.validity.badInput || (el.value.trim() !== "" && !(Number(el.value) >= 0)));
   if (badManDays) {
-    showMessage("人工は0以上の数字で入力してください（わからない場合は空欄のままにしてください）。", true);
+    showMessage("請求人工は0以上の数字で入力してください（未定の場合は空欄のままにしてください）。", true);
     badManDays.focus();
     return;
   }

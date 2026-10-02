@@ -45,23 +45,11 @@ export function weekdayOf(iso) {
 }
 
 /**
- * 業者の人工（請求用）: 日誌の「人工」に入力された値だけ。未入力は null（人工不明）。
- * 稼働人数・作業時間・03-2の延労働時間（1人＝8時間）とは別の値で、人数から人工を補わない
- * （「1人＝1人工」という決まりはアプリの既存仕様に無いため）。
+ * 業者の人工（現場集計用）: 稼働人数（実績人数）を 1人＝1人工 として数える。
+ * 請求人工（companies[].billingManDays）とは別の値で、ダッシュボードでは請求人工を使わない・表示しない。
  */
 function manDaysOf(c) {
-  return num(c.manDays);
-}
-
-/** 業者の人工の合計: 入力された人工だけを足し、未入力の業者数を別に数える（value は入力が1件も無ければ null） */
-function sumManDays(companies) {
-  let value = null, missing = 0;
-  for (const c of companies) {
-    const m = manDaysOf(c);
-    if (m == null) missing++;
-    else value = (value || 0) + m;
-  }
-  return { value, missing };
+  return num(c.actualWorkerCount);
 }
 
 /**
@@ -190,9 +178,8 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date 
       foreman: c.foremanName || "",
       machinery: c.machinery || "",
       notes: c.safetyNotes || "",
-      // 人工（請求用）: 日誌の「人工」に入力された値だけ。未入力は null（人工不明。人数からは補わない）
-      manDays: manDaysOf(c),
-      manDaysEntered: manDaysOf(c) != null
+      // 人工（現場集計用）: 稼働人数 1人＝1人工。請求人工は使わない
+      manDays: manDaysOf(c)
       };
     });
 
@@ -202,20 +189,16 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date 
     for (const c of r.companies || []) {
       const name = (c.companyName || "").trim();
       if (!name) continue;
-      const t = vendorTotals.get(name) || { workers: 0, manDays: null, manDaysMissing: 0 };
+      const t = vendorTotals.get(name) || { workers: 0, manDays: 0 };
       t.workers += num(c.actualWorkerCount) || 0;
-      const m = manDaysOf(c);
-      if (m == null) t.manDaysMissing++;
-      else t.manDays = (t.manDays || 0) + m;
+      t.manDays += manDaysOf(c) || 0;
       vendorTotals.set(name, t);
     }
   }
   for (const w of works) {
     const t = vendorTotals.get(w.vendor.trim());
     w.cumulativeWorkers = t?.workers ?? null;
-    // 累計人工は入力された人工だけの合計。未入力の日数は別に持つ（推測で埋めない）
     w.cumulativeManDays = t?.manDays ?? null;
-    w.cumulativeManDaysMissing = t?.manDaysMissing ?? 0;
   }
 
   // ---- 業者別の安全注意事項（日報の業者ごとの「安全注意事項」。03-2では「作業及び安全に関する指示・注意事項」欄）----
@@ -356,8 +339,7 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date 
     if (!r) return null;
     if (!isWorkDay(r)) return { state: labelOf(DAY_STATUSES, dayStatusOf(r)) };
     const cs = (r.companies || []).filter((c) => (c.companyName || "").trim() || num(c.actualWorkerCount));
-    const md = sumManDays(cs);
-    return { workers: actualOf(r), manDays: md.value, manDaysMissing: md.missing, vendors: cs.filter((c) => (c.companyName || "").trim()).length, progress: r.progressPercent ?? null };
+    return { workers: actualOf(r), manDays: cs.reduce((s, c) => s + (manDaysOf(c) || 0), 0), vendors: cs.filter((c) => (c.companyName || "").trim()).length, progress: r.progressPercent ?? null };
   };
   const prevDate = addDays(date, -1);
   const prev = dayFigures(reportOfDate(live, prevDate).report);
@@ -371,8 +353,7 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date 
     dayStatus,
     stateLabel: report ? labelOf(DAY_STATUSES, dayStatus) : "日報なし",
     workers: isWork ? today : null,
-    manDays: isWork ? sumManDays(report?.companies?.filter((c) => (c.companyName || "").trim() || num(c.actualWorkerCount)) || []).value : null,
-    manDaysMissing: isWork ? sumManDays(report?.companies?.filter((c) => (c.companyName || "").trim() || num(c.actualWorkerCount)) || []).missing : 0,
+    manDays: isWork ? works.reduce((s2, w) => s2 + (w.manDays || 0), 0) : null,
     vendors: isWork ? works.filter((w) => w.vendor).length : null,
     focus: (report?.focusInstructions || "").split(/\r?\n/)[0] || "",
     attentionCount: attention.length

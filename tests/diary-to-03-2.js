@@ -49,7 +49,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   await page.goto(`${BASE}#/sites/${ids.siteId}/report/new?date=2026-09-02`); await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(400);
   const fill = async (i, f) => { const r = page.locator(".company-row").nth(i); for (const [cls, v] of Object.entries(f)) await r.locator(`.${cls}`).fill(v); };
   await fill(0, { companyName: "サンプル塗装", occupation: "塗装", actualWorkerCount: "2" }); await page.locator(".company-row").nth(0).locator(".workStart").selectOption("08:00");
-  await page.click("#addCompanyBtn"); await fill(1, { companyName: "サンプル足場", occupation: "とび", actualWorkerCount: "4", manDays: "3.5" });
+  await page.click("#addCompanyBtn"); await fill(1, { companyName: "サンプル足場", occupation: "とび", actualWorkerCount: "4", billingManDays: "3.5" });
   await page.locator(".company-row").nth(1).locator(".workStart").selectOption("08:00"); await page.locator(".company-row").nth(1).locator(".workEnd").selectOption("12:00");
   await page.click("#addCompanyBtn"); await fill(2, { companyName: "サンプル緑化", occupation: "植栽工事", actualWorkerCount: "2" });
   await page.click("#addSiteSupervisorBtn"); await page.locator(".siteSupervisorNameInput").last().fill("監督A");
@@ -59,17 +59,20 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   }
   await page.fill("#focusInstructions", "開口部の養生確認を徹底\n重機作業時は誘導員を配置");
   await page.fill("#workCoordination", "午後は塗装と足場解体が同じ区画\n時間をずらす\n3行目\n4行目\n5行目\n6行目\n7行目");
-  // 不正な人工
-  await page.locator(".company-row").nth(0).locator(".manDays").fill("-1");
+  // 不正な請求人工
+  await page.locator(".company-row").nth(0).locator(".billingManDays").fill("-1");
   await page.click("#reportSaveBtn"); await page.waitForTimeout(300);
-  check("日誌: 人工にマイナスは保存できない", (await page.isVisible("#view-report-form")) && (await page.textContent("#message")).includes("人工は0以上"));
-  await page.locator(".company-row").nth(0).locator(".manDays").fill("");
+  check("日誌: 請求人工にマイナスは保存できない", (await page.isVisible("#view-report-form")) && (await page.textContent("#message")).includes("請求人工は0以上"));
+  await page.locator(".company-row").nth(0).locator(".billingManDays").fill("");
   await page.click("#reportSaveBtn"); await page.waitForSelector("#view-site-detail:not([hidden])");
   const d2 = await page.evaluate(async (sid) => (await (await import("/js/db.js")).dbGetAll("reports")).find((r) => r.siteId === sid && r.date === "2026-09-02"), ids.siteId);
-  check("日誌: 本日の重点指示・作業間の連絡・調整・人工（3.5）・現場監督を保存", d2.siteSupervisorNames.join() === "監督A" && d2.focusInstructions.startsWith("開口部の養生") && d2.workCoordination.includes("7行目") && d2.companies[1].manDays === "3.5" && d2.companies[0].manDays === "");
+  check("日誌: 本日の重点指示・作業間の連絡・調整・請求人工（足場3.5）・現場監督を保存", d2.siteSupervisorNames.join() === "監督A" && d2.focusInstructions.startsWith("開口部の養生") && d2.workCoordination.includes("7行目") && d2.companies[1].billingManDays === "3.5");
+  check("人工 ケース2: 稼働人数4人＋請求人工3.5 → 稼働人数4のまま・請求人工3.5を別の項目として保存", d2.companies[1].actualWorkerCount === "4" && d2.companies[1].billingManDays === "3.5" && d2.companies[1].manDays === undefined);
+  check("人工 ケース3: 請求人工が未入力 → 空のまま保存（稼働人数から推測して入れない）", d2.companies[0].billingManDays === "" && d2.companies[2].billingManDays === "", JSON.stringify(d2.companies.map((c) => c.billingManDays)));
   await page.goto(`${BASE}#/sites/${ids.siteId}/report/${d2.id}`); await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(400);
-  const re = await page.evaluate(() => ({ f: document.getElementById("focusInstructions").value, w: document.getElementById("workCoordination").value, m: document.querySelectorAll(".company-row .manDays")[1].value }));
-  check("日誌: 開き直すと重点指示・連絡調整・人工が残っている", re.f.includes("重機作業時") && re.w.includes("時間をずらす") && re.m === "3.5");
+  const re = await page.evaluate(() => ({ f: document.getElementById("focusInstructions").value, w: document.getElementById("workCoordination").value, m: document.querySelectorAll(".company-row .billingManDays")[1].value, m0: document.querySelectorAll(".company-row .billingManDays")[0].value, ph: document.querySelectorAll(".company-row .billingManDays")[0].placeholder }));
+  check("日誌: 開き直すと重点指示・連絡調整・請求人工が残っている", re.f.includes("重機作業時") && re.w.includes("時間をずらす") && re.m === "3.5");
+  check("人工 ケース3: 請求人工が未入力の業者は欄が空で「未入力」と表示", re.m0 === "" && re.ph === "未入力");
   await page.goto(`${BASE}#/sites/${ids.siteId}/report/${ids.d1}`); await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(400);
   const legacy = await page.evaluate(() => [...document.querySelectorAll(".company-row")].map((r) => `${r.querySelector(".workStart").value}-${r.querySelector(".workEnd").value}`));
   check("日誌: 以前の作業時間「8:00から17:00」「8:30〜17:00」「8:00」を開始・終了として読み込む", legacy.join() === "08:00-17:00,08:30-17:00,08:00-", legacy.join());
@@ -86,6 +89,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   const xf = path.join(dir, "d2.xlsx"); await dl.saveAs(xf);
   const x = (await readXlsx(xf)).cells;
   check("Excel 稼動人数: 塗装→塗装工事の行（人数2・累計5）、とび→鳶工事の行（4・4）、警備→警備員の行（累計1）", x.O33 === "2" && x.P33 === "5" && x.O7 === "4" && x.P7 === "4" && !x.O49 && x.P49 === "1", JSON.stringify({ O33: x.O33, P33: x.P33, O7: x.O7, P7: x.P7, P49: x.P49 }));
+  check("人工 ケース6・7: 03-2には稼働人数だけ（足場 稼働4人・請求人工3.5 → 鳶工事の行に4。3.5はどのセルにも書かない）", x.O7 === "4" && !Object.values(x).some((v) => v.includes("3.5")), JSON.stringify({ O7: x.O7 }));
   check("Excel 稼動人数: 様式に無い業種（植栽工事）は空き行（26行目）に業種名つきで（人数2・累計6）", x.M26 === "植栽工事" && x.O26 === "2" && x.P26 === "6", JSON.stringify({ M26: x.M26, O26: x.O26, P26: x.P26 }));
   const sup2 = d2.siteSupervisorNames?.filter(Boolean).length || 0;
   const todayTotal = 2 + 4 + 2 + sup2; const cumTotal = 8 + 1 + todayTotal;
@@ -118,11 +122,39 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   await page.goto(`${BASE}#/sites/${ids.siteId}`); await page.waitForSelector("#siteDashboard:not([hidden])");
   await page.fill("#siteDashboard .dash-date-input", "2026-09-02"); await page.dispatchEvent("#siteDashboard .dash-date-input", "change"); await page.waitForTimeout(600);
   const rows = await page.$$eval("#siteDashboard .dash-vendors tbody tr", (trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent.replace(/\s+/g, "")).join("|")));
-  check("ダッシュボード 業者別稼働状況: 業者・業種・稼働人数・作業時間・人工（入力3.5／未入力は「未入力」で人数から計算しない）・累計人工", rows[0] === "サンプル塗装|塗装|2人|08:00～17:009時間|未入力|未入力" && rows[1] === "サンプル足場|とび|4人|08:00～12:004時間|3.5|3.5" && rows[2] === "サンプル緑化|植栽工事|2人|-|未入力|未入力", rows.join(" / "));
+  check("人工 ケース1: 業者別稼働状況の人工＝稼働人数（1人＝1人工）。塗装2人→2・足場4人→4（請求人工3.5は使わない）・累計人工＝累計の稼働人数", rows[0] === "サンプル塗装|塗装|2人|08:00～17:009時間|2|5" && rows[1] === "サンプル足場|とび|4人|08:00～12:004時間|4|4" && rows[2] === "サンプル緑化|植栽工事|2人|-|2|6", rows.join(" / "));
+  const heads = await page.$$eval("#siteDashboard .dash-vendors thead th", (ths) => ths.map((t) => t.textContent.trim()));
+  const dashText0 = await page.textContent("#siteDashboard");
+  check("人工 ケース8: ダッシュボードは稼働人数・作業時間・人工を表示し、請求人工は表示しない", heads.join() === "業者,業種,稼働人数,作業時間,人工,累計人工" && !dashText0.includes("請求") && !dashText0.includes("3.5"), heads.join());
   const foot = await page.$eval("#siteDashboard .dash-vendors tfoot tr", (tr) => [...tr.cells].map((c) => c.textContent.replace(/\s+/g, "")).join("|"));
-  check("ダッシュボード 業者別稼働状況の合計: 稼働人数8人・人工は入力分3.5と未入力2社を分けて表示", foot === "合計（3社）|8人||3.5未入力2社|", foot);
+  check("ダッシュボード 業者別稼働状況の合計: 稼働人数8人・人工8", foot === "合計（3社）|8人||8|", foot);
   const dash = (await page.textContent("#siteDashboard")).replace(/\s+/g, " ");
   check("ダッシュボード: 本日の重点指示・作業間の連絡・調整・資材搬入・巡回点検・累計（社員を含む）", dash.includes("開口部の養生確認を徹底") && dash.includes("時間をずらす") && dash.includes("鋼管") && dash.includes("巡回点検") && dash.includes(`累計（社員を含む）${cumTotal}人`), (dash.match(/累計（社員を含む）\d+人/) || [""])[0]);
+
+  // ---- 人工 ケース4・5: 請求人工を変えても、稼働人数・人工・03-2は変わらない ----
+  await page.goto(`${BASE}#/sites/${ids.siteId}/report/${d2.id}`); await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(400);
+  await page.locator(".company-row").nth(1).locator(".billingManDays").fill("2");
+  await page.click("#reportSaveBtn"); await page.waitForSelector("#view-site-detail:not([hidden])");
+  const d2b = await page.evaluate(async (id) => (await (await import("/js/db.js")).dbGet("reports", id)), d2.id);
+  await page.fill("#siteDashboard .dash-date-input", "2026-09-02"); await page.dispatchEvent("#siteDashboard .dash-date-input", "change"); await page.waitForTimeout(600);
+  const rowsB = await page.$$eval("#siteDashboard .dash-vendors tbody tr", (trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent.replace(/\s+/g, "")).join("|")));
+  check("人工 ケース4: 請求人工を3.5→2に変更しても稼働人数（4人）・人工（4）は変わらない", d2b.companies[1].billingManDays === "2" && d2b.companies[1].actualWorkerCount === "4" && rowsB[1] === rows[1], rowsB[1]);
+  const [dlB] = await Promise.all([page.waitForEvent("download"), page.evaluate(async (id) => (await import("/js/reportPrint.js")).exportReportExcel(id), d2.id)]);
+  const xfB = path.join(dir, "d2b.xlsx"); await dlB.saveAs(xfB); const xB = (await readXlsx(xfB)).cells;
+  check("人工 ケース5: 請求人工・人工を変えても03-2の人数は変わらない（変更前と全セルが同じ・鳶工事4）", JSON.stringify(xB) === JSON.stringify(x) && xB.O7 === "4");
+  // 以前の版で「人工（請求用）」として保存した manDays は請求人工として読み、ダッシュボード・03-2には使わない
+  const legacyId = await page.evaluate(async (sid) => {
+    const { dbPut } = await import("/js/db.js"); const { stampNew } = await import("/js/utils.js");
+    const r = stampNew({ siteId: sid, date: "2026-09-03", companies: [{ companyId: "z", companyName: "サンプル内装", occupation: "内装", actualWorkerCount: "3", manDays: "1.5" }] });
+    await dbPut("reports", r); return r.id;
+  }, ids.siteId);
+  await page.goto(`${BASE}#/sites/${ids.siteId}/report/${legacyId}`); await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(400);
+  const legacyBilling = await page.inputValue(".company-row .billingManDays");
+  await page.goto(`${BASE}#/sites/${ids.siteId}`); await page.waitForSelector("#siteDashboard:not([hidden])");
+  await page.fill("#siteDashboard .dash-date-input", "2026-09-03"); await page.dispatchEvent("#siteDashboard .dash-date-input", "change"); await page.waitForTimeout(600);
+  const rowL = await page.$$eval("#siteDashboard .dash-vendors tbody tr", (trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent.replace(/\s+/g, "")).join("|")));
+  const legacyRec = await page.evaluate(async (id) => (await (await import("/js/db.js")).dbGet("reports", id)).companies[0], legacyId);
+  check("以前の版の「人工（請求用）」1.5: 請求人工欄に1.5と表示・ダッシュボードの人工は稼働人数の3・保存データは書き換えない", legacyBilling === "1.5" && rowL[0]?.startsWith("サンプル内装|内装|3人|-|3|") && legacyRec.manDays === "1.5" && legacyRec.billingManDays === undefined, `${legacyBilling} / ${rowL[0]}`);
 
   check("ページエラーが無い", errors.length === 0, errors.slice(0, 2).join(" / "));
   await ctx.close(); fs.rmSync(dir, { recursive: true, force: true });

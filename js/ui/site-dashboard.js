@@ -117,21 +117,17 @@ function render(model) {
       <p class="dash-sub">${d.confirmed ? "確認済み" : "未確認"}・${d.printed ? "印刷済み" : "未印刷"}</p>`
     : empty("この日の日誌はまだありません。");
 
-  // 業者別 稼働状況（稼働人数と人工は別の値。人工は日誌の「人工」に入力された値だけで、未入力は「未入力」）
+  // 業者別 稼働状況（人工は稼働人数を 1人＝1人工 として数えた現場集計の値。請求人工は表示しない）
   const fmtNum = (n) => (n == null ? "-" : Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, ""));
   const vendorRows = model.works.filter((w) => w.vendor || w.actual);
   const totalWorkers = vendorRows.reduce((s, w) => s + (w.actual || 0), 0);
-  const enteredManDays = vendorRows.filter((w) => w.manDays != null);
-  const totalManDays = enteredManDays.length ? enteredManDays.reduce((s, w) => s + w.manDays, 0) : null;
-  const missingManDays = vendorRows.length - enteredManDays.length;
-  // 人工の表示: 未入力は「未入力」、一部だけ入力なら「入力分の合計（未入力n社/日）」
-  const manDaysText = (value, missing, unit) => (value == null ? (missing ? "未入力" : "-") : missing ? `${fmtNum(value)}<br><small class="dash-sub">未入力${missing}${unit}</small>` : fmtNum(value));
+  const totalManDays = vendorRows.reduce((s, w) => s + (w.manDays || 0), 0);
   const vendorHtml = vendorRows.length
     ? `<div class="dash-table-wrap"><table class="dash-table dash-vendors">
         <thead><tr><th>業者</th><th>業種</th><th class="num">稼働人数</th><th>作業時間</th><th class="num">人工</th><th class="num">累計人工</th></tr></thead>
-        <tbody>${vendorRows.map((w) => `<tr><td><b>${escapeHtml(w.vendor || "（業者名なし）")}</b></td><td>${escapeHtml(w.occupation)}</td><td class="num dash-workers"><b>${w.actual ?? "-"}</b>人</td><td>${escapeHtml(w.hours || "-")}${w.hoursDuration ? `<br><small class="dash-sub">${escapeHtml(w.hoursDuration)}</small>` : ""}</td><td class="num">${w.manDays == null ? `<span class="dash-sub">未入力</span>` : fmtNum(w.manDays)}</td><td class="num">${manDaysText(w.cumulativeManDays, w.cumulativeManDaysMissing, "日")}</td></tr>`).join("")}</tbody>
-        <tfoot><tr><th colspan="2">合計（${vendorRows.length}社）</th><th class="num"><b>${totalWorkers}</b>人</th><th></th><th class="num">${manDaysText(totalManDays, missingManDays, "社")}</th><th></th></tr></tfoot>
-      </table></div><p class="dash-sub">人工は日誌の業者ごとの「人工（請求用）」に入力された値だけです。未入力の業者は「未入力」とし、稼働人数から人工を計算しません（合計・累計は入力された人工だけの合計）。</p>`
+        <tbody>${vendorRows.map((w) => `<tr><td><b>${escapeHtml(w.vendor || "（業者名なし）")}</b></td><td>${escapeHtml(w.occupation)}</td><td class="num dash-workers"><b>${w.actual ?? "-"}</b>人</td><td>${escapeHtml(w.hours || "-")}${w.hoursDuration ? `<br><small class="dash-sub">${escapeHtml(w.hoursDuration)}</small>` : ""}</td><td class="num">${fmtNum(w.manDays)}</td><td class="num">${fmtNum(w.cumulativeManDays)}</td></tr>`).join("")}</tbody>
+        <tfoot><tr><th colspan="2">合計（${vendorRows.length}社）</th><th class="num"><b>${totalWorkers}</b>人</th><th></th><th class="num">${fmtNum(totalManDays)}</th><th></th></tr></tfoot>
+      </table></div><p class="dash-sub">人工は稼働人数を1人＝1人工として数えた現場集計の値です。</p>`
     : empty(model.reportId ? "日誌の業者欄に入力すると、ここに業者別の稼働人数が表示されます。" : "この日の日誌はまだありません。");
   const textCard = (text, none) => (text ? `<p class="dash-notice">${escapeHtml(text).replace(/\n/g, "<br>")}</p>` : empty(model.reportId ? none : "この日の日誌はまだありません。"));
   const focusHtml = textCard(model.diary?.focusInstructions, "日誌の「本日の重点指示」に入力すると、ここに表示されます。");
@@ -173,7 +169,7 @@ function render(model) {
     <dl class="dash-checks">${model.checks.map((c) => `<dt>${escapeHtml(c.label)}</dt><dd class="lv-${c.level}">${escapeHtml(c.value)}</dd>`).join("")}</dl>`;
   // 昨日 → 今日（片方の日報が無ければ比較しない）
   const cmp = model.compare;
-  const fig = (x, key, unit) => (!x ? "日報なし" : x.state ? x.state : x[key] == null ? "未入力" : `${fmtNum(x[key])}${unit}${key === "manDays" && x.manDaysMissing ? `（未入力${x.manDaysMissing}社）` : ""}`);
+  const fig = (x, key, unit) => (!x ? "日報なし" : x.state ? x.state : x[key] == null ? "未入力" : `${fmtNum(x[key])}${unit}`);
   const cmpRows = [["作業員", "workers", "人"], ["人工", "manDays", ""], ["進捗率", "progress", "%"], ["業者数", "vendors", "社"]]
     .map(([label, key, unit]) => `<tr><th>${label}</th><td>${escapeHtml(fig(cmp.prev, key, unit))}</td><td>→</td><td><b>${escapeHtml(fig(cmp.now, key, unit))}</b></td></tr>`).join("");
   const md2 = (iso) => { const [, m2, d2] = iso.split("-").map(Number); return `${m2}/${d2}`; };
@@ -184,7 +180,7 @@ function render(model) {
       ${ov.constructionNumber ? `<dt>工事番号</dt><dd>${escapeHtml(ov.constructionNumber)}</dd>` : ""}
       <dt>進捗率</dt><dd>${ov.progress != null ? `${ov.progress}%` : "未入力"}</dd>
       <dt>本日稼働</dt><dd>${ov.workers != null ? `${ov.workers}人` : escapeHtml(ov.stateLabel)}</dd>
-      <dt>人工</dt><dd>${ov.manDays != null ? `${fmtNum(ov.manDays)}${ov.manDaysMissing ? `（未入力${ov.manDaysMissing}社）` : ""}` : ov.manDaysMissing ? "未入力" : "-"}</dd>
+      <dt>人工</dt><dd>${ov.manDays != null ? fmtNum(ov.manDays) : "-"}</dd>
       <dt>業者</dt><dd>${ov.vendors != null ? `${ov.vendors}社` : "-"}</dd>
       <dt>要確認</dt><dd>${ov.attentionCount}件</dd>
     </dl>${ov.focus ? `<p class="dash-sub">本日の重点指示: ${escapeHtml(ov.focus)}</p>` : ""}`;
