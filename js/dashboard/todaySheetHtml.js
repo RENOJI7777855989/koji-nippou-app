@@ -24,7 +24,7 @@ export function buildTodaySheetHtml(model) {
 
   // 流れが多い日は2列に分けて並べる（左列→右列の順に時刻順）。
   // 搬入・搬出の業者・元→先は右の「本日の搬入・搬出」の表に載るので、流れでは1行（時刻・品名・区分）にする
-  const flowRow = (f) => `<tr class="${f.kind === "delivery" ? `dlv${f.direction === "out" ? " out" : ""}` : ""}${f.cancelled ? " cancelled" : ""}"><td class="t">${esc(f.time || "")}</td><td class="mk">${f.mark}</td><td class="ti">${esc(f.title)}${f.note && f.kind !== "delivery" ? `<div class="nt">${esc(f.note)}</div>` : ""}</td><td class="st">${esc(f.status || "")}</td></tr>`;
+  const flowRow = (f) => `<tr class="${f.kind === "delivery" ? `dlv${f.direction === "out" ? " out" : ""}` : ""}${f.cancelled ? " cancelled" : ""}"><td class="t">${esc(f.time || "")}</td><td class="mk">${f.mark}</td><td class="ti">${f.kind !== "delivery" && f.flowKind !== "work" && f.kindLabel && f.title !== f.kindLabel ? `<span class="kd">${esc(f.kindLabel)}</span>` : ""}${esc(f.title)}${f.note && f.kind !== "delivery" ? `<div class="nt">${esc(f.note)}</div>` : ""}</td><td class="st">${esc(f.status || "")}</td></tr>`;
   const FLOW_TWO_COLUMNS_FROM = 18;
   const flowTable = (rows) => `<table class="flow">${rows.map(flowRow).join("")}</table>`;
   const flow = !model.flow.length
@@ -54,8 +54,8 @@ export function buildTodaySheetHtml(model) {
       </table></div>`;
 
   const works = model.works.length
-    ? `<table class="works"><thead><tr><th>業者</th><th>職種</th><th>予定/実績</th><th>作業時間</th><th>作業内容</th><th>職長</th><th>備考</th></tr></thead><tbody>${model.works
-        .map((w) => `<tr><td>${esc(w.vendor)}</td><td>${esc(w.occupation)}</td><td class="c">${w.planned ?? ""} / ${w.actual ?? ""}</td><td>${esc(w.hours)}</td><td>${br(w.content)}</td><td>${esc(w.foreman)}</td><td>${esc([w.notes, w.machinery ? "機械：" + w.machinery : ""].filter(Boolean).join("／"))}</td></tr>`)
+    ? `<table class="works"><thead><tr><th>業者</th><th>職種</th><th>予定/実績</th><th>作業時間</th><th>作業内容</th><th>職長</th><th>安全注意事項・使用機械</th></tr></thead><tbody>${model.works
+        .map((w) => `<tr><td>${esc(w.vendor)}</td><td>${esc(w.occupation)}</td><td class="c">${w.planned ?? ""} / ${w.actual ?? ""}</td><td>${esc(w.hours)}</td><td>${br(w.content)}</td><td>${esc(w.foreman)}</td><td>${br([w.notes, w.machinery ? "機械：" + w.machinery : ""].filter(Boolean).join("\n"))}</td></tr>`)
         .join("")}</tbody></table>`
     : "";
 
@@ -139,7 +139,8 @@ export function buildTodaySheetHtml(model) {
   .flow .mk { width: 6mm; text-align: center; color: #2b6cb0; }
   .flow .dlv .mk { color: #b7791f; }
   .flow .ti { font-size: 1.1em; }
-  .flow .nt { font-size: 0.85em; color: #444; }
+  .flow .nt, .works .nt { font-size: 0.85em; color: #444; }
+  .flow .kd { display: inline-block; font-size: 0.8em; border: 0.2mm solid #2b6cb0; color: #2b6cb0; border-radius: 1mm; padding: 0 1mm; margin-right: 1.5mm; }
   .flow .st { width: 3.4em; text-align: right; color: #555; white-space: nowrap; }
   .cancelled { text-decoration: line-through; color: #888; }
   .flow .dlv.out .mk { color: #2c7a7b; }

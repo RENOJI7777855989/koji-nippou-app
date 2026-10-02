@@ -17,7 +17,7 @@ import { PATROL_CHECKLIST_ITEMS, PATROL_STATUS_OPTIONS } from "../patrolChecklis
 import { hasPermission, canAccessSite } from "../auth.js";
 import { showView, showMessage } from "./common.js";
 import { navigate } from "../router.js";
-import { FLOW_KINDS, FLOW_STATUSES, DELIVERY_DIRECTIONS, DELIVERY_STATUSES, directionOf, normalizeFlowRow, normalizeDeliveryRow } from "../dashboard/dailyFlow.js";
+import { FLOW_KINDS, FLOW_STATUSES, DELIVERY_DIRECTIONS, DELIVERY_STATUSES, WORK_TIME_OPTIONS, directionOf, normalizeFlowRow, normalizeDeliveryRow, parseWorkHours, formatWorkHours, workMinutes, durationLabel } from "../dashboard/dailyFlow.js";
 
 const reportSaveBtn = document.getElementById("reportSaveBtn");
 
@@ -119,6 +119,52 @@ function recalcWorkerCountTotal() {
   workerCountTotalInput.value = total;
 }
 
+/**
+ * 作業時間（開始・終了を30分刻みで選ぶ）。保存は従来どおり workHours の文字列（"08:00～17:00"）で、
+ * 非表示の .workHours に入れておく（保存・削除確認などの処理は従来の .workHours を読む）。
+ * 以前に手入力した作業時間は読み取って開始・終了に入れる。30分刻みでない時刻（例 08:15）は選択肢に足す。
+ * 読み取れない自由入力（例「朝から夕方」）は消さずにそのまま残し、開始・終了を選んだときだけ置き換える。
+ */
+function setupWorkHours(row, saved) {
+  const startSel = row.querySelector(".workStart");
+  const endSel = row.querySelector(".workEnd");
+  const hidden = row.querySelector(".workHours");
+  const info = row.querySelector(".workHoursInfo");
+  const parsed = parseWorkHours(saved);
+  const fill = (sel, extra) => {
+    const times = [...new Set([...WORK_TIME_OPTIONS, ...(extra ? [extra] : [])])].sort();
+    sel.innerHTML = `<option value="">--:--</option>` + times.map((t) => `<option value="${t}">${t}</option>`).join("");
+  };
+  fill(startSel, parsed?.start);
+  fill(endSel, parsed?.end);
+  startSel.value = parsed?.start || "";
+  endSel.value = parsed?.end || "";
+  const legacy = !parsed && saved.trim() ? saved.trim() : "";
+  hidden.value = saved;
+  const update = () => {
+    const start = startSel.value;
+    const end = endSel.value;
+    if (start && end) hidden.value = formatWorkHours(start, end);
+    else if (start || end) hidden.value = `${start}～${end}`;
+    else hidden.value = legacy; // 何も選んでいなければ、以前の自由入力をそのまま残す
+    const minutes = workMinutes(start, end);
+    info.textContent = start && end
+      ? minutes == null ? "終了が開始より前です（日をまたぐ作業は時間を計算しません）" : `${durationLabel(minutes)}（開始～終了）`
+      : legacy ? `以前の入力: ${legacy}（開始・終了を選ぶと置き換わります）` : "";
+  };
+  startSel.addEventListener("change", () => {
+    // 開始だけ選んだときは、終了の初期値を開始の9時間後（8:00なら17:00）にして選びやすくする
+    if (startSel.value && !endSel.value) {
+      const [h, m] = startSel.value.split(":").map(Number);
+      const t = `${String(h + 9).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+      if (h + 9 < 24 && [...endSel.options].some((o) => o.value === t)) endSel.value = t;
+    }
+    update();
+  });
+  endSel.addEventListener("change", update);
+  update();
+}
+
 function addCompanyRow(data = {}) {
   const row = document.createElement("div");
   row.className = "company-row";
@@ -138,9 +184,16 @@ function addCompanyRow(data = {}) {
     <label>実績人数
       <input type="number" class="actualWorkerCount" min="0" placeholder="例）5">
     </label>
-    <label>作業時間
-      <input type="text" class="workHours" placeholder="例）8:00～17:00">
-    </label>
+    <div class="work-hours-field">
+      <span class="work-hours-label">作業時間</span>
+      <span class="work-hours-picker">
+        <select class="workStart" aria-label="作業の開始時刻"></select>
+        <span>～</span>
+        <select class="workEnd" aria-label="作業の終了時刻"></select>
+      </span>
+      <small class="workHoursInfo"></small>
+      <input type="hidden" class="workHours">
+    </div>
     <label class="full-row">使用機械
       <input type="text" class="machinery" placeholder="例）バックホウ">
     </label>
@@ -170,7 +223,7 @@ function addCompanyRow(data = {}) {
   row.querySelector(".plannedWorkerCount").value = data.plannedWorkerCount || "";
   row.querySelector(".actualWorkerCount").value = data.actualWorkerCount || "";
   row.querySelector(".machinery").value = data.machinery || "";
-  row.querySelector(".workHours").value = data.workHours || "";
+  setupWorkHours(row, data.workHours || "");
   row.querySelector(".workContent").value = data.workContent || "";
   row.querySelector(".safetyNotes").value = data.safetyNotes || "";
   row.querySelector(".foremanName").value = data.foremanName || "";
@@ -228,7 +281,7 @@ addCompanyBtn.addEventListener("click", () => addCompanyRow());
 
 // ================= 本日の現場の流れ・搬入・搬出（現場ダッシュボード用。日誌に入力する） =================
 
-const optionsHtml = (list, selected) => list.map((o) => `<option value="${o.value}"${o.value === selected ? " selected" : ""}>${escapeHtml(o.label)}</option>`).join("");
+const optionsHtml = (list, selected) => list.filter((o) => !o.legacy || o.value === selected).map((o) => `<option value="${o.value}"${o.value === selected ? " selected" : ""}>${escapeHtml(o.label)}</option>`).join("");
 
 function addTimelineRow(data = {}) {
   const row = document.createElement("div");
@@ -237,8 +290,8 @@ function addTimelineRow(data = {}) {
   row.innerHTML = `
     <label>時刻<input type="time" class="flowTime" step="300"></label>
     <label>種別<select class="flowKind">${optionsHtml(FLOW_KINDS, data.kind || "work")}</select></label>
-    <label class="full-row">内容<input type="text" class="flowTitle" placeholder="例）朝礼・KY／型枠工事／配筋検査"></label>
-    <label>予定・実績<select class="flowStatus">${optionsHtml(FLOW_STATUSES, data.status || "plan")}</select></label>
+    <label class="full-row">内容<input type="text" class="flowTitle" placeholder="例）全体朝礼・KY／○○工事打合せ／3階巡回"></label>
+    <label>状態（予定／実施済み）<select class="flowStatus">${optionsHtml(FLOW_STATUSES, data.status || "plan")}</select></label>
     <label class="full-row">メモ<input type="text" class="flowNote" placeholder="任意"></label>
     <button type="button" class="removeRowBtn secondary-btn">この行を削除</button>`;
   row.querySelector(".flowTime").value = data.time || "";

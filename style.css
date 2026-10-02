@@ -1721,3 +1721,17 @@ dialog h3 {
 
 /* 現場フォーム: 日報のExcel様式の説明（今使っている様式・保存するとどうなるか） */
 #siteFormReportTemplateHint { display: block; white-space: pre-line; margin-top: 4px; }
+
+/* 日報: 業者ごとの作業時間（開始～終了を選ぶ） */
+.work-hours-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.work-hours-label { font-weight: bold; }
+.work-hours-picker { display: flex; align-items: center; gap: 6px; }
+.work-hours-picker select { flex: 1 1 0; min-width: 0; min-height: 44px; margin: 0; }
+.workHoursInfo { color: #4a5568; }
+
+/* ダッシュボード: 流れの種別・安全注意事項・連絡事項・巡回点検 */
+.dash-kind { display: inline-block; font-size: 12px; font-weight: bold; color: #2b6cb0; background: #ebf4ff; border: 1px solid #c3dafe; border-radius: 4px; padding: 0 6px; margin-right: 6px; vertical-align: 1px; }
+.dash-safety { padding: 4px 0 6px; border-bottom: 1px dashed #ddd; }
+.dash-safety ul, .dash-bad { margin: 4px 0 0; padding-left: 1.3em; }
+.dash-notice { margin: 4px 0; font-size: 15px; }
+.dash-bad li { color: #b42318; }

@@ -152,7 +152,7 @@ async function render(model, mapping, companyProfile) {
       <div class="info-item"><dt>天気</dt><dd>${escapeHtml(model.report.weather)} ${escapeHtml(model.report.temperature)}</dd></div>
       <div class="info-item"><dt>作業人数（合計）</dt><dd>${escapeHtml(model.report.workerCountTotal) || "0"}人</dd></div>
       <div class="info-item wide"><dt>明日の予定</dt><dd>${escapeHtml(model.report.tomorrowPlan) || "-"}</dd></div>
-      <div class="info-item wide" style="grid-column: 1 / -1;"><dt>備考</dt><dd>${escapeHtml(model.report.remarks) || "-"}</dd></div>
+      <div class="info-item wide" style="grid-column: 1 / -1;"><dt>連絡事項</dt><dd>${escapeHtml(model.report.remarks) || "-"}</dd></div>
     </div>
   </section>
 

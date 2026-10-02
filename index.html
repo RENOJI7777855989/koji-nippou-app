@@ -243,7 +243,7 @@
         <button type="button" id="addCompanyBtn">＋ 業者を追加</button>
 
         <h3>本日の現場の流れ（時刻順に現場ダッシュボード・今日の現場シートへ表示）</h3>
-        <p class="app-subtitle">朝礼・作業・検査などを時刻つきで何件でも登録できます。搬入・搬出は下の「搬入・搬出」に入れると、流れにも自動で表示されます（搬入◆・搬出◇）。</p>
+        <p class="app-subtitle">朝礼・打ち合わせ・昼礼・現場巡回・作業などを時刻つきで何件でも登録できます。搬入・搬出は下の「搬入・搬出」に入れると、流れにも自動で表示されます（搬入◆・搬出◇）。</p>
         <div id="timelineContainer"></div>
         <button type="button" id="addTimelineBtn" class="secondary-btn">＋ 予定・作業を追加</button>
 
@@ -257,8 +257,9 @@
         <label>明日の予定
           <textarea id="tomorrowPlan" rows="3"></textarea>
         </label>
-        <label>備考
-          <textarea id="remarks" rows="3"></textarea>
+        <label>連絡事項
+          <textarea id="remarks" rows="3" placeholder="例）○○搬入予定、明日の作業変更、元請からの連絡など"></textarea>
+          <small class="empty-message">現場ダッシュボード・今日の現場シートの「連絡事項」に表示されます（以前の「備考」と同じ欄です）。</small>
         </label>
 
         <h3>巡回点検記録</h3>

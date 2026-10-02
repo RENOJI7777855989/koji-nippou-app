@@ -57,7 +57,7 @@ function render(model) {
         .map((f) => `<li class="dash-flow-item${f.kind === "delivery" ? ` is-delivery${f.direction === "out" ? " is-out" : ""}` : ""}${f.cancelled ? " is-cancelled" : ""}">
           <span class="dash-flow-time">${escapeHtml(f.time || "--:--")}</span>
           <span class="dash-flow-mark" aria-hidden="true">${f.mark}</span>
-          <span class="dash-flow-body"><span class="dash-flow-title">${escapeHtml(f.title)}</span>${f.note ? `<span class="dash-flow-note">${escapeHtml(f.note)}</span>` : ""}</span>
+          <span class="dash-flow-body"><span class="dash-flow-title">${f.kind !== "delivery" && f.kindLabel && f.title !== f.kindLabel ? `<span class="dash-kind">${escapeHtml(f.kindLabel)}</span>` : ""}${escapeHtml(f.title)}</span>${f.note ? `<span class="dash-flow-note">${escapeHtml(f.note)}</span>` : ""}</span>
           ${f.status ? `<span class="dash-badge">${escapeHtml(f.status)}</span>` : ""}
         </li>`)
         .join("")}</ol>`
@@ -88,6 +88,7 @@ function render(model) {
     <div class="dash-big">${s.today}<small>人</small></div>
     <p class="dash-sub">本日の実績人数${s.plannedToday ? `（予定 ${s.plannedToday}人）` : ""}</p>
     <dl class="dash-dl dash-dl-row">
+      ${s.byOccupation.map((o) => `<dt>${escapeHtml(o.occupation)}</dt><dd>${o.count}人</dd>`).join("")}
       <dt>職長</dt><dd>${s.foremen}人</dd><dt>業者</dt><dd>${s.vendors}社</dd>
       ${s.supervisors ? `<dt>現場監督</dt><dd>${s.supervisors}人</dd>` : ""}
       <dt>累計</dt><dd>${s.cumulative.toLocaleString()}人</dd>
@@ -104,6 +105,20 @@ function render(model) {
       <p class="dash-sub">${d.confirmed ? "確認済み" : "未確認"}・${d.printed ? "印刷済み" : "未印刷"}</p>`
     : empty("この日の日誌はまだありません。");
 
+  // 業者別の安全注意事項・連絡事項・巡回点検（いずれも日誌の入力から）
+  const safetyHtml = model.safety.length
+    ? model.safety.map((v) => `<div class="dash-safety"><b>${escapeHtml(v.vendor)}</b>${v.occupation ? ` <span class="dash-sub">${escapeHtml(v.occupation)}</span>` : ""}<ul>${v.items.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul></div>`).join("")
+    : empty(model.reportId ? "日誌の業者ごとの「安全注意事項」に入力すると、ここに業者別に表示されます。" : "この日の日誌はまだありません。");
+  const notice = model.diary?.remarks || "";
+  const noticeHtml = notice ? `<p class="dash-notice">${escapeHtml(notice).replace(/\n/g, "<br>")}</p>` : empty(model.reportId ? "日誌の「連絡事項」に入力すると、ここに表示されます。" : "この日の日誌はまだありません。");
+  const p = model.patrol;
+  const patrolHtml = p
+    ? `<dl class="dash-dl dash-dl-row"><dt>良好 ○</dt><dd>${p.good}</dd><dt>不良 ×</dt><dd>${p.bad}</dd><dt>該当なし</dt><dd>${p.na}</dd><dt>未確認</dt><dd>${p.unset}</dd></dl>
+      ${p.badItems.length ? `<p class="dash-sub">不良の項目</p><ul class="dash-bad">${p.badItems.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>` : ""}
+      ${p.comment ? `<p class="dash-sub">是正指示</p><p>${escapeHtml(p.comment).replace(/\n/g, "<br>")}</p>` : ""}
+      ${p.inspector ? `<p class="dash-sub">巡回者: ${escapeHtml(p.inspector)}</p>` : ""}`
+    : empty("この日の日誌はまだありません。");
+
   const st = model.status;
   const statusRow = (label, value, filter) =>
     `<button type="button" class="dash-status-row"${filter ? ` data-filter="${filter}"` : " disabled"}><span>${label}</span><b>${value == null ? "-" : value}</b></button>`;
@@ -118,9 +133,9 @@ function render(model) {
 
   const worksHtml = model.works.length
     ? `<div class="dash-table-wrap"><table class="dash-table">
-        <thead><tr><th>業者</th><th>職種</th><th>予定/実績</th><th>作業時間</th><th>作業内容</th><th>職長</th><th>備考</th></tr></thead>
+        <thead><tr><th>業者</th><th>職種</th><th>予定/実績</th><th>作業時間</th><th>作業内容</th><th>職長</th><th>使用機械</th></tr></thead>
         <tbody>${model.works
-          .map((w) => `<tr><td>${escapeHtml(w.vendor)}</td><td>${escapeHtml(w.occupation)}</td><td class="num">${w.planned ?? "-"} / ${w.actual ?? "-"}</td><td>${escapeHtml(w.hours)}</td><td>${escapeHtml(w.content)}</td><td>${escapeHtml(w.foreman)}</td><td>${escapeHtml([w.notes, w.machinery ? "機械：" + w.machinery : ""].filter(Boolean).join("／"))}</td></tr>`)
+          .map((w) => `<tr><td>${escapeHtml(w.vendor)}</td><td>${escapeHtml(w.occupation)}</td><td class="num">${w.planned ?? "-"} / ${w.actual ?? "-"}</td><td>${escapeHtml(w.hours)}${w.hoursDuration ? `<br><small class="dash-sub">${escapeHtml(w.hoursDuration)}</small>` : ""}</td><td>${escapeHtml(w.content)}</td><td>${escapeHtml(w.foreman)}</td><td>${escapeHtml(w.machinery)}</td></tr>`)
           .join("")}</tbody></table></div>`
     : empty("本日の作業（日誌の業者欄）はまだありません。");
 
@@ -149,8 +164,11 @@ function render(model) {
       <section class="dash-card dash-card-flow"><h3>本日の現場の流れ</h3>${flowHtml}</section>
       <section class="dash-card"><h3>🚚 本日の搬入・搬出${model.deliveries.length ? `<span class="dash-dlv-count">搬入${inCount}件・搬出${outCount}件</span>` : ""}</h3>${deliveryHtml}</section>
       <section class="dash-card"><h3>👷 本日の人員</h3>${staffHtml}</section>
+      <section class="dash-card"><h3>📢 連絡事項</h3>${noticeHtml}</section>
+      <section class="dash-card"><h3>⚠️ 本日の安全注意事項（業者別）</h3>${safetyHtml}</section>
       <section class="dash-card"><h3>📋 今日の日誌</h3>${diaryHtml}</section>
       <section class="dash-card"><h3>📊 日誌状況</h3>${statusHtml}</section>
+      <section class="dash-card"><h3>🔍 巡回点検（03-2の巡回点検記録）</h3>${patrolHtml}</section>
       <section class="dash-card dash-card-wide"><h3>本日の作業</h3>${worksHtml}</section>
     </div>
     <div class="dash-actions">

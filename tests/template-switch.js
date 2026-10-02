@@ -122,7 +122,7 @@ const sha = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
   check("D 既存の日報（業者・署名・搬入・搬出・流れ・作業時間）が変わっていない", (await snapshot()) === dataBefore);
   await page.goto(`${BASE}#/sites/${ids.siteId}/report/${ids.reportId}`); await page.waitForSelector("#view-report-form:not([hidden])");
   const form = await page.evaluate(() => ({ name: document.querySelector(".company-row .companyName").value, hours: document.querySelector(".company-row .workHours").value, dl: document.querySelectorAll(".delivery-row").length }));
-  check("D 日報を開くと内容が入っている", form.name === "株式会社サンプル建設工業協力会社" && form.hours === "8:00～17:00" && form.dl === 2, JSON.stringify(form));
+  check("D 日報を開くと内容が入っている", form.name === "株式会社サンプル建設工業協力会社" && form.hours === "08:00～17:00" && form.dl === 2, JSON.stringify(form));
 
   // ---- E Excel・PDF・印刷・台帳が同梱の03-2を使う ----
   const [dl2] = await Promise.all([page.waitForEvent("download"), page.evaluate(async (id) => { const r = await (await import("/js/reportPrint.js")).exportReportExcel(id); window.__usedTpl = r.company?.templateId; }, ids.reportId)]);

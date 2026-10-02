@@ -46,11 +46,11 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
   await page.selectOption("#weather", "晴れ"); await page.fill("#temperature", "25");
   const r1 = page.locator(".company-row").first();
   await r1.locator(".companyName").fill("山田型枠"); await r1.locator(".occupation").fill("型枠工"); await r1.locator(".plannedWorkerCount").fill("6"); await r1.locator(".actualWorkerCount").fill("5");
-  await r1.locator(".workHours").fill("8:00～17:00"); await r1.locator(".workContent").fill("2階型枠建込"); await r1.locator(".foremanName").fill("山田");
+  await r1.locator(".workStart").selectOption("08:00"); await r1.locator(".workEnd").selectOption("17:00"); await r1.locator(".workContent").fill("2階型枠建込"); await r1.locator(".foremanName").fill("山田");
   await page.click("#addCompanyBtn");
   const r2 = page.locator(".company-row").nth(1);
   await r2.locator(".companyName").fill("佐藤鉄筋"); await r2.locator(".occupation").fill("鉄筋工"); await r2.locator(".actualWorkerCount").fill("4"); await r2.locator(".workContent").fill("2階配筋");
-  const flows = [["08:00", "meeting", "朝礼・KY", "done"], ["13:00", "work", "午後作業", "plan"], ["17:00", "other", "片付け", "plan"], ["08:30", "work", "型枠工事", "done"]];
+  const flows = [["08:00", "chorei", "朝礼・KY", "done"], ["13:00", "work", "午後作業", "plan"], ["17:00", "other", "片付け", "plan"], ["08:30", "work", "型枠工事", "done"]];
   for (const [t, k, title, st] of flows) {
     await page.click("#addTimelineBtn");
     const row = page.locator(".timeline-row").last();
@@ -85,12 +85,12 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
   await page.fill("#tomorrowPlan", "3階床配筋"); await page.fill("#remarks", "北側道路の片側通行に注意");
   await page.click("#reportSaveBtn"); await page.waitForSelector("#view-site-detail:not([hidden])");
   const rep = await page.evaluate(async () => (await (await import("/js/db.js")).dbGetAll("reports"))[0]);
-  check("4 日誌に「本日の現場の流れ」4件・搬入2件（全項目）・作業時間を保存（空の行は保存しない）", rep.timeline.length === 4 && rep.deliveries.filter((d) => d.direction === "in").length === 2 && rep.deliveries.some((d) => d.direction === "in" && d.origin === "○○工場" && d.destination === "北側ゲート" && d.vehicle === "10t車" && d.note.includes("誘導員") && d.status === "done") && rep.companies[0].workHours === "8:00～17:00", JSON.stringify({ t: rep.timeline.length, d: rep.deliveries.length }));
+  check("4 日誌に「本日の現場の流れ」4件・搬入2件（全項目）・作業時間を保存（空の行は保存しない）", rep.timeline.length === 4 && rep.deliveries.filter((d) => d.direction === "in").length === 2 && rep.deliveries.some((d) => d.direction === "in" && d.origin === "○○工場" && d.destination === "北側ゲート" && d.vehicle === "10t車" && d.note.includes("誘導員") && d.status === "done") && rep.companies[0].workHours === "08:00～17:00", JSON.stringify({ t: rep.timeline.length, d: rep.deliveries.length }));
   check("B3 搬入2件・搬出2件を1つの日誌に複数登録でき、搬出は区分 out・元／先・車両・状況・備考つきで保存される", rep.deliveries.length === 4 && rep.deliveries.filter((d) => d.direction === "out").length === 2 && rep.deliveries.some((d) => d.direction === "out" && d.item === "残土" && d.origin === "現場" && d.destination === "○○処分場" && d.vehicle === "10tダンプ" && d.status === "done" && d.note === "マニフェスト持参"), JSON.stringify(rep.deliveries.map((d) => d.direction + ":" + d.item)));
 
   // ===== ダッシュボードへ自動反映 =====
   await page.waitForFunction(() => document.querySelectorAll("#siteDashboard .dash-flow-item").length > 0);
-  const flowItems = await page.$$eval("#siteDashboard .dash-flow-item", (els) => els.map((e) => `${e.querySelector(".dash-flow-time").textContent}${e.querySelector(".dash-flow-mark").textContent}${e.querySelector(".dash-flow-title").textContent}`));
+  const flowItems = await page.$$eval("#siteDashboard .dash-flow-item", (els) => els.map((e) => `${e.querySelector(".dash-flow-time").textContent}${e.querySelector(".dash-flow-mark").textContent}${(() => { const t = e.querySelector(".dash-flow-title").cloneNode(true); t.querySelector(".dash-kind")?.remove(); return t.textContent; })()}`));
   check("5 B5 B7 本日の現場の流れが時刻順に表示され、搬入◆・搬出◇が日誌の搬入・搬出から自動的に入る（二重入力なし）", flowItems.join(",") === "08:00●朝礼・KY,08:30●型枠工事,10:00◆鉄筋　10t 搬入,13:00●午後作業,13:00◇残土　8m3 搬出,15:00◆仮設材　1式 搬入,16:00◇型枠材　2t 搬出,17:00●片付け", flowItems.join(" / "));
   const outFlowClass = await page.$$eval("#siteDashboard .dash-flow-item.is-out", (els) => els.length);
   check("B7 流れの搬出は搬入と色を分ける（is-out）", outFlowClass === 2);
@@ -107,7 +107,7 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
   const detail = await page.locator("#siteDashboard .dash-delivery").first().textContent();
   check("6 搬入をタップすると詳細（搬入元・搬入先・車両・備考）が見える", detail.includes("○○工場") && detail.includes("10t車") && detail.includes("誘導員1名配置"), detail.replace(/\s+/g, " ").slice(0, 100));
   check("7 本日の人員: 実績9人（予定6）・職長1人・業者2社・累計9人・延べ労働時間72時間", /9人/.test(dash) && dash.includes("予定 6人") && dash.includes("職長1人") && dash.includes("業者2社") && dash.includes("累計9人") && dash.includes("延べ労働時間72時間"), dash.match(/本日の人員[\s\S]{0,120}/)?.[0].replace(/\s+/g, " "));
-  check("8 本日の作業: 業者・職種・予定/実績・作業時間・作業内容・職長", dash.includes("山田型枠") && dash.includes("8:00～17:00") && dash.includes("2階型枠建込") && dash.includes("6 / 5"));
+  check("8 本日の作業: 業者・職種・予定/実績・作業時間・作業内容・職長", dash.includes("山田型枠") && dash.includes("08:00～17:00") && dash.includes("9時間") && dash.includes("2階型枠建込") && dash.includes("6 / 5"));
   check("9 今日の日誌: 天候・気温・作業・明日の予定", dash.includes("晴れ　25℃") && dash.includes("3階床配筋"));
   const status = await page.$$eval("#siteDashboard .dash-status-row", (els) => Object.fromEntries(els.map((e) => [e.querySelector("span").textContent, e.querySelector("b").textContent])));
   check("10 日誌状況: 提出予定4・未提出3・未署名1・未承認1・未印刷1", status["提出予定"] === "4" && status["未提出"] === "3" && status["未署名"] === "1" && status["未承認（未確認）"] === "1" && status["未印刷"] === "1", JSON.stringify(status));
@@ -130,7 +130,7 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
   const reloadedDirs = await page.$$eval(".delivery-row", (rows) => rows.map((r) => `${r.querySelector(".dlvDirection").value}:${r.querySelector(".dlvItem").value}:${r.querySelector("[data-label=origin]").textContent}`));
   check("B4 保存した日誌を開き直すと、搬入・搬出の区分と項目名（搬入元／搬出元）がそのまま", reloadedDirs.join(",") === "in:仮設材:搬入元,in:鉄筋:搬入元,out:型枠材:搬出元,out:残土:搬出元", reloadedDirs.join(","));
   const reopened = { flow: await page.locator(".timeline-row").count(), hours: await page.locator(".company-row .workHours").first().inputValue(), note: await page.locator(".delivery-row .dlvNote").nth(1).inputValue() };
-  check("4 保存した日誌を開き直すと、流れ・搬入・作業時間が入っている", reopened.flow === 4 && reopened.hours === "8:00～17:00" && reopened.note.includes("誘導員"), JSON.stringify(reopened));
+  check("4 保存した日誌を開き直すと、流れ・搬入・作業時間が入っている", reopened.flow === 4 && reopened.hours === "08:00～17:00" && reopened.note.includes("誘導員"), JSON.stringify(reopened));
   await page.click("#reportCancelBtn"); await page.waitForSelector("#view-site-detail:not([hidden])");
 
   // ===== A3横「今日の現場シート」=====
@@ -214,7 +214,7 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
   await page.fill("#siteDashboard .dash-date-input", legacy.date); await page.dispatchEvent("#siteDashboard .dash-date-input", "change");
   await page.waitForFunction(() => document.getElementById("siteDashboard").textContent.includes("旧搬入の日"));
   const legacyRows = await page.$$eval("#siteDashboard .dash-delivery summary", (els) => els.map((e) => e.textContent.replace(/\s+/g, "")));
-  const legacyFlow = await page.$$eval("#siteDashboard .dash-flow-item", (els) => els.map((e) => e.querySelector(".dash-flow-mark").textContent + e.querySelector(".dash-flow-title").textContent));
+  const legacyFlow = await page.$$eval("#siteDashboard .dash-flow-item", (els) => els.map((e) => e.querySelector(".dash-flow-mark").textContent + (() => { const t = e.querySelector(".dash-flow-title").cloneNode(true); t.querySelector(".dash-kind")?.remove(); return t.textContent; })()));
   check("B1 区分の無い従来の搬入データが「◆ 搬入」として時刻順に表示される（状況 done は「完了」）", legacyRows.length === 2 && legacyRows[0] === "09:00◆搬入H鋼3t完了旧鋼材旧工場→北側ゲート" && legacyRows[1].startsWith("14:00◆搬入合板50枚予定") && legacyFlow.join(",") === "●朝礼,◆H鋼　3t 搬入,◆合板　50枚 搬入", legacyRows.join(" | ") + " / " + legacyFlow.join(","));
   const stored = await page.evaluate(async (id) => JSON.stringify((await (await import("/js/db.js")).dbGet("reports", id)).deliveries), legacy.id);
   check("B1 表示しただけでは従来のデータを書き換えない（保存済みの搬入データは元のまま）", stored === legacy.before);
