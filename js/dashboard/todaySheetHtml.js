@@ -5,7 +5,7 @@
    会社指定の03-2とは別の帳票で、03-2の仕組み・様式には一切触れない。
 
    ・並び: 上段＝本日の作業・業者別 稼働状況（業者・工種・稼働人数・人工・作業時間・作業内容・職長・安全注意事項）、
-     中段＝本日の現場の流れ｜本日の搬入・搬出｜（本日の重点指示・本日の危険予知活動表・本日の人員）、
+     中段＝本日の現場の流れ｜本日の搬入・搬出／本日の巡回点検｜（本日の重点指示・本日の危険予知活動表・本日の人員）、
      下段＝作業間の連絡・調整｜連絡事項｜明日の予定｜現場メモ（日誌の内容のあとは手書き用の罫線）
    ・用紙はA3横（@page）。1枚に収まるよう、各欄の文字が溢れる場合だけ表示時・印刷前に文字を小さくする
      （最小6pt。情報が少ない日は小さくしない）。本日の作業が収まらない日はその欄の高さを広げて詰め直す
@@ -59,6 +59,10 @@ export function buildTodaySheetHtml(model) {
     ? `<div class="ky">${ky.rows.map((r) => `<span class="ky-${r.state}">${esc(r.vendorName)} ${esc(r.label)}</span>`).join("")}</div><div class="ky-sum">対象 ${ky.targetCount}　提出済み ${ky.submittedCount}　未提出 ${ky.notSubmittedCount}${ky.excludedCount ? `　対象外 ${ky.excludedCount}` : ""}（業者）</div>`
     : `<p class="empty">（対象業者の登録なし）</p>`;
 
+  // 本日の巡回点検（状況・件数・×の項目・是正指示。休工日等で記録が無い日は「未実施（…）」、日報が無い日は「記録なし」）
+  const pt = b.patrol;
+  const patrolHtml = `<div class="pt-state pt-${pt.state}">巡回点検：<b>${esc(pt.label)}</b></div>${pt.counts ? `<div class="pt-counts">良好○ ${pt.counts.good}　不良× ${pt.counts.bad}　該当なし－ ${pt.counts.na}${pt.counts.unset ? `　未記入 ${pt.counts.unset}` : ""}</div>` : ""}${pt.badItems.length || pt.comment ? `<div class="pt-attn"><b>巡回点検・要確認</b>${pt.badItems.length ? `<div>${pt.badItems.map((i) => `<span class="pt-bad">× ${esc(i)}</span>`).join("")}</div>` : ""}${pt.comment ? `<div>是正指示：${br(pt.comment)}</div>` : ""}</div>` : ""}`;
+
   const s = b.staff;
   const staff = `<div class="staff">
       <div class="big">${s.today}<small>人</small></div>
@@ -85,7 +89,10 @@ export function buildTodaySheetHtml(model) {
     ${box("works", works, "worksbox")}
     <main class="mid">
       ${box("flow", `${flow}${flowFill}`, "flowbox")}
-      ${box("deliveries", deliveries)}
+      <div class="midcol">
+        ${box("deliveries", deliveries)}
+        ${box("patrol", patrolHtml, "patrolbox")}
+      </div>
       <div class="side">
         ${box("focus", notesBox(b.focus, 3), "focusbox")}
         ${box("ky", kyHtml, "kybox")}
@@ -144,6 +151,13 @@ export function buildTodaySheetHtml(model) {
   .works tfoot th, .works tfoot td { background: #f7f7f7; }
   .works .c { text-align: center; white-space: nowrap; }
   .mid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 30% 1fr 26%; gap: 3mm; }
+  .midcol { display: grid; grid-template-rows: minmax(0, 1.5fr) minmax(0, 1fr); gap: 3mm; min-height: 0; }
+  .pt-state { font-size: 1.05em; margin-bottom: 1mm; }
+  .pt-attention b { color: #b45309; }
+  .pt-counts { color: #333; margin-bottom: 1mm; }
+  .pt-attn { border: 0.3mm solid #f0b35a; background: #fffaf0; padding: 1mm 2mm; border-radius: 1mm; }
+  .pt-attn > b { color: #b45309; }
+  .pt-bad { display: inline-block; margin-right: 4mm; color: #b42318; }
   .side { display: grid; grid-template-rows: minmax(0, 1.3fr) minmax(0, 1fr) auto; gap: 3mm; min-height: 0; }
   .flow { width: 100%; border-collapse: collapse; }
   .flow td { border-bottom: 0.2mm dashed #aaa; padding: 0.3em 0.3em; vertical-align: top; }

@@ -25,6 +25,7 @@ import { analyzeLedgerTemplate, readFormLabels, clearLedgerSampleInputs, scrubWo
 import { parseSharedStringsXml, readSheetCells, mapSheetCells, colToIndex, indexToCol } from "./sheetCells.js";
 import { WorkbookCalculator } from "./formulaCache.js";
 import { buildXlsxCellPlan } from "../xlsxCellPlan.js";
+import { applyDiagonalBorders } from "../xlsxDiagonal.js";
 import { assignTradeRows, freeLabelWrites } from "../tradeAttendance.js";
 import {
   renderTemplateString,
@@ -335,6 +336,7 @@ export async function renderLedgerWorkbook({ templateBuffer, mapping, site, entr
 
   // 5. 日報ごとの書き込み
   const imagesBySheet = new Map();
+  const diagonalsBySheet = new Map(); // 巡回点検の欄の斜線（休工日・作業なし・事務作業日で点検記録が無い日の頁だけ）
   const pageCfgBase = mapping.page;
   // 稼動人数表の業種の行の割り当ては、台帳全体（全頁）で固定する（累計の数式が前頁の同じ行を参照するため）
   const tradeAssignment = pageCfgBase.tradeAttendance
@@ -363,6 +365,11 @@ export async function renderLedgerWorkbook({ templateBuffer, mapping, site, entr
     const list = writesBySheet.get(cfg.sheetName) || [];
     for (const w of plan.cellWrites) list.push({ ...w, cell: shiftRef(w.cell, rowOffset), date: entry.date });
     writesBySheet.set(cfg.sheetName, list);
+    if (plan.diagonalCells?.length) {
+      const list = diagonalsBySheet.get(cfg.sheetName) || [];
+      for (const ref of plan.diagonalCells) list.push(shiftRef(ref, rowOffset));
+      diagonalsBySheet.set(cfg.sheetName, list);
+    }
     if (plan.images.length) {
       const imgs = imagesBySheet.get(cfg.sheetName) || [];
       for (const img of plan.images) imgs.push({ ...img, cell: shiftRef(img.cell, rowOffset) });
@@ -374,6 +381,17 @@ export async function renderLedgerWorkbook({ templateBuffer, mapping, site, entr
     const { sheetXml, skippedFormulaCells } = writeCells(await pkg.getText(pathOf(name)), sharedStrings, writes);
     pkg.setText(pathOf(name), sheetXml);
     for (const ref of skippedFormulaCells) warnings.push(`「${name}」の${ref}は数式のセルのため書き込みませんでした（マッピングを確認してください）。`);
+  }
+  if (diagonalsBySheet.size) {
+    let stylesXml = await pkg.getText("xl/styles.xml");
+    const cache = new Map();
+    for (const [name, cells] of diagonalsBySheet) {
+      const d = applyDiagonalBorders({ sheetXml: await pkg.getText(pathOf(name)), stylesXml, cells, cache });
+      pkg.setText(pathOf(name), d.sheetXml);
+      stylesXml = d.stylesXml;
+      if (d.missing.length) warnings.push(`「${name}」で斜線を付けるセルが見つかりませんでした: ${d.missing.slice(0, 5).join("・")}${d.missing.length > 5 ? " ほか" : ""}`);
+    }
+    pkg.setText("xl/styles.xml", stylesXml);
   }
 
   // 職長サイン画像（手書印刷用と同じH列）

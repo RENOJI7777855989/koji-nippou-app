@@ -56,3 +56,40 @@ export const PATROL_STATUS_OPTIONS = [
   { value: "bad", label: "否" },
   { value: "na", label: "該当なし" }
 ];
+
+/* ----------------------------------------------------------
+   巡回点検の状況（表示・帳票の出力時に判定する。DBには書き込まない）
+   優先順: ①実際の点検記録（○×－のどれか、または是正指示）があればそれを出す（日の状態に関係なく）
+           ②記録が無く、休工日・作業なし（現場作業なし）・事務作業日 → 未実施（03-2では巡回点検の欄を斜線）
+           ③日報そのものが無い → 記録なし（未実施とは判定しない。03-2も斜線にしない）
+           ④通常作業で記録が無い → 未記入
+   ×や是正指示は「要確認」とし、対応状況（対応済み・未対応など）は推測しない（DBに無い）。
+   ---------------------------------------------------------- */
+const PATROL_NOT_DONE_LABELS = { nowork: "未実施（現場作業なし）", office: "未実施（事務作業日）", holiday: "未実施（休工日）" };
+const nonWorkDayStatus = (report) => (["nowork", "office", "holiday"].includes(report?.dayStatus) ? report.dayStatus : null);
+
+/** 実際の巡回点検の記録があるか（○・×・－のどれか、または是正指示） */
+export function hasPatrolRecord(report) {
+  const answers = report?.patrolChecklist || {};
+  return PATROL_CHECKLIST_ITEMS.some((i) => ["good", "bad", "na"].includes(answers[i.key])) || !!String(report?.patrolComment || "").trim();
+}
+
+/**
+ * その日の巡回点検の状況
+ * @returns {{state: "none"|"notdone"|"blank"|"done"|"attention", label: string}}
+ *   none=記録なし（日報なし） / notdone=未実施（休工日等） / blank=未記入（通常作業で記録なし） / done=実施 / attention=要確認（×または是正指示）
+ */
+export function patrolStatusOf(report) {
+  if (!report) return { state: "none", label: "記録なし" };
+  if (hasPatrolRecord(report)) {
+    const answers = report.patrolChecklist || {};
+    const bad = PATROL_CHECKLIST_ITEMS.some((i) => answers[i.key] === "bad");
+    return bad || String(report.patrolComment || "").trim() ? { state: "attention", label: "要確認" } : { state: "done", label: "実施" };
+  }
+  const st = nonWorkDayStatus(report);
+  if (st) return { state: "notdone", label: PATROL_NOT_DONE_LABELS[st] };
+  return { state: "blank", label: "未記入" };
+}
+
+/** 03-2の巡回点検の欄を斜線にするか（休工日・作業なし・事務作業日で、実際の点検記録が無い日だけ。日報なしは対象外） */
+export const patrolSlashApplies = (report) => !!report && !!nonWorkDayStatus(report) && !hasPatrolRecord(report);

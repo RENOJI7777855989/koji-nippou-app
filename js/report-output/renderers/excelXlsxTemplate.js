@@ -30,6 +30,7 @@ import {
 } from "../xlsxTemplateEngine.js";
 import { cellRefToRowCol, rowColToCellRef } from "../cellGrid.js";
 import { buildXlsxCellPlan } from "../xlsxCellPlan.js";
+import { applyDiagonalBorders } from "../xlsxDiagonal.js";
 import { ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING } from "./mappings/anzenEiseiUchiawaseNisshi.js";
 import { getLayoutProfile } from "../layoutProfiles.js";
 import "../layouts/index.js";
@@ -78,6 +79,14 @@ async function render(model, mapping, companyProfile, template) {
   });
 
   const modifications = new Map();
+
+  // 巡回点検の欄の斜線（休工日・作業なし・事務作業日で点検記録が無い日）。出力の複製の書式だけを足す
+  if (plan.diagonalCells?.length) {
+    const d = applyDiagonalBorders({ sheetXml, stylesXml: await readZipEntryText(zip, "xl/styles.xml"), cells: plan.diagonalCells });
+    sheetXml = d.sheetXml;
+    modifications.set("xl/styles.xml", new TextEncoder().encode(d.stylesXml));
+    if (d.missing.length) plan.warnings.push(`斜線を付けるセルが様式に見つかりませんでした: ${d.missing.join("・")}`);
+  }
 
   if (plan.images.length) {
     let drawingParts = null; // 画像を貼る必要が生じた時点で遅延読み込みする

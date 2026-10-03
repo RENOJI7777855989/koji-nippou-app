@@ -151,8 +151,11 @@ function render(model) {
   const notice = model.diary?.remarks || "";
   const noticeHtml = notice ? `<p class="dash-notice">${escapeHtml(notice).replace(/\n/g, "<br>")}</p>` : empty(model.reportId ? "日誌の「連絡事項」に入力すると、ここに表示されます。" : "この日の日誌はまだありません。");
   const p = model.patrol;
-  const patrolHtml = p
-    ? `<dl class="dash-dl dash-dl-row"><dt>良好 ○</dt><dd>${p.good}</dd><dt>不良 ×</dt><dd>${p.bad}</dd><dt>該当なし</dt><dd>${p.na}</dd><dt>未記入</dt><dd>${p.unset}</dd></dl>
+  const ps = model.patrolStatus;
+  // 巡回点検の状況（表示時に判定。休工日等で記録が無ければ未実施、日報が無ければ記録なし）
+  const patrolStateHtml = `<p class="dash-patrol-state is-${ps.state}">巡回点検：<b>${escapeHtml(ps.label)}</b></p>`;
+  const patrolHtml = p && ps.state !== "notdone"
+    ? `${patrolStateHtml}<dl class="dash-dl dash-dl-row"><dt>良好 ○</dt><dd>${p.good}</dd><dt>不良 ×</dt><dd>${p.bad}</dd><dt>該当なし</dt><dd>${p.na}</dd><dt>未記入</dt><dd>${p.unset}</dd></dl>
       ${p.badItems.length || p.comment
         ? `<div class="dash-patrol-attention"><h4>巡回点検・要確認</h4>
             ${p.badItems.length ? `<ul class="dash-bad">${p.badItems.map((i) => `<li>${escapeHtml(i)}　<b>×</b></li>`).join("")}</ul>` : ""}
@@ -160,13 +163,17 @@ function render(model) {
             <p class="dash-sub">対応したかどうか（対応状況）は記録していないため、ここでは「要確認」として表示しています。</p></div>`
         : ""}
       ${p.inspector ? `<p class="dash-sub">巡回者: ${escapeHtml(p.inspector)}</p>` : ""}`
-    : empty("この日の日誌はまだありません。");
+    : `${patrolStateHtml}<p class="dash-sub">${ps.state === "none" ? "この日の日報が無いため、巡回点検の記録はありません（未実施とは判定しません）。" : "巡回点検の記録はありません（03-2の巡回点検の欄は斜線になります）。"}</p>`;
+  // 現場掲示用の巡回点検（状況・件数・×の項目・是正指示。対応状況は推測しない）
+  const patrolBoardHtml = `${patrolStateHtml}${p && ps.state !== "notdone" && ps.state !== "blank" ? `<p class="dash-sub">良好○ ${p.good}　不良× ${p.bad}　該当なし－ ${p.na}${p.unset ? `　未記入 ${p.unset}` : ""}</p>${p.badItems.length || p.comment ? `<div class="dash-patrol-attention"><h4>巡回点検・要確認</h4>${p.badItems.length ? `<ul class="dash-bad">${p.badItems.map((i) => `<li>${escapeHtml(i)}　<b>×</b></li>`).join("")}</ul>` : ""}${p.comment ? `<p class="dash-sub">是正指示</p><p>${escapeHtml(p.comment).replace(/\n/g, "<br>")}</p>` : ""}</div>` : ""}` : ""}`;
 
   // ① 今日の状態（日報なし／通常作業／作業なし／休工日）
   const stateHtml = !model.reportId
     ? `<div class="dash-state is-missing">この日の日報は<b>未入力</b>です</div>`
     : model.dayStatus === "nowork"
       ? `<div class="dash-state is-nowork">本日は<b>作業なし</b>（稼働人数・人工には数えません）</div>`
+      : model.dayStatus === "office"
+        ? `<div class="dash-state is-office">本日は<b>事務作業日</b>（稼働人数・人工には数えません）</div>`
       : model.dayStatus === "holiday"
         ? `<div class="dash-state is-holiday">本日は<b>休工日</b>（稼働人数・人工には数えません）</div>`
         : "";
@@ -209,11 +216,7 @@ function render(model) {
     <p class="dash-sub">${escapeHtml(fmtDate(h.date, h.weekday))}までの日誌</p>`;
 
   // 現場掲示に出す日の状態（作業なし・休工日だけ。日報未入力は監督向けの情報なので出さない）
-  const boardStateHtml = model.dayStatus === "nowork"
-    ? `<div class="dash-state is-nowork">本日は<b>作業なし</b></div>`
-    : model.dayStatus === "holiday"
-      ? `<div class="dash-state is-holiday">本日は<b>休工日</b></div>`
-      : "";
+  const boardStateHtml = { nowork: `<div class="dash-state is-nowork">本日は<b>作業なし</b></div>`, office: `<div class="dash-state is-office">本日は<b>事務作業日</b></div>`, holiday: `<div class="dash-state is-holiday">本日は<b>休工日</b></div>` }[model.dayStatus] || "";
 
   // 危険予知活動表（紙のKY活動表が提出されたか。日報とは別の提出物）。掲示は業者ごとの提出済み／未提出だけ（時刻は出さない）
   const ky = model.ky;
@@ -252,7 +255,7 @@ function render(model) {
     : empty("本日の作業（日誌の業者欄）はまだありません。");
 
   // 現場掲示の欄（欄名・並びは boardContent.js の BOARD_SECTIONS。A3の印刷も同じ定義を使う）
-  const BOARD_ICONS = { works: "👷", flow: "", deliveries: "🚚", focus: "🎯", ky: "📝", safety: "⚠️", staff: "👷", coordination: "🤝", notice: "📢", tomorrow: "📅" };
+  const BOARD_ICONS = { works: "👷", flow: "", deliveries: "🚚", focus: "🎯", ky: "📝", patrol: "🔍", safety: "⚠️", staff: "👷", coordination: "🤝", notice: "📢", tomorrow: "📅" };
   const tomorrowHtml = textCard(model.diary?.tomorrowPlan, "日誌の「明日の予定」に入力すると、ここに表示されます。");
   const boardBody = {
     works: model.isWork ? vendorHtml + `<h4 class="dash-subhead">作業内容・職長・使用機械</h4>` + worksHtml : "",
@@ -260,6 +263,7 @@ function render(model) {
     deliveries: deliveryHtml,
     focus: focusHtml,
     ky: kyBoardHtml,
+    patrol: patrolBoardHtml,
     safety: safetyHtml,
     staff: staffHtml,
     coordination: coordHtml,
@@ -308,7 +312,7 @@ function render(model) {
       <section class="dash-card dash-card-wide dash-ky"><h3>📝 本日の危険予知活動表 提出状況</h3>${kyManageHtml}</section>
       <section class="dash-card"><h3>🏗 現場概要</h3>${overviewHtml}</section>
       <section class="dash-card"><h3>📈 昨日 → 今日</h3>${compareHtml}</section>
-      <section class="dash-card"><h3>🔍 巡回点検（03-2の巡回点検記録）</h3>${patrolHtml}</section>
+      <section class="dash-card"><h3>🔍 本日の巡回点検（03-2の巡回点検記録）</h3>${patrolHtml}</section>
       <section class="dash-card"><h3>📋 今日の日誌</h3>${diaryHtml}</section>
       <section class="dash-card"><h3>📊 日誌状況</h3>${statusHtml}</section>
       <section class="dash-card dash-card-wide"><h3>📅 日報カレンダー</h3><div class="dash-calendar-slot"></div></section>

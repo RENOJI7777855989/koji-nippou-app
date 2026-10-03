@@ -9,6 +9,7 @@
 
 import { renderTemplateString } from "./xlsxTemplateEngine.js";
 import { assignTradeRows, buildTradeAttendanceWrites } from "./tradeAttendance.js";
+import { patrolSlashApplies } from "../patrolChecklist.js";
 
 /**
  * @returns {{
@@ -22,6 +23,7 @@ import { assignTradeRows, buildTradeAttendanceWrites } from "./tradeAttendance.j
 export function buildXlsxCellPlan(model, cfg) {
   const cellWrites = [];
   const images = [];
+  const diagonalCells = []; // 斜線にするセル（巡回点検の欄。出力時に罫線として付ける。xlsxDiagonal.js）
   const warnings = [];
 
   (cfg.templates || []).forEach(({ cell, template }) => {
@@ -144,9 +146,12 @@ export function buildXlsxCellPlan(model, cfg) {
     if (patrolChecklist.commentCell && model.report.patrolComment) {
       cellWrites.push({ cell: patrolChecklist.commentCell, value: model.report.patrolComment, numeric: false });
     }
+    // 休工日・作業なし・事務作業日で実際の点検記録が無い日は、巡回点検の欄（○×のセル）を斜線にする。
+    // 「未実施」の文字は書かない。日報が無い日（この関数は呼ばれない）・記録がある日・通常作業の日は斜線にしない
+    if (patrolSlashApplies(model.report)) diagonalCells.push(...(patrolChecklist.slashCells || Object.values(patrolChecklist.itemCells || {})));
   }
 
-  return { cellWrites, images, fitToPage: cfg.fitToPage || null, sheetName: cfg.sheetName, warnings };
+  return { cellWrites, images, diagonalCells, fitToPage: cfg.fitToPage || null, sheetName: cfg.sheetName, warnings };
 }
 
 function parseCellRefRow(ref) {

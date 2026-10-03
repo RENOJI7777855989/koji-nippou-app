@@ -1818,3 +1818,9 @@ dialog h3 {
 .dash-ky-list li.is-submitted { color: #276749; }
 .dash-ky-list li.is-not_submitted { color: #b42318; }
 .dash-ky-list li.is-excluded { color: #888; }
+.dash-state.is-office { background: #ebf8ff; color: #2a4365; border: 1px solid #bee3f8; }
+.cal-office { background: #ebf8ff; border-color: #90cdf4; }
+.status-badge.day-office { background: #ebf8ff; color: #2a4365; }
+.dash-patrol-state { margin: 0 0 6px; font-size: 15px; }
+.dash-patrol-state.is-attention b { color: #b45309; }
+.dash-patrol-state.is-notdone b, .dash-patrol-state.is-none b { color: #4a5568; }

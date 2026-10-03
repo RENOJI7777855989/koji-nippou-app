@@ -4,11 +4,12 @@
    （todaySheetHtml.js）の両方がここを使う。欄の名前・並び・中身をここで1か所にまとめ、
    画面と印刷で別々に書き直して食い違わないようにする。データは同じ buildDashboardModel の結果。
 
-   載せないもの: 今日の確認事項・日誌状況・巡回点検など監督向けの情報、請求人工、見積の情報。
+   載せないもの: 今日の確認事項・日誌状況など監督向けの情報、請求人工、見積の情報。
+   巡回点検は状況（実施／要確認／未実施（休工日等）／未記入／記録なし）・件数・×の項目・是正指示だけ（対応状況は推測しない）。
    ========================================================== */
 
 /** 現場掲示のレイアウトの版。画面の現場掲示タブとA3の印刷の両方に小さく表示し、古い版が出ていないか見分けられるようにする */
-export const BOARD_LAYOUT_VERSION = "2026-10-03";
+export const BOARD_LAYOUT_VERSION = "2026-10-03-2";
 
 /**
  * 現場掲示の欄（この順に並べる）。a3: A3での置き場所
@@ -20,6 +21,7 @@ export const BOARD_SECTIONS = [
   { key: "deliveries", title: "本日の搬入・搬出", a3: "deliveries" },
   { key: "focus", title: "本日の重点指示", a3: "side" },
   { key: "ky", title: "本日の危険予知活動表", a3: "side" },
+  { key: "patrol", title: "本日の巡回点検", a3: "mid" },
   { key: "safety", title: "本日の安全注意事項（業者別）", a3: "works" }, // A3では本日の作業の表の「安全注意事項・使用機械」の列
   { key: "staff", title: "本日の人員", a3: "side" },
   { key: "coordination", title: "作業間の連絡・調整", a3: "bottom" },
@@ -69,7 +71,7 @@ export function buildBoardContent(model) {
       remainingDays: h.remainingDays,
       dayNumber: h.dayNumber
     },
-    dayStateLabel: model.dayStatus === "nowork" ? "本日は作業なし" : model.dayStatus === "holiday" ? "本日は休工日" : "",
+    dayStateLabel: { nowork: "本日は作業なし", office: "本日は事務作業日", holiday: "本日は休工日" }[model.dayStatus] || "",
     works,
     totals: { workers: works.reduce((s, w) => s + (w.actual || 0), 0), manDays: works.reduce((s, w) => s + (w.manDays || 0), 0) },
     flow: model.flow,
@@ -80,6 +82,14 @@ export function buildBoardContent(model) {
     tomorrow: diary?.tomorrowPlan || "",
     safety: model.safety,
     staff: model.staff,
+    // 巡回点検（状況は patrolStatusOf で表示時に判定。休工日等で記録が無い日は件数を出さず「未実施（…）」だけ）
+    patrol: {
+      state: model.patrolStatus?.state || "none",
+      label: model.patrolStatus?.label || "記録なし",
+      counts: model.patrol && !["notdone", "blank", "none"].includes(model.patrolStatus?.state) ? { good: model.patrol.good, bad: model.patrol.bad, na: model.patrol.na, unset: model.patrol.unset } : null,
+      badItems: model.patrol?.badItems || [],
+      comment: model.patrol?.comment || ""
+    },
     ky: {
       rows: ky.rows.map((r) => ({ vendorName: r.vendorName, state: r.state, label: KY_BOARD_LABELS[r.state] })),
       targetCount: ky.targetCount,

@@ -89,7 +89,7 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
   check("ダッシュボード: 安全注意事項が業者別に分かれて表示される", safety.length === 2 && safety[0].v === "サンプル工業" && safety[0].items.join("|") === "墜落防止|開口部注意|足場使用時の安全確認" && safety[1].v === "サンプル設備" && safety[1].items.join("|") === "火気使用時の確認|感電防止", JSON.stringify(safety));
   const notice = await page.evaluate(() => [...document.querySelectorAll("#siteDashboard .dash-card")].find((c) => c.querySelector("h3").textContent.includes("連絡事項"))?.textContent || "");
   check("ダッシュボード: 日報の連絡事項が「連絡事項」として表示される", notice.includes("○○搬入予定") && notice.includes("明日の作業変更"));
-  const patrol = await page.evaluate(() => [...document.querySelectorAll("#siteDashboard .dash-card")].find((c) => c.querySelector("h3").textContent.includes("巡回点検"))?.textContent.replace(/\s+/g, " ") || "");
+  const patrol = await page.evaluate(() => [...document.querySelectorAll("#siteDashboard [data-panel=manage] .dash-card")].find((c) => c.querySelector("h3").textContent.includes("巡回点検"))?.textContent.replace(/\s+/g, " ") || "");
   check("ダッシュボード: 巡回点検（不良1件の項目・是正指示）が表示される", patrol.includes("不良 ×1") && patrol.includes("開口部") && patrol.includes("3階開口部の養生を復旧すること"), patrol.slice(0, 120));
   check("ダッシュボード: 職種別の人数（とび工5人・配管工3人）が人員に出る", dash.includes("とび工5人") && dash.includes("配管工3人"));
 

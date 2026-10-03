@@ -18,7 +18,7 @@
    ========================================================== */
 
 import { labelOf, dayStatusOf, isWorkDay, DAY_STATUSES, directionOf, DELIVERY_DIRECTIONS, DELIVERY_STATUSES, FLOW_STATUSES, FLOW_KINDS, parseWorkHours, formatWorkHours, workMinutes, durationLabel } from "./dailyFlow.js";
-import { PATROL_CHECKLIST_ITEMS } from "../patrolChecklist.js";
+import { PATROL_CHECKLIST_ITEMS, patrolStatusOf } from "../patrolChecklist.js";
 
 /** 安全注意事項を箇条に分ける（改行ごと。先頭の「・」「-」は取る） */
 const noteItems = (text) => String(text || "").split(/\r?\n/).map((l) => l.replace(/^\s*[・\-－‐●]\s*/, "").trim()).filter(Boolean);
@@ -255,6 +255,8 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
         inspector: report.patrolInspectorName || ""
       }
     : null;
+  // 巡回点検の状況（実施／要確認／未実施（休工日・現場作業なし・事務作業日）／未記入／記録なし（日報なし））。表示時に判定し、DBには書かない
+  const patrolStatus = patrolStatusOf(report);
 
   // ---- 人員（日誌から自動集計）----
   const today = isWork ? actualOf(report) : 0;
@@ -362,6 +364,11 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
         add("搬入・搬出", `${deliveries.length}件（完了${by("done")}・予定${by("plan")}${by("changed") ? `・変更${by("changed")}` : ""}${by("cancelled") ? `・中止${by("cancelled")}` : ""}）`, "info");
       }
     }
+    if (!isWork) {
+      // 作業なし・事務作業日・休工日: 実際の記録があればそれを優先（×・是正指示は要確認）、無ければ未実施
+      if (patrolStatus.state === "attention") add("巡回点検・要確認", patrol.bad ? `× ${patrol.bad}件${patrol.comment ? "・是正指示あり" : ""}` : "是正指示あり（×の項目なし）", "warn");
+      else add("巡回点検", patrolStatus.label, "info");
+    }
     add("日報の確認", report.confirmedAt ? "確認済み" : "未確認", "info");
   }
   // 危険予知活動表（日報とは別の提出物。日報の有無・提出とは連動させない）
@@ -399,5 +406,5 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
     attentionCount: attention.length
   };
 
-  return { header, reportId: report?.id || null, dayStatus, isWork, sameDayCount, flow, deliveries, works, safety, patrol, staff, status, diary, checks, attention, compare, overview, ky };
+  return { header, reportId: report?.id || null, dayStatus, isWork, sameDayCount, flow, deliveries, works, safety, patrol, patrolStatus, staff, status, diary, checks, attention, compare, overview, ky };
 }

@@ -50,17 +50,20 @@ export const labelOf = (list, value) => list.find((x) => x.value === value)?.lab
 /**
  * 日報の「日の状態」。日報が無い日（未入力）とは別。
  *   work    … 通常作業
- *   nowork  … 作業なし（稼働対象日だが作業が無かった日）
+ *   nowork  … 作業なし（現場作業なし。稼働対象日だが作業が無かった日）
+ *   office  … 事務作業日（現場作業は無く、事務作業だけの日）
  *   holiday … 休工日（休日・休工として現場を止めている日）
- * 作業なし・休工日の日報は履歴として残すが、稼働人数・人工・作業時間・業種別累計・業者別稼働には数えない。
+ * 作業なし・事務作業日・休工日の日報は履歴として残すが、稼働人数・人工・作業時間・業種別累計・業者別稼働には数えない。
  * 項目の無い日報（この項目を追加する前の日報）は通常作業として扱う。
  */
 export const DAY_STATUSES = [
   { value: "work", label: "通常作業" },
   { value: "nowork", label: "作業なし" },
+  { value: "office", label: "事務作業日" },
   { value: "holiday", label: "休工日" }
 ];
-export const dayStatusOf = (report) => (report?.dayStatus === "nowork" || report?.dayStatus === "holiday" ? report.dayStatus : "work");
+const NON_WORK_DAY_STATUSES = ["nowork", "office", "holiday"];
+export const dayStatusOf = (report) => (NON_WORK_DAY_STATUSES.includes(report?.dayStatus) ? report.dayStatus : "work");
 export const isWorkDay = (report) => dayStatusOf(report) === "work";
 
 /** "8:00" "08:00" "8時" などを "08:00" にそろえる（読めなければ空） */

@@ -84,11 +84,15 @@ function parseFillEl(fillEl) {
 }
 
 function parseBorderEl(borderEl) {
+  const diagonal = parseBorderSide(borderEl.getElementsByTagName("diagonal")[0]);
   return {
     left: parseBorderSide(borderEl.getElementsByTagName("left")[0]),
     right: parseBorderSide(borderEl.getElementsByTagName("right")[0]),
     top: parseBorderSide(borderEl.getElementsByTagName("top")[0]),
-    bottom: parseBorderSide(borderEl.getElementsByTagName("bottom")[0])
+    bottom: parseBorderSide(borderEl.getElementsByTagName("bottom")[0]),
+    // 斜線（左上→右下 diagonalDown／左下→右上 diagonalUp）。03-2の巡回点検の欄（休工日等）で使う
+    diagonalDown: diagonal && borderEl.getAttribute("diagonalDown") === "1" ? diagonal : null,
+    diagonalUp: diagonal && borderEl.getAttribute("diagonalUp") === "1" ? diagonal : null
   };
 }
 

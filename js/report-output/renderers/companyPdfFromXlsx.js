@@ -23,6 +23,7 @@ import { registerPdfRenderer } from "../rendererRegistry.js";
 import { loadZip, readZipEntryText, readZipEntryBytes } from "../../zipUtil.js";
 import { setCellInSheetXml, resolveSheetPartPath } from "../xlsxTemplateEngine.js";
 import { buildXlsxCellPlan } from "../xlsxCellPlan.js";
+import { applyDiagonalBorders } from "../xlsxDiagonal.js";
 import { parseXlsxStyles, parseSharedStrings, readSheetLayout, colLettersToIndex } from "../xlsxSheetReader.js";
 import { escapeHtml } from "../../utils.js";
 import { ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING } from "./mappings/anzenEiseiUchiawaseNisshi.js";
@@ -199,6 +200,11 @@ export function cellStyleToCss(style) {
   if (b.bottom) parts.push(`border-bottom:${b.bottom}`);
   if (b.left) parts.push(`border-left:${b.left}`);
   if (b.right) parts.push(`border-right:${b.right}`);
+  // 斜線（Excelの罫線の diagonal）。セルの角から角へ細い線を引く。背景の印刷を切っていても出るよう、このセルだけ印刷時も色を残す
+  const diag = [];
+  if (b.diagonalDown) diag.push("linear-gradient(to top right, transparent calc(50% - 0.6px), #000 calc(50% - 0.6px), #000 calc(50% + 0.6px), transparent calc(50% + 0.6px))");
+  if (b.diagonalUp) diag.push("linear-gradient(to bottom right, transparent calc(50% - 0.6px), #000 calc(50% - 0.6px), #000 calc(50% + 0.6px), transparent calc(50% + 0.6px))");
+  if (diag.length) parts.push(`background-image:${diag.join(",")};-webkit-print-color-adjust:exact;print-color-adjust:exact`);
   return parts.join(";");
 }
 
@@ -356,7 +362,9 @@ async function render(model, mapping, companyProfile, template) {
     sheetXml = setCellInSheetXml(sheetXml, cell, value, { numeric });
   });
 
-  const stylesXml = await readZipEntryText(zip, "xl/styles.xml");
+  let stylesXml = await readZipEntryText(zip, "xl/styles.xml");
+  // 巡回点検の欄の斜線（Excel出力と同じ処理。休工日・作業なし・事務作業日で点検記録が無い日）
+  if (plan.diagonalCells?.length) ({ sheetXml, stylesXml } = applyDiagonalBorders({ sheetXml, stylesXml, cells: plan.diagonalCells }));
   const sharedStringsXml = await readZipEntryText(zip, "xl/sharedStrings.xml");
   const styles = parseXlsxStyles(stylesXml);
   const sharedStrings = parseSharedStrings(sharedStringsXml);

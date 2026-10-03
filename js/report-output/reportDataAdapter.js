@@ -86,8 +86,8 @@ export function buildReportOutputModel({ site, report, photos = [], signatures =
       tomorrowPlan: report?.tomorrowPlan || "",
       remarks: report?.remarks || "",
       // 本日の重点指示・作業間の連絡・調整（03-2の同名の欄。日誌の入力項目）
-      // 日の状態（"work"/"nowork"/"holiday"。無ければ通常作業）。作業なし・休工日は稼動人数表に数えない
-      dayStatus: report?.dayStatus === "nowork" || report?.dayStatus === "holiday" ? report.dayStatus : "work",
+      // 日の状態（"work"/"nowork"/"office"/"holiday"。無ければ通常作業）。作業なし・事務作業日・休工日は稼動人数表に数えない
+      dayStatus: ["nowork", "office", "holiday"].includes(report?.dayStatus) ? report.dayStatus : "work",
       focusInstructions: report?.focusInstructions || "",
       workCoordination: report?.workCoordination || "",
       // 搬入・搬出（03-2の「資材・機材搬入（ＡＭ／ＰＭ）」へ、ダッシュボードと同じく搬入・搬出の両方を書く。direction の無い行は搬入）

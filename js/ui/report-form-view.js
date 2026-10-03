@@ -29,7 +29,7 @@ const temperatureInput = document.getElementById("temperature");
 const progressInput = document.getElementById("progressPercent");
 const dayStatusSelect = document.getElementById("dayStatus");
 const dayStatusHint = document.getElementById("dayStatusHint");
-const DAY_STATUS_HINT = { work: "", nowork: "作業なしの日は、稼働人数・人工・作業時間・工種別累計に数えません（日報は履歴として残ります）。", holiday: "休工日は、稼働人数・人工・作業時間・工種別累計に数えません（日報は履歴として残ります）。" };
+const DAY_STATUS_HINT = { work: "", nowork: "作業なしの日は、稼働人数・人工・作業時間・工種別累計に数えません（日報は履歴として残ります）。", office: "事務作業日は、稼働人数・人工・作業時間・工種別累計に数えません（日報は履歴として残ります）。巡回点検の記録が無ければ、03-2の巡回点検の欄は斜線になります。", holiday: "休工日は、稼働人数・人工・作業時間・工種別累計に数えません（日報は履歴として残ります）。" };
 const updateDayStatusHint = () => { dayStatusHint.textContent = DAY_STATUS_HINT[dayStatusSelect.value] || ""; };
 dayStatusSelect.addEventListener("change", updateDayStatusHint);
 const progressHint = document.getElementById("progressPercentHint");
@@ -559,7 +559,7 @@ export async function initReportFormViewEdit(params) {
   weatherSelect.value = report.weather || "晴れ";
   temperatureInput.value = report.temperature || "";
   progressInput.value = report.progressPercent ?? "";
-  dayStatusSelect.value = report.dayStatus === "nowork" || report.dayStatus === "holiday" ? report.dayStatus : "work";
+  dayStatusSelect.value = ["nowork", "office", "holiday"].includes(report.dayStatus) ? report.dayStatus : "work";
   updateDayStatusHint();
   tomorrowPlanInput.value = report.tomorrowPlan || "";
   remarksInput.value = report.remarks || "";

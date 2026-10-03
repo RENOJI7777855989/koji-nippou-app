@@ -87,7 +87,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
     return { ...r, pages: (pdf.match(/\/Type\s*\/Page[^s]/g) || []).length, a3Landscape: /\/MediaBox\s*\[\s*0\s+0\s+1191/.test(pdf) };
   })();
 
-  check("4 印刷画面に渡るのは新しい現場掲示のA3（見出し「現場掲示　今日の現場シート」・画面と同じレイアウトの版）", html.includes("現場掲示　今日の現場シート") && board.ver.includes("2026-10-03") && html.includes("現場掲示レイアウト 2026-10-03版") && !html.includes("日誌状況"), board.ver);
+  check("4 印刷画面に渡るのは新しい現場掲示のA3（見出し「現場掲示　今日の現場シート」・画面と同じレイアウトの版）", html.includes("現場掲示　今日の現場シート") && board.ver.includes("2026-10-03-2") && html.includes("現場掲示レイアウト 2026-10-03-2版") && !html.includes("日誌状況"), board.ver);
   const missingInA3 = board.keys.filter((k) => k !== "safety" && !a3.keys.includes(k));
   const titleMismatch = board.keys.filter((k) => a3.titles[k] && !board.titles[board.keys.indexOf(k)].endsWith(" " + a3.titles[k]) && board.titles[board.keys.indexOf(k)] !== a3.titles[k]);
   check("5 画面の現場掲示の欄がすべてA3にあり、欄名が同じ（安全注意事項はA3では作業の表の列）", missingInA3.length === 0 && titleMismatch.length === 0 && html.includes("安全注意事項・使用機械"), `画面 ${board.keys.join(",")} / A3 ${a3.keys.join(",")} / 不一致 ${titleMismatch.join(",")}`);
@@ -97,7 +97,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   check("16 稼働人数・人工（1人＝1人工）: 塗装 予定4/実績3・人工3、設備 実績2・人工2、合計5人・人工5", html.includes("4 / <b>3</b></td><td class=\"c\">3</td>") && html.includes(" / <b>2</b></td><td class=\"c\">2</td>") && html.includes("<b>5</b>人</td><td class=\"c\">5</td>"));
   check("6 KY提出状況が画面とA3の両方に出る（掲示塗装 ✓ 提出済み・掲示設備 未提出・見学業者 対象外、対象2）", ["掲示塗装 ✓ 提出済み", "掲示設備 未提出", "見学業者 対象外"].every((t) => a3.text.includes(t)) && a3.text.includes("対象 2 提出済み 1 未提出 1 対象外 1") && ["掲示塗装 ✓ 提出済み", "掲示設備 未提出", "見学業者 対象外"].every((t) => board.text.includes(t)));
   check("7 請求人工が画面の現場掲示にもA3にも出ない（「請求」の文字・2.5 が無い）", !a3.text.includes("請求") && !a3.text.includes("2.5") && !board.text.includes("請求") && !board.text.includes("2.5"));
-  check("8 A3に監督専用の情報・操作が混ざらない（今日の確認事項・要確認・日誌状況・未承認・未印刷・巡回点検・提出時刻・ボタン・入力欄が無い）", !/今日の確認事項|要確認|日誌状況|未承認|未印刷|未署名|巡回点検|提出時刻/.test(a3.text) && a3.controls === 0 && !/\d{1,2}:\d{2}.*提出済み/.test(a3.text.split("本日の危険予知活動表")[1] || ""));
+  check("8 A3に監督専用の情報・操作が混ざらない（今日の確認事項・日誌状況・未承認・未印刷・提出時刻・ボタン・入力欄が無い）", !/今日の確認事項|日誌状況|未承認|未印刷|未署名|提出時刻/.test(a3.text) && a3.controls === 0 && !/\d{1,2}:\d{2}.*提出済み/.test(a3.text.split("本日の危険予知活動表")[1] || ""));
   check("9・10 A3横・1ページで、欄からあふれない", a3.pages === 1 && a3.a3Landscape && a3.overflow.length === 0, a3.overflow.join(","));
 
   // 情報の多い日（業者12社・流れ14件・搬入搬出10件・長い文章）

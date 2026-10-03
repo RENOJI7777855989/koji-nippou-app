@@ -10,7 +10,7 @@ import { previewSiteTemplateUpgrade, upgradeSiteTemplate, revertSiteTemplate } f
 import { getReportTemplate } from "../report-output/reportTemplates.js";
 import { renderSiteDashboard } from "./site-dashboard.js";
 import { calendarDayState } from "../dashboard/siteDashboardModel.js";
-import { dayStatusOf } from "../dashboard/dailyFlow.js";
+import { dayStatusOf, labelOf, DAY_STATUSES } from "../dashboard/dailyFlow.js";
 import { dbGetAll } from "../db.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
 import { escapeHtml } from "../utils.js";
@@ -93,7 +93,7 @@ function matchesFilter(report, filter) {
     case "editedAfterPrint": return isEditedAfterPrint(report);
     case "confirmed": return !!report.confirmedAt;
     case "unconfirmed": return !report.confirmedAt;
-    case "nowork": case "holiday": return dayStatusOf(report) === filter;
+    case "nowork": case "office": case "holiday": return dayStatusOf(report) === filter;
     default: return true;
   }
 }
@@ -115,7 +115,7 @@ function reportCardHtml(report) {
     report.lastOutputAt ? `<span>最終出力 ${escapeHtml(fmtDateTime(report.lastOutputAt))}</span>` : "",
     isEditedAfterPrint(report) ? `<span class="status-badge status-warning">印刷後に修正あり</span>` : "",
     report.finalizedAt ? `<span class="status-badge status-default">確定済み</span>` : "",
-    dayStatusOf(report) !== "work" ? `<span class="status-badge day-${dayStatusOf(report)}">${dayStatusOf(report) === "nowork" ? "作業なし" : "休工日"}</span>` : ""
+    dayStatusOf(report) !== "work" ? `<span class="status-badge day-${dayStatusOf(report)}">${labelOf(DAY_STATUSES, dayStatusOf(report))}</span>` : ""
   ].filter(Boolean).join("");
   return `
       <p class="report-card-date">${escapeHtml(report.date) || "日付未設定"}</p>
@@ -128,7 +128,7 @@ const reportCalendarEl = document.getElementById("reportCalendar");
 let calendarMonth = null; // "YYYY-MM"
 let calendarSiteId = null;
 const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const CAL_LABEL = { ok: "日報あり", partial: "一部未入力", none: "日報なし", nowork: "作業なし", holiday: "休工日", out: "", future: "" };
+const CAL_LABEL = { ok: "日報あり", partial: "一部未入力", none: "日報なし", nowork: "作業なし", office: "事務作業日", holiday: "休工日", out: "", future: "" };
 
 async function renderReportCalendar(reports) {
   if (!reportCalendarEl) return;
@@ -153,7 +153,7 @@ async function renderReportCalendar(reports) {
   const days = new Date(y, m, 0).getDate();
   const cells = [];
   for (let i = 0; i < first.getDay(); i++) cells.push(`<div class="cal-cell cal-blank"></div>`);
-  const counts = { ok: 0, partial: 0, none: 0, nowork: 0, holiday: 0 };
+  const counts = { ok: 0, partial: 0, none: 0, nowork: 0, office: 0, holiday: 0 };
   for (let d = 1; d <= days; d++) {
     const iso = isoOf(new Date(y, m - 1, d));
     const report = byDate.get(iso) || null;
@@ -174,7 +174,7 @@ async function renderReportCalendar(reports) {
       <b>${y}年${m}月の日報</b>
       <button type="button" class="secondary-btn cal-nav" data-shift="1" aria-label="次の月">▶</button>
     </div>
-    <p class="cal-summary">日報あり ${counts.ok}・一部未入力 ${counts.partial}・<b>日報なし ${counts.none}</b>・作業なし ${counts.nowork}・休工日 ${counts.holiday}</p>
+    <p class="cal-summary">日報あり ${counts.ok}・一部未入力 ${counts.partial}・<b>日報なし ${counts.none}</b>・作業なし ${counts.nowork}・事務作業日 ${counts.office}・休工日 ${counts.holiday}</p>
     <div class="cal-grid">${["日", "月", "火", "水", "木", "金", "土"].map((w) => `<div class="cal-week">${w}</div>`).join("")}${cells.join("")}</div>
     <p class="cal-note">「日報なし」は工期内で日報が無い日です（作業なし・休工日とは別。日報で「作業なし」「休工日」を選んだ日だけがその表示になります）。日付を押すと日報を開きます（日報なしの日は新しく作成）。</p>`;
 }
