@@ -37,9 +37,11 @@ export async function getSite(id) {
  * reportTemplateId: この現場だけで使う日報Excel様式のid。null（既定）は「標準テンプレートに従う」
  * （新規現場は原則こちら。標準を差し替えると自動的に追従する）。
  */
-export async function createSite({ name, address = "", clientName = "", startDate = "", endDate = "", memo = "", assignedUserIds = [], reportTemplateId = null, constructionNumber = "", progressPercent = null }) {
+export async function createSite({ name, address = "", clientName = "", startDate = "", endDate = "", actualStartDate = "", memo = "", assignedUserIds = [], reportTemplateId = null, constructionNumber = "", progressPercent = null }) {
+  // startDate/endDate: 工期の開始日・終了日（竣工予定日）。actualStartDate: 着工日（実際に現場で工事を始めた日。任意）。
+  // 工期開始日と着工日は別のもの（工期開始日を着工日へ自動でコピーしない）
   // constructionNumber: 工事番号（任意）。progressPercent: 進捗率（0〜100の手入力。未入力はnull＝ダッシュボードでは工期経過率を別表示）
-  const site = stampNew({ name, address, clientName, startDate, endDate, memo, status: "active", assignedUserIds, reportTemplateId: reportTemplateId || null, constructionNumber, progressPercent: normalizeProgress(progressPercent) });
+  const site = stampNew({ name, address, clientName, startDate, endDate, actualStartDate, memo, status: "active", assignedUserIds, reportTemplateId: reportTemplateId || null, constructionNumber, progressPercent: normalizeProgress(progressPercent) });
   await dbPut("sites", site);
   // 作成した時点の様式（現場の指定→標準→元請名一致）の版に固定する。以後テンプレートを新しい版へ
   // 差し替えても、この現場は自動では切り替わらない。様式が無い・失敗した場合も現場の作成は続ける
@@ -98,6 +100,7 @@ export async function copySite(sourceSiteId, { newName, copyReports = false } = 
     clientName: source.clientName,
     startDate: "",
     endDate: "",
+    actualStartDate: "",
     memo: source.memo,
     reportTemplateId: source.reportTemplateId || null
   });

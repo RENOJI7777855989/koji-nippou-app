@@ -16,6 +16,7 @@ const clientNameInput = document.getElementById("siteFormClientName");
 const addressInput = document.getElementById("siteFormAddress");
 const startDateInput = document.getElementById("siteFormStartDate");
 const endDateInput = document.getElementById("siteFormEndDate");
+const actualStartDateInput = document.getElementById("siteFormActualStartDate"); // 着工日（工期開始日とは別。任意）
 const constructionNumberInput = document.getElementById("siteFormConstructionNumber");
 const progressNote = document.getElementById("siteFormProgressNote");
 const PROGRESS_NOTE = "進捗率は日誌ごとに入力します（日誌の入力画面の「進捗率（％）」）。";
@@ -117,6 +118,7 @@ export async function initSiteFormViewEdit(params) {
   addressInput.value = site.address || "";
   startDateInput.value = site.startDate || "";
   endDateInput.value = site.endDate || "";
+  actualStartDateInput.value = site.actualStartDate || "";
   constructionNumberInput.value = site.constructionNumber || "";
   // 以前この画面で入力した進捗率（site.progressPercent）は、消さずに残す（画面からは入力しない・保存でも上書きしない）
   progressNote.textContent = site.progressPercent != null ? `${PROGRESS_NOTE}以前この画面で入力した値（${site.progressPercent}%）は消さずに残しています。` : PROGRESS_NOTE;
@@ -146,6 +148,7 @@ form.addEventListener("submit", async (e) => {
     address: addressInput.value.trim(),
     startDate: startDateInput.value,
     endDate: endDateInput.value,
+    actualStartDate: actualStartDateInput.value,
     constructionNumber: constructionNumberInput.value.trim(),
     memo: memoInput.value.trim(),
     assignedUserIds: Array.from(assignedSelect.selectedOptions).map((opt) => opt.value),

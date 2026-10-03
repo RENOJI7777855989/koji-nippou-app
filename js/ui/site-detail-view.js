@@ -24,6 +24,7 @@ const statusBadgeEl = document.getElementById("siteDetailStatusBadge");
 const clientNameEl = document.getElementById("siteDetailClientName");
 const addressEl = document.getElementById("siteDetailAddress");
 const periodEl = document.getElementById("siteDetailPeriod");
+const actualStartEl = document.getElementById("siteDetailActualStartDate");
 const reportTemplateEl = document.getElementById("siteDetailReportTemplate");
 const constructionNumberEl = document.getElementById("siteDetailConstructionNumber");
 const memoEl = document.getElementById("siteDetailMemo");
@@ -73,7 +74,7 @@ const todayIso = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
-/** 工期（着工日〜竣工予定日。今日より先は含めない）のうち、日報のない日。休工日も含まれる */
+/** 工期（工期開始日〜工期終了日。今日より先は含めない）のうち、日報のない日。休工日も含まれる */
 function missingDates(site, reports) {
   if (!site.startDate) return null;
   const has = new Set(reports.map((r) => r.date));
@@ -220,7 +221,7 @@ async function renderReportList() {
     if (r.confirmedAt) counts.confirmed++;
   }
   const missing = missingDates(currentSite, allReports);
-  reportListSummary.textContent = `全${allReports.length}件（未印刷${counts.unprinted}・印刷済み${counts.printed}・再印刷${counts.reprinted}・確認済み${counts.confirmed}）${missing ? `／未入力（日報のない日）${missing.length}日` : "／着工日が未設定のため未入力日は判定できません"}`;
+  reportListSummary.textContent = `全${allReports.length}件（未印刷${counts.unprinted}・印刷済み${counts.printed}・再印刷${counts.reprinted}・確認済み${counts.confirmed}）${missing ? `／未入力（日報のない日）${missing.length}日` : "／工期開始日が未設定のため未入力日は判定できません"}`;
 
   if (filter === "missing") {
     reportListEl.hidden = true;
@@ -228,7 +229,7 @@ async function renderReportList() {
     shownReports = [];
     const list = (missing || []).filter((d) => !q || d.includes(q));
     reportMissingList.innerHTML = missing === null
-      ? `<li class="empty-message">着工日が未設定のため、未入力日を判定できません（現場情報で着工日を設定してください）。</li>`
+      ? `<li class="empty-message">工期開始日が未設定のため、未入力日を判定できません（現場情報で工期開始日を設定してください）。</li>`
       : list.length === 0
         ? `<li class="empty-message">工期内に日報のない日はありません。</li>`
         : list.map((d) => `<li class="report-missing-card" data-date="${d}"><strong>${d}</strong>　日報なし（休工日も含みます）${currentSite.completedAt ? "" : "　― 押すとこの日の日報を作成"}</li>`).join("");
@@ -481,6 +482,7 @@ function renderSiteInfo() {
   renderSiteTemplateInfo();
   addressEl.textContent = currentSite.address || "-";
   periodEl.textContent = fmtPeriod(currentSite);
+  if (actualStartEl) actualStartEl.textContent = currentSite.actualStartDate || "未設定";
   constructionNumberEl.textContent = currentSite.constructionNumber || "-";
   memoEl.textContent = currentSite.memo || "-";
   toggleArchiveBtn.textContent = currentSite.status === "archived" ? "アーカイブを解除" : "この現場をアーカイブ";

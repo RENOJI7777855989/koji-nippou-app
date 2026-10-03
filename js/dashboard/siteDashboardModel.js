@@ -137,8 +137,9 @@ export function buildKyModel({ records = [], reports = [], date }) {
 
 /**
  * 工期の日数（現場の工事開始日・終了日と表示する日から。純粋関数）。既存の決まりのまま:
- *   工事○日目 = 開始日を1日目とした暦日（休工日・作業なし・事務作業日も数える）。工期経過（日）= 工事○日目と同じ日数
+ *   工期経過（日）= 工期開始日を1日目とした暦日（休工日・作業なし・事務作業日も数える）。工期終了後は全工期の日数（終了日までの値）
  *   残り = 表示日から終了日までの日数（表示日を含めない。終了日当日は0日）。全工期 = 開始日〜終了日の日数（両端を含む）
+ *   （着工○日目は工期とは別に、現場の着工日（actualStartDate）から buildGroundbreakingInfo で数える）
  * phase: unset（開始日なし）/ before（開始前）/ during（工期中。終了日なしを含む）/ after（終了日の翌日以降）
  */
 export function buildPeriodInfo(startDate, endDate, date) {
@@ -148,8 +149,19 @@ export function buildPeriodInfo(startDate, endDate, date) {
   const dayNumber = daysBetween(start, date) + 1;
   const totalDays = end ? daysBetween(start, end) + 1 : null;
   if (dayNumber < 1) return { phase: "before", startDate: start, endDate: end, totalDays, dayNumber: null, elapsedDays: null, remainingDays: null };
-  if (end && daysBetween(date, end) < 0) return { phase: "after", startDate: start, endDate: end, totalDays, dayNumber, elapsedDays: dayNumber, remainingDays: null };
+  if (end && daysBetween(date, end) < 0) return { phase: "after", startDate: start, endDate: end, totalDays, dayNumber, elapsedDays: totalDays, remainingDays: null };
   return { phase: "during", startDate: start, endDate: end, totalDays, dayNumber, elapsedDays: dayNumber, remainingDays: end ? daysBetween(date, end) : null };
+}
+
+/**
+ * 着工○日目（実際に現場で工事を始めた日＝現場の着工日 actualStartDate を1日目とした暦日。工期開始日とは別）
+ * phase: unset（着工日なし）/ before（着工前）/ started
+ */
+export function buildGroundbreakingInfo(actualStartDate, date) {
+  const d = actualStartDate && toUtc(actualStartDate) != null ? actualStartDate : "";
+  if (!d) return { phase: "unset", date: "", dayNumber: null };
+  const n = daysBetween(d, date) + 1;
+  return n < 1 ? { phase: "before", date: d, dayNumber: null } : { phase: "started", date: d, dayNumber: n };
 }
 
 export function buildDashboardModel({ site, reports = [], signatures = [], date, kySubmissions = [] }) {
@@ -190,6 +202,7 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
     elapsedPct,
     remainingDays,
     period: buildPeriodInfo(start, end, date), // 工期の日数（現場掲示・A3の情報帯で使う）
+    groundbreaking: buildGroundbreakingInfo(site?.actualStartDate || "", date), // 着工○日目（着工日から。工期開始日とは別）
     dayNumber: dayNumber != null && dayNumber >= 1 ? dayNumber : null,
     date,
     weekday: weekdayOf(date)

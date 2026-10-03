@@ -104,11 +104,14 @@
           <label>住所
             <input type="text" id="siteFormAddress">
           </label>
-          <label>着工日
+          <label>工期開始日
             <input type="date" id="siteFormStartDate">
           </label>
-          <label>竣工予定日
+          <label>工期終了日（竣工予定日）
             <input type="date" id="siteFormEndDate">
+          </label>
+          <label>着工日（実際に現場で工事を始めた日・任意）
+            <input type="date" id="siteFormActualStartDate">
           </label>
           <label>工事番号
             <input type="text" id="siteFormConstructionNumber" placeholder="例）2026-015">
@@ -140,7 +143,8 @@
         <dt>住所</dt><dd id="siteDetailAddress"></dd>
         <dt>日報のExcel様式</dt><dd id="siteDetailReportTemplate"></dd>
         <dt>工事番号</dt><dd id="siteDetailConstructionNumber"></dd>
-        <dt>着工日〜竣工予定日</dt><dd id="siteDetailPeriod"></dd>
+        <dt>工期（開始日〜終了日）</dt><dd id="siteDetailPeriod"></dd>
+        <dt>着工日</dt><dd id="siteDetailActualStartDate"></dd>
         <dt>メモ</dt><dd id="siteDetailMemo"></dd>
       </dl>
       <div class="toolbar">

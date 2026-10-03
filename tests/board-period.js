@@ -57,13 +57,13 @@ const days = (a, b) => Math.round((Date.UTC(...b.split("-").map((v, i) => Number
   const same = (r) => JSON.stringify(r.band) === JSON.stringify(r.a3);
 
   const c1 = await bandOf(ids.siteId, "2026-04-01");
-  check("1 開始日当日: 工事1日目・工期経過1日・残り274日・工期 2026/04/01 ～ 2026/12/31（275日）", c1.a3["工事"] === "1日目" && c1.a3["工期経過"] === "1日" && c1.a3["残り"] === "274日" && c1.a3["工期"] === "2026/04/01 ～ 2026/12/31（275日）" && same(c1), JSON.stringify(c1.a3));
+  check("1 開始日当日: 工期経過1日・残り274日・工期 2026/04/01 ～ 2026/12/31（275日）・着工日が無いので着工は未設定", c1.a3["着工"] === "未設定" && c1.a3["工期経過"] === "1日" && c1.a3["残り"] === "274日" && c1.a3["工期"] === "2026/04/01 ～ 2026/12/31（275日）" && same(c1), JSON.stringify(c1.a3));
   const c2 = await bandOf(ids.siteId, "2026-04-10");
-  check("2 通常日（4/10）: 工事10日目・工期経過10日・残り265日（工事○日目と工期経過は同じ日数）", c2.a3["工事"] === "10日目" && c2.a3["工期経過"] === "10日" && c2.a3["残り"] === "265日" && same(c2), JSON.stringify(c2.a3));
+  check("2 通常日（4/10）: 工期経過10日・残り265日", c2.a3["工期経過"] === "10日" && c2.a3["残り"] === "265日" && same(c2), JSON.stringify(c2.a3));
   for (const [no, date, label] of [["3", "2026-06-01", "休工日"], ["4", "2026-06-02", "作業なし"], ["5", "2026-06-03", "事務作業日"]]) {
     const r = await bandOf(ids.siteId, date);
     const n = days("2026-04-01", date) + 1;
-    check(`${no} ${label}（${date}）でも暦日で数える: 工事${n}日目・工期経過${n}日・残り${days(date, "2026-12-31")}日・工期275日`, r.a3["工事"] === `${n}日目` && r.a3["工期経過"] === `${n}日` && r.a3["残り"] === `${days(date, "2026-12-31")}日` && r.a3["工期"].includes("（275日）") && same(r), JSON.stringify(r.a3));
+    check(`${no} ${label}（${date}）でも暦日で数える: 工期経過${n}日・残り${days(date, "2026-12-31")}日・工期275日`, r.a3["工期経過"] === `${n}日` && r.a3["残り"] === `${days(date, "2026-12-31")}日` && r.a3["工期"].includes("（275日）") && same(r), JSON.stringify(r.a3));
   }
   check("6 進捗あり: その日の日報の進捗（4/10 → 12%）", c2.a3["進捗"] === "12%");
   const c7 = await bandOf(ids.siteId, "2026-06-04");
@@ -73,12 +73,12 @@ const days = (a, b) => Math.round((Date.UTC(...b.split("-").map((v, i) => Number
   check("9 天気未入力: 日報の天気が空（6/4）・日報が無い日（6/5）は「未入力」", c7.a3["天気"] === "未入力" && c9.a3["天気"] === "未入力", `${c7.a3["天気"]} / ${c9.a3["天気"]}`);
   check("9 日報が無い日（6/5）の進捗は、それまでで一番新しい日報（6/4）が未入力なので「未入力」", c9.a3["進捗"] === "未入力");
   const c10 = await bandOf(ids.unsetId, "2026-06-01");
-  check("10 工期未設定: 工期「未設定」・工事／工期経過／残り「工期未設定」（0日を出さない）", c10.a3["工期"] === "未設定" && c10.a3["工事"] === "工期未設定" && c10.a3["工期経過"] === "工期未設定" && c10.a3["残り"] === "工期未設定" && !Object.values(c10.a3).some((v) => v === "0日"), JSON.stringify(c10.a3));
+  check("10 工期未設定: 工期「未設定」・工期経過／残り「工期未設定」・着工「未設定」（0日を出さない）", c10.a3["工期"] === "未設定" && c10.a3["着工"] === "未設定" && c10.a3["工期経過"] === "工期未設定" && c10.a3["残り"] === "工期未設定" && !Object.values(c10.a3).some((v) => v === "0日"), JSON.stringify(c10.a3));
   const c11 = await bandOf(ids.siteId, "2027-01-05");
   const cEnd = await bandOf(ids.siteId, "2026-12-31");
-  check("11 工期終了後（2027/1/5）: 残り「工期終了」（マイナスにしない）／終了日当日は残り0日", c11.a3["残り"] === "工期終了" && !Object.values(c11.a3).some((v) => /-\d/.test(v)) && cEnd.a3["残り"] === "0日" && cEnd.a3["工事"] === "275日目", `${c11.a3["残り"]} / ${cEnd.a3["残り"]}`);
+  check("11 工期終了後（2027/1/5）: 残り「工期終了」（マイナスにしない）・工期経過は終了日までの275日／終了日当日は残り0日・工期経過275日", c11.a3["残り"] === "工期終了" && c11.a3["工期経過"] === "275日" && !Object.values(c11.a3).some((v) => /-\d/.test(v)) && cEnd.a3["残り"] === "0日" && cEnd.a3["工期経過"] === "275日", `${c11.a3["残り"]} / ${cEnd.a3["残り"]}`);
   const c12 = await bandOf(ids.siteId, "2026-03-30");
-  check("開始前（3/30）: 工事・工期経過・残り「工事開始前」", c12.a3["工事"] === "工事開始前" && c12.a3["工期経過"] === "工事開始前" && c12.a3["残り"] === "工事開始前");
+  check("開始前（3/30）: 工期経過・残り「工事開始前」", c12.a3["工期経過"] === "工事開始前" && c12.a3["残り"] === "工事開始前");
 
   // 画面（ダッシュボードで表示した日付）と、印刷ボタンで渡るA3
   await page.goto(`${BASE}#/sites/${ids.siteId}`); await page.waitForSelector("#siteDashboard:not([hidden])");
@@ -90,9 +90,9 @@ const days = (a, b) => Math.round((Date.UTC(...b.split("-").map((v, i) => Number
   const printed = await page.$eval("#reportPrintFrame", (f) => f.srcdoc);
   await page.click("#reportPrintCloseBtn");
   const pBand = await page.evaluate((html) => [...new DOMParser().parseFromString(html, "text/html").querySelectorAll(".band .bi")].map((b) => `${b.querySelector(".bl").textContent} ${b.querySelector(".bv").textContent}`), printed);
-  const expected = ["工期 2026/04/01 ～ 2026/12/31（275日）", "本日 2026/04/10（金）", "工事 10日目", "工期経過 10日", "残り 265日", "進捗 12%", "天気 雨　18℃"];
+  const expected = ["工期 2026/04/01 ～ 2026/12/31（275日）", "本日 2026/04/10（金）", "工期経過 10日", "着工 未設定", "残り 265日", "進捗 12%", "天気 雨　18℃"];
   check("14 画面の情報帯と印刷ボタンで渡るA3の情報帯が同じ（表示している日 4/10 が基準。ブラウザの今日ではない）", expected.every((t) => screen.includes(t.replace("　", " "))) && JSON.stringify(pBand) === JSON.stringify(expected), `画面 ${screen.join(" | ")}`);
-  check("14 A3は新しいレイアウトの版（2026-10-03-3）", printed.includes("現場掲示レイアウト 2026-10-03-3版"));
+  check("14 A3は新しいレイアウトの版（2026-10-03-4）", printed.includes("現場掲示レイアウト 2026-10-03-4版"));
 
   // 12・13 A3横1ページ・既存の欄が崩れない（休工日・通常日）
   for (const date of ["2026-04-10", "2026-06-01"]) {

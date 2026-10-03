@@ -151,7 +151,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
     });
     const bad = [...m.flowTimes, ...m.kinds, ...m.dlv].filter((x) => !x.ok).map((x) => x.t);
     check(`13〜20 ${name}: 流れの時刻（08:00・10:30・12:00・14:00…）・区分（朝礼・打ち合わせ・昼礼・現場巡回）・搬入搬出の時刻・区分が枠内で1行、隣の列に重ならない`, bad.length === 0 && m.kinds.map((k) => k.t).join() === "朝礼,打ち合わせ,現場巡回,検査・立会,その他" && m.dlv.length === 8, bad.join(",") || `区分 ${m.kinds.map((k) => k.t).join("・")}／搬入搬出${m.dlv.length}`);
-    check(`23 ${name}: 他の現場掲示の欄も文字があふれない・レイアウトの版 2026-10-03-3`, m.boxes.length === 0 && m.ver.includes("2026-10-03-3"), m.boxes.join(","));
+    check(`23 ${name}: 他の現場掲示の欄も文字があふれない・レイアウトの版 2026-10-03-4`, m.boxes.length === 0 && m.ver.includes("2026-10-03-4"), m.boxes.join(","));
     if (name === "Chromium") {
       const pdf = Buffer.from(await p.pdf({ preferCSSPageSize: true })).toString("latin1");
       check("21・22 A3横・1ページ", (pdf.match(/\/Type\s*\/Page[^s]/g) || []).length === 1 && /\/MediaBox\s*\[\s*0\s+0\s+1191/.test(pdf));
