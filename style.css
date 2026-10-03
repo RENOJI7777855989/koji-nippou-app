@@ -1914,3 +1914,8 @@ dialog h3 {
   .timeline-row .removeRowBtn { grid-column: 4; width: 100%; min-height: 40px; margin: 0; padding: 6px; font-size: 14px; }
 }
 .timeline-row select, .timeline-row input { min-height: 44px; }
+/* 現場掲示のPDF保存・共有 */
+.board-pdf-dialog { width: min(94vw, 640px); }
+.board-pdf-status { font-weight: bold; margin: 0 0 8px; }
+.board-pdf-preview { display: block; width: 100%; height: auto; border: 1px solid #c9d6e8; margin: 0 0 10px; background: #fff; }
+.board-pdf-preview[hidden] { display: none; }

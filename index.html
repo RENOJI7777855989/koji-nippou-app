@@ -1088,6 +1088,22 @@
   </dialog>
 
   <!-- 日報カレンダーの「日報なし」の日: この日の状態を登録（js/ui/day-status-dialog.js） -->
+  <!-- 現場掲示のPDF保存・共有（A3横・1ページ。js/ui/board-pdf.js） -->
+  <dialog id="boardPdfDialog" class="day-status-dialog board-pdf-dialog">
+    <h3>現場掲示のPDF（A3横・1ページ）</h3>
+    <p id="boardPdfStatus" class="board-pdf-status"></p>
+    <img id="boardPdfPreview" class="board-pdf-preview" alt="PDFの内容（縮小表示）" hidden>
+    <div class="day-panel-actions">
+      <button type="button" id="boardPdfShareBtn">共有（LINE・ファイルに保存・メールなど）</button>
+      <button type="button" id="boardPdfSaveBtn" class="secondary-btn">PDFを保存</button>
+    </div>
+    <p id="boardPdfNote" class="day-status-note"></p>
+    <p class="day-status-note">「🖨 現場掲示をA3印刷」と同じ内容です（請求人工・監督向けの情報は入りません）。PDFの文字は画像のため、選択・検索はできません。</p>
+    <div class="form-actions">
+      <button type="button" id="boardPdfCloseBtn" class="secondary-btn">閉じる</button>
+    </div>
+  </dialog>
+
   <!-- 日報カレンダーで日報のある日を押したとき: この日の日報の状況（js/ui/day-panel-dialog.js） -->
   <dialog id="dayPanelDialog" class="day-status-dialog day-panel-dialog">
     <h3 id="dayPanelTitle"></h3>

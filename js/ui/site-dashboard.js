@@ -19,6 +19,7 @@ import { labelOf, DAY_STATUSES } from "../dashboard/dailyFlow.js";
 import { buildTodaySheetHtml } from "../dashboard/todaySheetHtml.js";
 import { BOARD_SECTIONS, BOARD_LAYOUT_VERSION, KY_BOARD_LABELS, buildInfoBand } from "../dashboard/boardContent.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
+import { openBoardPdfDialog } from "./board-pdf.js";
 import { listKySubmissions, addKyVendor, setKyState } from "../ky/kySubmissions.js";
 import { showMessage } from "./common.js";
 
@@ -332,6 +333,7 @@ function render(model) {
     <div class="dash-actions">
       ${canEdit ? `<button type="button" data-action="diary">＋日誌</button><button type="button" data-action="deliveries" class="secondary-btn">🚚搬入・搬出</button><button type="button" data-action="companies" class="secondary-btn">👷業者</button>` : ""}
       <button type="button" data-action="print" class="secondary-btn">🖨 現場掲示をA3印刷</button>
+      <button type="button" data-action="pdf" class="secondary-btn">📄 PDF保存・共有</button>
     </div>`;
   root.hidden = false;
   // 日報カレンダーを監督管理タブの中へ移す（要素そのものを移すので、描画・クリックの処理はそのまま動く）
@@ -422,6 +424,10 @@ root?.addEventListener("click", async (e) => {
       title: `現場掲示 今日の現場シート（${current.model.header.date}）A3横`,
       note: "A3・横向きで印刷してください（iPadは共有→プリント、Windowsは印刷画面で用紙A3・横を選択）。03-2の日報とは別の帳票で、日報の印刷記録には残りません。"
     });
+  }
+  // A3印刷と同じ印刷用HTMLから、A3横・1ページのPDFを作って共有・保存する（LINE等へ送る用。board-pdf.js）
+  if (action === "pdf") {
+    openBoardPdfDialog({ html: buildTodaySheetHtml(current.model), siteName: current.model.header.siteName, date: current.model.header.date });
   }
 });
 
