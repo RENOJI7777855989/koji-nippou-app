@@ -121,8 +121,10 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
   await page.click("#reportSaveBtn"); await page.waitForSelector("#view-site-detail:not([hidden])");
   const saved = await page.evaluate(async (id) => (await (await import("/js/db.js")).dbGet("reports", id)), oldId);
   check("以前の日報を何も変えずに保存しても、自由入力の作業時間・以前の種別・連絡事項は消えない", saved.companies[0].workHours === "朝から夕方" && saved.companies[1].workHours === "08:00～17:00" && saved.timeline[0].kind === "meeting" && saved.remarks === "以前の備考", `${saved.companies.map((c) => c.workHours).join(" / ")}`);
+  const dateBefore = await page.inputValue("#siteDashboard .dash-date-input");
   await page.click("#siteDashboard .dash-nav[data-shift='-1']");
-  await page.waitForFunction(() => document.getElementById("siteDashboard").textContent.includes("旧工業"));
+  // 「旧工業」は前の作業日の業者として危険予知活動表の候補にも出るので、日付が変わるのを待つ
+  await page.waitForFunction((d) => document.querySelector("#siteDashboard .dash-date-input")?.value !== d && document.getElementById("siteDashboard").textContent.includes("旧工業"), dateBefore);
   const oldDash = await page.textContent("#siteDashboard");
   check("ダッシュボード: 以前の日報も表示できる（自由入力の作業時間・「朝礼・打合せ」）", oldDash.includes("朝から夕方") && oldDash.includes("朝礼・打合せ"));
 

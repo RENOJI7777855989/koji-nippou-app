@@ -6,8 +6,11 @@
 
    ・用紙はA3横（@page）。1枚に収まるよう、各欄の文字が溢れる場合だけ
      表示時・印刷前に文字を小さくする（情報が少ない日は小さくしない）
-   ・下段の「連絡事項」（日誌の備考）「明日の予定」「現場メモ」は、日誌の内容を載せたうえで
+   ・下段の「本日の重点指示」「連絡事項」（日誌の備考）「明日の予定」「現場メモ」は、日誌の内容を載せたうえで
      残りを手書き用の罫線にする（無理に情報を詰め込まない）
+   ・現場に掲示して作業員・業者に周知するための帳票。監督向けの日誌状況（未提出・未署名・未承認・未印刷）・
+     今日の確認事項は載せない（ダッシュボードの「監督管理」タブで見る）。請求人工は載せない
+   ・本日の危険予知活動表は、紙のKY活動表の業者ごとの提出済み／未提出だけ（提出時刻・対象外の業者は載せない）
    ========================================================== */
 
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -55,19 +58,17 @@ export function buildTodaySheetHtml(model) {
       </table></div>`;
 
   const works = model.works.length
-    ? `<table class="works"><thead><tr><th>業者</th><th>職種</th><th>予定/実績</th><th>作業時間</th><th>作業内容</th><th>職長</th><th>安全注意事項・使用機械</th></tr></thead><tbody>${model.works
-        .map((w) => `<tr><td>${esc(w.vendor)}</td><td>${esc(w.occupation)}</td><td class="c">${w.planned ?? ""} / ${w.actual ?? ""}</td><td>${esc(w.hours)}</td><td>${br(w.content)}</td><td>${esc(w.foreman)}</td><td>${br([w.notes, w.machinery ? "機械：" + w.machinery : ""].filter(Boolean).join("\n"))}</td></tr>`)
+    ? `<table class="works"><thead><tr><th>業者</th><th>職種</th><th>予定/実績</th><th>人工</th><th>作業時間</th><th>作業内容</th><th>職長</th><th>安全注意事項・使用機械</th></tr></thead><tbody>${model.works
+        .map((w) => `<tr><td>${esc(w.vendor)}</td><td>${esc(w.occupation)}</td><td class="c">${w.planned ?? ""} / ${w.actual ?? ""}</td><td class="c">${w.manDays ?? ""}</td><td>${esc(w.hours)}</td><td>${br(w.content)}</td><td>${esc(w.foreman)}</td><td>${br([w.notes, w.machinery ? "機械：" + w.machinery : ""].filter(Boolean).join("\n"))}</td></tr>`)
         .join("")}</tbody></table>`
     : "";
 
-  const st = model.status;
-  const statusBox = `<table class="kv">
-      <tr><th>提出予定</th><td>${st.scheduled ?? "-"}</td></tr>
-      <tr><th>未提出</th><td>${st.missing ?? "-"}</td></tr>
-      <tr><th>未署名</th><td>${st.unsigned}</td></tr>
-      <tr><th>未承認</th><td>${st.unconfirmed}</td></tr>
-      <tr><th>未印刷</th><td>${st.unprinted}</td></tr>
-    </table>`;
+  // 本日の危険予知活動表（日報とは別の提出物）。対象業者の提出済／未提出だけを周知する
+  const ky = model.ky || { rows: [], submittedCount: 0, targetCount: 0 };
+  const kyTargets = ky.rows.filter((r) => r.state !== "excluded");
+  const kyBox = kyTargets.length
+    ? `<div class="ky">${kyTargets.map((r) => `<span class="${r.state === "submitted" ? "ok" : "ng"}">${esc(r.vendorName)} ${r.state === "submitted" ? "✓ 提出済み" : "未提出"}</span>`).join("")}</div><div class="ky-sum">提出済み ${ky.submittedCount}／対象 ${ky.targetCount}業者（未提出＝紙のKY活動表がまだ提出されていない）</div>`
+    : `<p class="empty">（対象業者の登録なし）</p>`;
 
   const notesBox = (text, lines) => `${text ? `<div class="filled">${br(text)}</div>` : ""}${ruled(lines)}`;
 
@@ -76,7 +77,7 @@ export function buildTodaySheetHtml(model) {
     <header class="top">
       <div class="title">今日の現場シート</div>
       <div class="site">${esc(h.siteName)}${h.constructionNumber ? `<span class="no">工事番号 ${esc(h.constructionNumber)}</span>` : ""}</div>
-      <div class="date">${esc(dateText)}${diary ? `<span class="wx">${esc(diary.weather)}${diary.temperature ? `　${esc(diary.temperature)}` : ""}</span>` : ""}</div>
+      <div class="date">${esc(dateText)}${diary ? `<span class="wx">${esc(diary.weather)}${diary.temperature ? `　${esc(diary.temperature)}${/\d$/.test(String(diary.temperature)) ? "℃" : ""}` : ""}</span>` : ""}</div>
       <div class="meta">${[h.startDate || h.endDate ? `工期 ${esc(h.startDate || "未定")}〜${esc(h.endDate || "未定")}` : "", progress, h.remainingDays != null ? `残り ${h.remainingDays}日` : "", h.dayNumber != null ? `${h.dayNumber}日目` : ""].filter(Boolean).join("　｜　")}</div>
     </header>
     <main class="mid">
@@ -84,11 +85,12 @@ export function buildTodaySheetHtml(model) {
       <div class="right">
         <section class="box"><h2>本日の搬入・搬出</h2><div class="content">${deliveries}</div></section>
         <section class="box staffbox"><h2>本日の人員</h2><div class="content">${staff}</div></section>
+        <section class="box kybox"><h2>本日の危険予知活動表</h2><div class="content">${kyBox}</div></section>
       </div>
     </main>
     ${works ? `<section class="box worksbox"><h2>本日の作業</h2><div class="content">${works}</div></section>` : ""}
     <footer class="bottom">
-      <section class="box"><h2>日誌状況（${esc(`${m}/${d}`)}まで）</h2><div class="content">${statusBox}</div></section>
+      <section class="box"><h2>本日の重点指示</h2><div class="content">${notesBox(diary?.focusInstructions, 5)}</div></section>
       <section class="box"><h2>連絡事項</h2><div class="content">${notesBox(diary?.remarks, 5)}</div></section>
       <section class="box"><h2>明日の予定</h2><div class="content">${notesBox(diary?.tomorrowPlan, 5)}</div></section>
       <section class="box"><h2>現場メモ</h2><div class="content">${ruled(6)}</div></section>
@@ -129,7 +131,7 @@ export function buildTodaySheetHtml(model) {
   .date .wx { font-size: 12pt; font-weight: normal; margin-left: 5mm; }
   .meta { grid-column: 1 / -1; font-size: 10.5pt; color: #333; }
   .mid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 50% 1fr; gap: 3mm; }
-  .right { display: grid; grid-template-rows: 1fr auto; gap: 3mm; min-height: 0; }
+  .right { display: grid; grid-template-rows: 1fr auto auto; gap: 3mm; min-height: 0; }
   .box { border: 0.4mm solid #555; border-radius: 1.5mm; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
   .box h2 { margin: 0; font-size: 11pt; background: #e8eef7; border-bottom: 0.3mm solid #555; padding: 1mm 3mm; }
   .box .content { flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 2mm 3mm; font-size: 10.5pt; line-height: 1.3; }
@@ -164,7 +166,12 @@ export function buildTodaySheetHtml(model) {
   .works th, .works td { border: 0.2mm solid #999; padding: 0.25em 0.5em; vertical-align: top; overflow-wrap: anywhere; }
   .works th { background: #f2f2f2; font-weight: normal; white-space: nowrap; }
   .works .c { text-align: center; white-space: nowrap; }
-  .bottom { flex: 0 0 62mm; display: grid; grid-template-columns: 1fr 1.4fr 1.4fr 1.4fr; gap: 3mm; }
+  .bottom { flex: 0 0 62mm; display: grid; grid-template-columns: 1.4fr 1.4fr 1.4fr 1fr; gap: 3mm; }
+  .kybox .content { padding: 1.5mm 3mm; }
+  .ky { display: flex; flex-wrap: wrap; gap: 1mm 5mm; }
+  .ky span { white-space: nowrap; }
+  .ky .ng { color: #b42318; font-weight: bold; }
+  .ky-sum { margin-top: 1mm; font-size: 0.9em; color: #444; }
   .filled { margin-bottom: 1mm; }
   .ruled div { border-bottom: 0.2mm solid #bbb; height: 7.5mm; }
   .empty { color: #777; margin: 0 0 2mm; }

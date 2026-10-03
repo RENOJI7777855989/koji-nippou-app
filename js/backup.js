@@ -33,7 +33,8 @@ const DATA_STORES = [
   "masterItems",
   "submissionPlans",
   "submissionAssignments",
-  "submissionImports"
+  "submissionImports",
+  "kySubmissions"
 ];
 
 // 復元時の競合一覧に表示するための、ストアごとの見出しラベルと代表フィールド
@@ -55,7 +56,8 @@ const STORE_LABELS = {
   masterItems: "共通積算項目マスター",
   submissionPlans: "提出内訳の出力設定",
   submissionAssignments: "提出内訳の区分割当",
-  submissionImports: "提出内訳Excelの取込結果"
+  submissionImports: "提出内訳Excelの取込結果",
+  kySubmissions: "危険予知活動表の提出状況"
 };
 const RECORD_LABEL_FIELDS = {
   sites: "name",
@@ -70,7 +72,8 @@ const RECORD_LABEL_FIELDS = {
   omissionDispositions: "disposition",
   masterItems: "standardName",
   submissionPlans: "projectTitle",
-  submissionImports: "sourceFileName"
+  submissionImports: "sourceFileName",
+  kySubmissions: "vendorName"
 };
 
 // ストアごとに、Blobを含むフィールド一覧（バックアップ時は別ファイルへ退避する）

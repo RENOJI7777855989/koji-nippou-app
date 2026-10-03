@@ -1792,3 +1792,26 @@ dialog h3 {
 .status-badge.day-holiday { background: #faf5ff; color: #553c9a; }
 .dash-patrol-attention { margin-top: 6px; padding: 6px 10px; border: 1px solid #f0b35a; border-radius: 6px; background: #fffaf0; }
 .dash-patrol-attention h4 { margin: 0 0 4px; font-size: 15px; color: #b45309; }
+
+/* 現場ダッシュボードのタブ（現場掲示／監督管理）と危険予知活動表 */
+.dash-tabs { display: flex; gap: 6px; margin-top: 12px; border-bottom: 2px solid #c9d6e8; }
+.dash-tab { background: #eef3fa; color: #2b6cb0; border: 1px solid #c9d6e8; border-bottom: none; border-radius: 8px 8px 0 0; padding: 10px 16px; min-height: 44px; font-size: 15px; cursor: pointer; }
+.dash-tab.is-active { background: #2b6cb0; color: #fff; border-color: #2b6cb0; font-weight: bold; }
+.dash-panel[hidden] { display: none; }
+.dash-ky-summary { margin: 0 0 6px; font-size: 15px; }
+.dash-ky-missing { margin: 0 0 6px; color: #b42318; font-weight: bold; }
+.dash-ky-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.dash-ky-list li { font-size: 15px; }
+.dash-ky-list li.is-ok { color: #276749; }
+.dash-ky-list li.is-missing { color: #b42318; }
+.dash-ky-states { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.dash-ky-state { min-height: 40px; padding: 6px 10px; border: 1px solid #c9d6e8; border-radius: 6px; background: #fff; color: #2d3748; cursor: pointer; }
+.dash-ky-state.is-on[data-ky-state="submitted"] { background: #276749; border-color: #276749; color: #fff; }
+.dash-ky-state.is-on[data-ky-state="not_submitted"] { background: #b42318; border-color: #b42318; color: #fff; }
+.dash-ky-state.is-on[data-ky-state="excluded"] { background: #718096; border-color: #718096; color: #fff; }
+.dash-ky-table tr.ky-excluded td { color: #888; }
+.dash-ky-candidates { margin-top: 8px; }
+.dash-ky-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.dash-ky-add { min-height: 40px; padding: 6px 10px; border: 1px dashed #2b6cb0; border-radius: 6px; background: #f5f9ff; color: #2b6cb0; cursor: pointer; }
+.dash-ky-form { display: flex; gap: 6px; margin-top: 4px; }
+.dash-ky-form input { flex: 1 1 auto; min-width: 0; min-height: 40px; }

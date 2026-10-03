@@ -40,10 +40,10 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   });
   await page.goto(`${BASE}#/sites/${ids.siteId}`); await page.waitForSelector("#siteDashboard:not([hidden])");
   const at = async (date) => { await page.fill("#siteDashboard .dash-date-input", date); await page.dispatchEvent("#siteDashboard .dash-date-input", "change"); await page.waitForTimeout(500);
-    return page.evaluate(() => ({ text: document.getElementById("siteDashboard").textContent.replace(/\s+/g, " "), state: document.querySelector("#siteDashboard .dash-state")?.textContent || "", att: [...document.querySelectorAll("#siteDashboard .dash-attention li")].map((l) => l.textContent.replace(/\s+/g, " ")), checks: Object.fromEntries([...document.querySelectorAll("#siteDashboard .dash-checks dt")].map((dt) => [dt.textContent, dt.nextElementSibling.textContent])), compare: [...document.querySelectorAll("#siteDashboard .dash-compare tbody tr")].map((tr) => tr.textContent.replace(/\s+/g, "")), vendors: document.querySelectorAll("#siteDashboard .dash-vendors tbody tr").length, firstCard: document.querySelector("#siteDashboard .dash-grid .dash-card h3")?.textContent })); };
+    return page.evaluate(() => ({ text: document.getElementById("siteDashboard").textContent.replace(/\s+/g, " "), state: document.querySelector("#siteDashboard .dash-state")?.textContent || "", att: [...document.querySelectorAll("#siteDashboard .dash-attention li")].map((l) => l.textContent.replace(/\s+/g, " ")), checks: Object.fromEntries([...document.querySelectorAll("#siteDashboard .dash-checks dt")].map((dt) => [dt.textContent, dt.nextElementSibling.textContent])), compare: [...document.querySelectorAll("#siteDashboard .dash-compare tbody tr")].map((tr) => tr.textContent.replace(/\s+/g, "")), vendors: document.querySelectorAll("#siteDashboard .dash-vendors tbody tr").length, firstCard: document.querySelector("#siteDashboard .dash-panel[data-panel=manage] .dash-card h3")?.textContent, boardCards: [...document.querySelectorAll("#siteDashboard .dash-panel[data-panel=board] .dash-card h3")].map((h) => h.textContent) })); };
 
   const d3 = await at("2026-09-03");
-  check("配置: ダッシュボードの最初のカードが「今日の確認事項」", d3.firstCard.includes("今日の確認事項"), d3.firstCard);
+  check("配置: 「監督管理」タブの最初のカードが「今日の確認事項」・「現場掲示」タブには確認事項・日誌状況・巡回点検を出さない", d3.firstCard.includes("今日の確認事項") && d3.boardCards[0].includes("業者別 稼働状況") && !d3.boardCards.some((t) => /確認事項|日誌状況|巡回点検|現場概要|昨日/.test(t)), d3.boardCards.join(" / "));
   check("今日の確認事項: 日報・進捗率41%・業者3社・作業員22人・作業時間（電気が未入力）・重点指示・連絡調整・搬入", d3.checks["日報"] === "入力済み（通常作業）" && d3.checks["進捗率"] === "41%" && d3.checks["業者"] === "3社" && d3.checks["作業員数"] === "22人" && d3.checks["作業時間"] === "サンプル電気 未入力" && d3.checks["本日の重点指示"] === "入力済み" && d3.checks["作業間の連絡・調整"] === "入力済み" && d3.checks["搬入・搬出"] === "2件（完了1・予定1）", JSON.stringify(d3.checks));
   check("要確認: 作業時間（電気）・署名（電気）・巡回点検・要確認（×1件・是正指示あり）・巡回点検の未記入", d3.att.length === 4 && d3.att.some((a) => a.includes("サンプル電気") && a.includes("署名未入力")) && d3.att.includes("巡回点検・要確認 × 1件・是正指示あり") && d3.att.some((a) => a.startsWith("巡回点検 未記入")), d3.att.join(" / "));
   check("昨日→今日（9/2→9/3）: 作業員 18→22人・人工（1人＝1人工）18→22・進捗率 38→41%・業者 2→3社（請求人工7.5・4は使わない）", d3.compare.join("|") === "作業員18人→22人|人工18→22|進捗率38%→41%|業者数2社→3社", d3.compare.join(" | "));
@@ -62,8 +62,10 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   check("累計: 作業なしの日の人数を数えない（18+22=40人）", d6staff === "40", d6staff);
 
   // カレンダー（9月）
+  check("日報カレンダーは「監督管理」タブの中にある", await page.evaluate(() => !!document.querySelector("#siteDashboard .dash-panel[data-panel=manage] #reportCalendar")));
   const cal = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll("#reportCalendar .cal-cell[data-date]")].map((b) => [b.dataset.date.slice(8), b.className.replace(/cal-cell |cal-today/g, "").trim()])));
   check("カレンダー: 9/2 は日報あり（入力がそろっている）、9/3 は一部未入力（電気の作業時間・署名）、9/4 作業なし、9/5 休工日、9/1・9/6 日報なし", cal["02"] === "cal-ok" && cal["03"] === "cal-partial" && cal["04"] === "cal-nowork" && cal["05"] === "cal-holiday" && cal["01"] === "cal-none" && cal["06"] === "cal-none", JSON.stringify({ "01": cal["01"], "02": cal["02"], "03": cal["03"], "04": cal["04"], "05": cal["05"], "06": cal["06"] }));
+  await page.click("#siteDashboard .dash-tab[data-tab=manage]"); // 日報カレンダーは「監督管理」タブ
   await page.click("#reportCalendar .cal-cell[data-date='2026-09-04']"); await page.waitForSelector("#view-report-form:not([hidden])");
   check("カレンダー: 日付を押すとその日の日報が開き、日の状態「作業なし」が選ばれている", (await page.inputValue("#dayStatus")) === "nowork" && (await page.inputValue("#date")) === "2026-09-04");
   // 日の状態を画面で変えて保存

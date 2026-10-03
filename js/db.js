@@ -5,7 +5,7 @@
    ========================================================== */
 
 const DB_NAME = "constructionReportsDB";
-const DB_VERSION = 9;
+const DB_VERSION = 10;
 
 let dbPromise = null;
 
@@ -154,6 +154,13 @@ export function openDb() {
       // 取込1回=1レコード。既存ストアには影響しない。
       if (!db.objectStoreNames.contains("submissionImports")) {
         const store = db.createObjectStore("submissionImports", { keyPath: "id" });
+        store.createIndex("by_siteId", "siteId");
+      }
+
+      // DB v10: 危険予知活動表（KY活動表）の提出状況（現場×日付×業者名）。日報とは独立した提出物。
+      // 新しいストアを足すだけで、既存ストア・既存データには触れない（js/ky/kySubmissions.js）。
+      if (!db.objectStoreNames.contains("kySubmissions")) {
+        const store = db.createObjectStore("kySubmissions", { keyPath: "id" });
         store.createIndex("by_siteId", "siteId");
       }
     };

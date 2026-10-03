@@ -109,6 +109,7 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
   check("7 本日の人員: 実績9人（予定6）・職長1人・業者2社・累計9人・延べ労働時間72時間", /9人/.test(dash) && dash.includes("予定 6人") && dash.includes("職長1人") && dash.includes("業者2社") && dash.includes("累計（社員を含む）9人") && dash.includes("延べ労働時間72時間"), dash.match(/本日の人員[\s\S]{0,120}/)?.[0].replace(/\s+/g, " "));
   check("8 本日の作業: 業者・職種・予定/実績・作業時間・作業内容・職長", dash.includes("山田型枠") && dash.includes("08:00～17:00") && dash.includes("9時間") && dash.includes("2階型枠建込") && dash.includes("6 / 5"));
   check("9 今日の日誌: 天候・気温・作業・明日の予定", dash.includes("晴れ　25℃") && dash.includes("3階床配筋"));
+  await page.click("#siteDashboard .dash-tab[data-tab=manage]"); // 日誌状況は「監督管理」タブ
   const status = await page.$$eval("#siteDashboard .dash-status-row", (els) => Object.fromEntries(els.map((e) => [e.querySelector("span").textContent, e.querySelector("b").textContent])));
   check("10 日誌状況: 提出予定4・未提出3・未署名1・未承認1・未印刷1", status["提出予定"] === "4" && status["未提出"] === "3" && status["未署名"] === "1" && status["未承認（未確認）"] === "1" && status["未印刷"] === "1", JSON.stringify(status));
   await page.click("#siteDashboard .dash-status-row[data-filter=missing]");
