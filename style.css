@@ -1853,3 +1853,13 @@ dialog h3 {
 .billing-table tr.billing-unconfirmed td:first-child { border-left: 4px solid #f0b35a; }
 .billing-status, .billing-close-status { min-height: 40px; }
 .billing-close { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; }
+
+/* 業者管理（業者別稼働／請求人工管理） */
+.vm-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.vm-head select { min-height: 44px; font-size: 16px; }
+.vm-lead { margin: 8px 0; color: #4a5568; }
+.vm-table .vm-vendor { font-weight: bold; font-size: 15px; padding: 6px 0; min-height: 36px; text-align: left; }
+.vm-detail-title { margin: 8px 0; }
+.vm-days tr.vm-notworked td { color: #718096; }
+.vm-days .vm-report { min-height: 36px; }
+.billing-close { white-space: nowrap; }

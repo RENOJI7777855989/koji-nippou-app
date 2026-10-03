@@ -33,6 +33,7 @@ import { initComparisonView } from "./ui/comparison-view.js";
 import { initMasterItemListView } from "./ui/master-item-list-view.js";
 import { initSubmissionView } from "./ui/submission-view.js";
 import { initSubmissionImportView } from "./ui/submission-import-view.js";
+import { initVendorManagementView } from "./ui/vendor-management-view.js";
 
 /**
  * セットアップリンク（index.html#setup=鍵）で開かれたら、鍵をURLから取り除いてから処理する
@@ -90,6 +91,7 @@ async function bootstrap() {
   registerRoute("/sites/:id/vendor-quotes/import", (params) => initVendorQuoteImportView(params));
   registerRoute("/sites/:id/vendor-quotes/compare", (params) => initComparisonView(params));
   registerRoute("/sites/:id/vendor-quotes", (params) => initVendorQuoteListView(params));
+  registerRoute("/sites/:id/vendors", (params) => initVendorManagementView(params));
   registerRoute("/sites/:id", (params) => initSiteDetailView(params));
 
   startRouter();

@@ -14,7 +14,6 @@ import { dayStatusOf, labelOf, DAY_STATUSES } from "../dashboard/dailyFlow.js";
 import { dbGetAll } from "../db.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
 import { openDayStatusDialog } from "./day-status-dialog.js";
-import { buildMonthlyBilling, setBillingStatus, setBillingClose, BILLING_STATUSES, BILLING_CLOSE_STATUSES } from "../billing/billingMonthly.js";
 import { escapeHtml } from "../utils.js";
 import { showView, showMessage } from "./common.js";
 import { navigate } from "../router.js";
@@ -180,47 +179,8 @@ async function renderReportCalendar(reports) {
     <p class="cal-summary">日報あり ${counts.ok}・一部未入力 ${counts.partial}・<b>日報なし ${counts.none}</b>・現場作業なし ${counts.nowork}・休工日 ${counts.holiday}・雨天作業不可日 ${counts.rain}・事務作業日 ${counts.office}</p>
     <div class="cal-grid">${["日", "月", "火", "水", "木", "金", "土"].map((w) => `<div class="cal-week">${w}</div>`).join("")}${cells.join("")}</div>
     <p class="cal-note">「日報なし」は工期内で日報が無い日です（現場作業なし・休工日・雨天作業不可日・事務作業日とは別。日報で選んだ日だけがその表示になります）。日報のある日を押すと日報を開きます。日報なしの日を押すと、この日の状態（通常作業・現場作業なし・休工日・雨天作業不可日・事務作業日）を選んで登録できます。</p>
-    ${billingMonthlyHtml(reports, today)}`;
+`;
 }
-
-/* ---------- 請求人工（月次）。カレンダーと同じ月を表示する（月を切り替えると請求の集計もその月に切り替わる）---------- */
-function billingMonthlyHtml(reports, today) {
-  const b = buildMonthlyBilling({ reports, site: currentSite, month: calendarMonth, today });
-  const [y, m] = calendarMonth.split("-").map(Number);
-  const canEdit = hasPermission("editReports");
-  const md = (iso) => { if (!iso) return ""; const [, mm, dd] = iso.split("-").map(Number); return `${mm}/${dd}`; };
-  const statusSelect = (row) => `<select class="billing-status" data-billing-vendor="${escapeHtml(row.vendor)}" aria-label="${escapeHtml(row.vendor)}の請求状況"${canEdit ? "" : " disabled"}>${BILLING_STATUSES.map((s) => `<option value="${s.value}"${s.value === row.status ? " selected" : ""}>${s.label}</option>`).join("")}</select>`;
-  const rows = b.rows.map((r) => `<tr class="billing-${r.status}" data-billing-row="${escapeHtml(r.vendor)}">
-      <td><b>${escapeHtml(r.vendor)}</b>${r.trades.length ? `<br><small class="empty-message">${escapeHtml(r.trades.join("・"))}</small>` : ""}</td>
-      <td class="num">${r.manDays}${r.missingRows ? `<br><small class="empty-message">未入力の行 ${r.missingRows}（合計に入れない）</small>` : ""}</td>
-      <td>${statusSelect(r)}</td>
-      <td>${md(r.lastDate)}</td></tr>`).join("");
-  return `<section class="billing-monthly" aria-label="請求人工（月次）" data-billing-month="${calendarMonth}">
-    <h4>💴 請求人工（月次）　${y}年${m}月</h4>
-    <p class="billing-summary">請求あり <b>${b.counts.billed}</b>社・未確認 <b>${b.counts.unconfirmed}</b>社・請求なし <b>${b.counts.none}</b>社${b.counts.billedWithoutManDays ? `・<span class="billing-warn">請求あり・請求人工未入力 ${b.counts.billedWithoutManDays}社</span>` : ""}　／　月間請求人工 計 <b>${b.total}</b>（${md(b.cutoff)}まで）</p>
-    ${b.rows.length
-      ? `<div class="dash-table-wrap"><table class="dash-table billing-table"><thead><tr><th>業者</th><th class="num">月間請求人工</th><th>請求状況</th><th>最終入力日</th></tr></thead><tbody>${rows}</tbody></table></div>`
-      : `<p class="empty-message">この月に請求人工を入力した業者はありません。</p>`}
-    ${b.billedWithoutManDays.length ? `<p class="billing-warn">請求ありで登録されていますが、この月の請求人工が入力されていない業者（一覧には出しません）：${escapeHtml(b.billedWithoutManDays.join("・"))}</p>` : ""}
-    <label class="billing-close">月の締め <select class="billing-close-status"${canEdit ? "" : " disabled"}>${BILLING_CLOSE_STATUSES.map((s) => `<option value="${s.value}"${s.value === b.closeStatus ? " selected" : ""}>${s.label}</option>`).join("")}</select></label>
-    <p class="cal-note">月間請求人工は、この月の日報の業者ごとの「請求人工」の合計です（業者名ごと。工種が違っても同じ業者は1社。今日より後の日付は含めない。月をまたいで足さない）。一覧に出すのは、この月に請求人工を1件以上入力した業者だけです（日報に出ただけ・請求状況だけの業者は出しません）。請求状況は請求書を確認して選びます（請求人工が入っていても自動で「請求あり」にはしません。請求なしでも請求人工は0にしません）。前の月に切り替えると、その月の合計・請求状況をそのまま確認できます。</p>
-  </section>`;
-}
-
-
-// 請求状況・月の締めの変更（現場の記録に保存。請求人工・日報は変えない）
-reportCalendarEl?.addEventListener("change", async (e) => {
-  const st = e.target.closest(".billing-status");
-  const close = e.target.closest(".billing-close-status");
-  if (!st && !close) return;
-  try {
-    currentSite = st ? await setBillingStatus(currentSite.id, calendarMonth, st.dataset.billingVendor, st.value) : await setBillingClose(currentSite.id, calendarMonth, close.value);
-    await renderReportCalendar(await listReportsBySite(currentSite.id));
-    await renderSiteDashboard(currentSite, dashboardOptions);
-  } catch (err) {
-    showMessage(err.message, true);
-  }
-});
 
 reportCalendarEl?.addEventListener("click", async (e) => {
   const nav = e.target.closest(".cal-nav");
@@ -411,6 +371,8 @@ reportListEl.addEventListener("click", (e) => {
 });
 
 editBtn.addEventListener("click", () => navigate(`/sites/${currentSite.id}/edit`));
+// 業者管理（業者別稼働／請求人工管理）
+document.getElementById("vendorMgmtBtn")?.addEventListener("click", () => navigate(`/sites/${currentSite.id}/vendors`));
 backBtn.addEventListener("click", () => navigate("/sites"));
 newReportBtn.addEventListener("click", () => navigate(`/sites/${currentSite.id}/report/new`));
 goToEstimateListBtn.addEventListener("click", () => navigate(`/sites/${currentSite.id}/estimates`));
@@ -567,12 +529,6 @@ export async function initSiteDetailView(params) {
 }
 
 const dashboardOptions = {
-  // ダッシュボードの「今月の請求状況」の「詳細を見る」: カレンダー（と請求人工（月次））をその月にして表示する
-  onShowBilling: async (month) => {
-    calendarMonth = month;
-    await renderReportCalendar(await listReportsBySite(currentSite.id));
-    reportCalendarEl.querySelector(".billing-monthly")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  },
   onFilter: async (filter) => {
     reportListFilter.value = filter;
     await renderReportList();

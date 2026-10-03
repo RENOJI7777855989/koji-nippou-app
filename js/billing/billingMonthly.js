@@ -15,6 +15,7 @@
 
 import { dbGet } from "../db.js";
 import { updateSite } from "../sites.js";
+import { isWorkDay, dayStatusOf, labelOf as statusLabelOf, DAY_STATUSES, parseWorkHours, workMinutes } from "../dashboard/dailyFlow.js";
 
 export const BILLING_STATUSES = [
   { value: "unconfirmed", label: "未確認" },
@@ -49,7 +50,7 @@ export function buildMonthlyBilling({ reports = [], site = null, month, today })
   const savedVendors = saved.vendors || {};
   const byVendor = new Map();
   const ensure = (name) => {
-    if (!byVendor.has(name)) byVendor.set(name, { vendor: name, total: 0, entered: 0, missing: 0, lastDate: "", trades: new Set(), days: new Set() });
+    if (!byVendor.has(name)) byVendor.set(name, { vendor: name, total: 0, entered: 0, missing: 0, lastDate: "", trades: new Set(), days: new Set(), billingDays: new Set() });
     return byVendor.get(name);
   };
   for (const r of reports) {
@@ -62,7 +63,7 @@ export function buildMonthlyBilling({ reports = [], site = null, month, today })
       if ((c.occupation || "").trim()) v.trades.add(c.occupation.trim());
       const b = billingValueOf(c);
       if (b == null) v.missing++;
-      else { v.total += b; v.entered++; if (r.date > v.lastDate) v.lastDate = r.date; }
+      else { v.total += b; v.entered++; v.billingDays.add(r.date); if (r.date > v.lastDate) v.lastDate = r.date; }
     }
   }
   // 一覧・集計の対象は、この月に請求人工が1件以上入力されている業者だけ
@@ -74,6 +75,7 @@ export function buildMonthlyBilling({ reports = [], site = null, month, today })
       vendor: v.vendor,
       manDays,
       enteredRows: v.entered,
+      enteredDays: v.billingDays.size, // 請求人工を入力した日数
       missingRows: v.missing,
       days: v.days.size,
       trades: [...v.trades],
@@ -125,4 +127,96 @@ export async function setBillingClose(siteId, month, closeStatus) {
   const months = { ...(site.billingMonths || {}) };
   months[month] = { ...(months[month] || {}), vendors: { ...(months[month]?.vendors || {}) }, closeStatus, closeUpdatedAt: new Date().toISOString() };
   return updateSite(siteId, { billingMonths: months });
+}
+
+/* ----------------------------------------------------------
+   業者管理: 業者別稼働（実際の現場稼働。請求人工は使わない）と、業者・月の日別の詳細
+   ・稼働日＝通常作業の日報で、その業者の稼働人数（実績人数）が1人以上の日。現場作業なし・休工日・
+     雨天作業不可日・事務作業日の日報は、既存の決まりどおり現場作業員の稼働に数えない
+   ・稼働人数＝実績人数の合計、実績人工＝1人＝1人工（稼働人数と同じ）、作業時間＝業者の行の作業時間（開始～終了）の合計
+     （同じ日に同じ業者が複数の工種の行にあるときは行ごとに足す。開始・終了がそろわない行は「未入力」として数える）
+   ・基準日（今日）より後の日報は入れない。月をまたいで足さない
+   ---------------------------------------------------------- */
+const actualOf = (c) => { const n = Number(String(c?.actualWorkerCount ?? "").trim()); return Number.isFinite(n) && n > 0 ? n : 0; };
+const minutesOf = (c) => { const p = parseWorkHours(c?.workHours); return p && p.end ? workMinutes(p.start, p.end) : null; };
+const inMonth = (r, month, cutoff) => !r.isDeleted && r.date && r.date.slice(0, 7) === month && r.date <= cutoff;
+const cutoffOf = (month, today) => { const end = monthEnd(month); return today && today < end ? today : end; };
+
+/** その月の業者別稼働（純粋関数） */
+export function buildVendorActivity({ reports = [], month, today }) {
+  const cutoff = cutoffOf(month, today);
+  const byVendor = new Map();
+  for (const r of reports) {
+    if (!inMonth(r, month, cutoff) || !isWorkDay(r)) continue;
+    const dayTotals = new Map(); // 同じ日の同じ業者（複数の工種の行）をまとめる
+    for (const c of r.companies || []) {
+      const name = String(c.companyName || "").trim();
+      if (!name) continue;
+      const t = dayTotals.get(name) || { workers: 0, minutes: 0, missingHours: 0, trades: new Set() };
+      t.workers += actualOf(c);
+      const m = minutesOf(c);
+      if (actualOf(c) > 0) { if (m == null) t.missingHours++; else t.minutes += m; }
+      if ((c.occupation || "").trim()) t.trades.add(c.occupation.trim());
+      dayTotals.set(name, t);
+    }
+    for (const [name, t] of dayTotals) {
+      if (t.workers < 1) continue; // 稼働人数0の日は稼働日にしない
+      const v = byVendor.get(name) || { vendor: name, days: 0, workers: 0, minutes: 0, missingHours: 0, trades: new Set() };
+      v.days++; v.workers += t.workers; v.minutes += t.minutes; v.missingHours += t.missingHours;
+      t.trades.forEach((x) => v.trades.add(x));
+      byVendor.set(name, v);
+    }
+  }
+  const rows = [...byVendor.values()].map((v) => ({ vendor: v.vendor, days: v.days, workers: v.workers, manDays: v.workers, minutes: v.minutes, hoursMissing: v.missingHours, trades: [...v.trades] })).sort((a, b) => a.vendor.localeCompare(b.vendor, "ja"));
+  return { month, cutoff, rows, totals: { vendors: rows.length, days: rows.reduce((s, r) => s + r.days, 0), workers: rows.reduce((s, r) => s + r.workers, 0), minutes: rows.reduce((s, r) => s + r.minutes, 0) } };
+}
+
+/**
+ * 業者・月の日別の詳細（稼働と請求人工の入力を日ごとに並べる。どちらかがある日を出す）
+ * 稼働は通常作業の日の実績人数、請求人工は日の状態に関係なく入力された値（未入力は null）
+ */
+export function buildVendorMonthDetail({ reports = [], site = null, month, today, vendor }) {
+  const cutoff = cutoffOf(month, today);
+  const name = String(vendor || "").trim();
+  const days = [];
+  for (const r of [...reports].sort((a, b) => (a.date || "").localeCompare(b.date || ""))) {
+    if (!inMonth(r, month, cutoff)) continue;
+    const rows = (r.companies || []).filter((c) => String(c.companyName || "").trim() === name);
+    if (!rows.length) continue;
+    const work = isWorkDay(r);
+    const workers = work ? rows.reduce((s, c) => s + actualOf(c), 0) : 0;
+    const mins = rows.map(minutesOf).filter((m) => m != null);
+    const billingVals = rows.map(billingValueOf).filter((b) => b != null);
+    const billing = billingVals.length ? Math.round(billingVals.reduce((s, b) => s + b, 0) * 100) / 100 : null;
+    if (workers < 1 && billing == null) continue;
+    days.push({
+      date: r.date,
+      reportId: r.id,
+      dayStatus: dayStatusOf(r),
+      dayStatusLabel: statusLabelOf(DAY_STATUSES, dayStatusOf(r)),
+      worked: workers >= 1,
+      workers,
+      hours: [...new Set(rows.map((c) => c.workHours).filter(Boolean))].join("・"),
+      minutes: work && mins.length ? mins.reduce((s, m) => s + m, 0) : null,
+      trades: [...new Set(rows.map((c) => (c.occupation || "").trim()).filter(Boolean))],
+      billing
+    });
+  }
+  const billingInfo = buildMonthlyBilling({ reports, site, month, today }).rows.find((r) => r.vendor === name) || null;
+  const saved = site?.billingMonths?.[month]?.vendors?.[name];
+  return {
+    vendor: name,
+    month,
+    cutoff,
+    days,
+    summary: {
+      workDays: days.filter((d) => d.worked).length,
+      workers: days.reduce((s, d) => s + d.workers, 0),
+      manDays: days.reduce((s, d) => s + d.workers, 0),
+      billing: billingInfo ? billingInfo.manDays : null,
+      billingDays: days.filter((d) => d.billing != null).length,
+      status: billingInfo ? billingInfo.status : saved?.status || "unconfirmed",
+      statusLabel: labelOf(BILLING_STATUSES, billingInfo ? billingInfo.status : saved?.status || "unconfirmed")
+    }
+  };
 }

@@ -21,7 +21,6 @@ import { staffHeadcountInfo, staffHeadcountForDay } from "./dailyFlow.js";
 import { labelOf, dayStatusOf, isWorkDay, DAY_STATUSES, directionOf, DELIVERY_DIRECTIONS, DELIVERY_STATUSES, FLOW_STATUSES, FLOW_KINDS, parseWorkHours, formatWorkHours, workMinutes, durationLabel } from "./dailyFlow.js";
 import { PATROL_CHECKLIST_ITEMS, patrolStatusOf } from "../patrolChecklist.js";
 import { normalizeTrade } from "../report-output/tradeAttendance.js";
-import { buildMonthlyBilling } from "../billing/billingMonthly.js";
 
 /*
  * 業者と工種は別のもの（業者＝施工する会社、工種＝その日の作業の種別）。日報の業者の行は「業者＋工種＋作業内容」で、
@@ -448,10 +447,6 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
   } else if (!report || isWork) {
     add("危険予知活動表", "対象業者 未登録", "info");
   }
-  // 今月（表示している日の月）の請求状況（監督管理用。請求人工の月間合計は日報から計算、請求状況は現場の記録）。
-  // 請求ありで保存されているのに、この月の請求人工が1件も入力されていない業者は確認事項に出す（月次の一覧には出さない）
-  const billing = buildMonthlyBilling({ reports: live, site, month: date.slice(0, 7), today: date });
-  if (billing.counts.billedWithoutManDays) add("請求", `請求あり・請求人工未入力 ${billing.counts.billedWithoutManDays}社（${billing.billedWithoutManDays.join("・")}）`, "warn");
   const attention = checks.filter((c) => c.level === "warn");
 
   // ---- 昨日 → 今日（前日の日報と比べる。片方が無ければ比較しない）----
@@ -480,5 +475,5 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
     attentionCount: attention.length
   };
 
-  return { header, reportId: report?.id || null, dayStatus, isWork, sameDayCount, flow, deliveries, works, safety, patrol, patrolStatus, staff, status, billing, diary, checks, attention, compare, overview, ky };
+  return { header, reportId: report?.id || null, dayStatus, isWork, sameDayCount, flow, deliveries, works, safety, patrol, patrolStatus, staff, status, diary, checks, attention, compare, overview, ky };
 }

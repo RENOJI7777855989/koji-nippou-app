@@ -127,15 +127,6 @@ function render(model) {
     ${cr.staffWork ? `<p class="dash-sub">監督・職員の作業内容：${escapeHtml(cr.staffWork).replace(/\n/g, "<br>")}</p>` : ""}
     <p class="dash-sub">人工は1人＝1人工の現場集計の値です。監督・職員は03-2の稼動人数表の「社員」の行に入り、計・延労働時間に含まれます。</p>`;
 
-  // 今月の請求状況（請求人工の月次管理の要約。詳細は日報カレンダーの下の「請求人工（月次）」）
-  const bl = model.billing;
-  const billingHtml = `<dl class="dash-dl dash-dl-row">
-      <dt>請求あり</dt><dd>${bl.counts.billed}社</dd><dt>未確認</dt><dd>${bl.counts.unconfirmed}社</dd><dt>請求なし</dt><dd>${bl.counts.none}社</dd>
-      <dt>月間請求人工</dt><dd>${bl.total}（${Number(bl.cutoff.slice(5, 7))}/${Number(bl.cutoff.slice(8))}まで）</dd><dt>締め</dt><dd>${escapeHtml(bl.closeLabel)}</dd>
-    </dl>
-    ${bl.counts.billedWithoutManDays ? `<p class="billing-warn">請求あり・請求人工未入力 ${bl.counts.billedWithoutManDays}社</p>` : ""}
-    <button type="button" class="secondary-btn" data-action="billing" data-month="${bl.month}">詳細を見る</button>`;
-
   const d = model.diary;
   const diaryHtml = d
     ? `<dl class="dash-dl">
@@ -329,7 +320,6 @@ function render(model) {
       <section class="dash-card dash-card-wide dash-today"><h3>✅ 今日の確認事項</h3>${stateHtml}${checksHtml}</section>
       <section class="dash-card dash-card-wide dash-ky"><h3>📝 本日の危険予知活動表 提出状況</h3>${kyManageHtml}</section>
       <section class="dash-card dash-card-wide"><h3>👥 本日の稼働（現場作業員・監督/職員）</h3>${crewHtml}</section>
-      <section class="dash-card dash-billing-card"><h3>💴 今月の請求状況（${Number(model.billing.month.slice(5))}月）</h3>${billingHtml}</section>
       <section class="dash-card"><h3>🏗 現場概要</h3>${overviewHtml}</section>
       <section class="dash-card"><h3>📈 昨日 → 今日</h3>${compareHtml}</section>
       <section class="dash-card"><h3>🔍 本日の巡回点検（03-2の巡回点検記録）</h3>${patrolHtml}</section>
@@ -405,7 +395,6 @@ root?.addEventListener("click", async (e) => {
   if (action === "diary") openDiary(null);
   if (action === "deliveries") openDiary("deliveries");
   if (action === "companies") openDiary("companies");
-  if (action === "billing" && current.onShowBilling) await current.onShowBilling(e.target.closest("[data-action]").dataset.month);
   if (action === "print") {
     const html = buildTodaySheetHtml(current.model);
     openReportPrintDialog({
@@ -438,9 +427,9 @@ root?.addEventListener("change", async (e) => {
  * @param {object} site
  * @param {{onFilter?: (filter: string) => void}} [options] 日誌状況の数字を押したときに日報一覧を絞り込む
  */
-export async function renderSiteDashboard(site, { onFilter, onShowBilling } = {}) {
+export async function renderSiteDashboard(site, { onFilter } = {}) {
   if (!root) return;
   const keepDate = current.site?.id === site.id && current.date ? current.date : todayIso();
-  current = { site, date: keepDate, onFilter, onShowBilling, model: null };
+  current = { site, date: keepDate, onFilter, model: null };
   await refresh();
 }

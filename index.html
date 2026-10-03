@@ -149,6 +149,7 @@
       </dl>
       <div class="toolbar">
         <button type="button" id="editSiteBtn" class="secondary-btn">現場情報を編集</button>
+        <button type="button" id="vendorMgmtBtn" class="secondary-btn">👷 業者管理</button>
         <button type="button" id="copySiteBtn" class="secondary-btn">この現場をコピー</button>
         <button type="button" id="toggleArchiveBtn" class="secondary-btn"></button>
       </div>
@@ -578,6 +579,22 @@
     </section>
 
     <!-- 積算内訳一覧 -->
+    <!-- 業者管理（業者別稼働／請求人工管理。js/ui/vendor-management-view.js） -->
+    <section class="view" id="view-vendor-management" hidden>
+      <button type="button" id="backToSiteFromVendorMgmtBtn" class="link-btn">← 現場詳細に戻る</button>
+      <h2>業者管理<span id="vendorMgmtSiteName"></span></h2>
+      <div class="vm-head">
+        <button type="button" class="secondary-btn vm-month-nav" data-shift="-1" aria-label="前の月">◀</button>
+        <label>対象年月 <select id="vendorMgmtMonth" aria-label="対象年月"></select></label>
+        <button type="button" class="secondary-btn vm-month-nav" data-shift="1" aria-label="次の月">▶</button>
+      </div>
+      <div class="dash-tabs vm-tabs" role="tablist">
+        <button type="button" role="tab" class="dash-tab" data-vm-tab="activity">業者別稼働</button>
+        <button type="button" role="tab" class="dash-tab" data-vm-tab="billing">請求人工管理</button>
+      </div>
+      <div id="vendorMgmtBody"></div>
+    </section>
+
     <section class="view" id="view-estimate-list" hidden>
       <button type="button" id="backToSiteFromEstimateListBtn" class="link-btn">← 現場詳細に戻る</button>
       <h2>積算内訳<span id="estimateListSiteName"></span></h2>
