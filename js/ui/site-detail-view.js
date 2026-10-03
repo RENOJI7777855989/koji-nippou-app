@@ -13,6 +13,7 @@ import { calendarDayState } from "../dashboard/siteDashboardModel.js";
 import { dayStatusOf, labelOf, DAY_STATUSES } from "../dashboard/dailyFlow.js";
 import { dbGetAll } from "../db.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
+import { openDayStatusDialog } from "./day-status-dialog.js";
 import { escapeHtml } from "../utils.js";
 import { showView, showMessage } from "./common.js";
 import { navigate } from "../router.js";
@@ -176,7 +177,7 @@ async function renderReportCalendar(reports) {
     </div>
     <p class="cal-summary">日報あり ${counts.ok}・一部未入力 ${counts.partial}・<b>日報なし ${counts.none}</b>・作業なし ${counts.nowork}・事務作業日 ${counts.office}・休工日 ${counts.holiday}</p>
     <div class="cal-grid">${["日", "月", "火", "水", "木", "金", "土"].map((w) => `<div class="cal-week">${w}</div>`).join("")}${cells.join("")}</div>
-    <p class="cal-note">「日報なし」は工期内で日報が無い日です（作業なし・休工日とは別。日報で「作業なし」「休工日」を選んだ日だけがその表示になります）。日付を押すと日報を開きます（日報なしの日は新しく作成）。</p>`;
+    <p class="cal-note">「日報なし」は工期内で日報が無い日です（作業なし・休工日・事務作業日とは別。日報で選んだ日だけがその表示になります）。日報のある日を押すと日報を開きます。日報なしの日を押すと、この日の状態（通常作業・作業なし・休工日・事務作業日）を選んで登録できます。</p>`;
 }
 
 reportCalendarEl?.addEventListener("click", async (e) => {
@@ -191,7 +192,17 @@ reportCalendarEl?.addEventListener("click", async (e) => {
   const cell = e.target.closest(".cal-cell[data-date]:not([disabled])");
   if (!cell) return;
   if (cell.dataset.reportId) navigate(`/sites/${currentSite.id}/report/${cell.dataset.reportId}`);
-  else if (!currentSite.completedAt && hasPermission("editReports")) navigate(`/sites/${currentSite.id}/report/new?date=${cell.dataset.date}`);
+  // 日報なしの日: この日の状態（通常作業→日報の作成画面／作業なし・休工日・事務作業日→簡単な登録）を選ぶ
+  else if (!currentSite.completedAt && hasPermission("editReports")) {
+    openDayStatusDialog({
+      site: currentSite,
+      date: cell.dataset.date,
+      onSaved: async () => {
+        await renderReportList();
+        await renderSiteDashboard(currentSite, dashboardOptions);
+      }
+    });
+  }
 });
 
 async function renderReportList() {
@@ -509,11 +520,13 @@ export async function initSiteDetailView(params) {
   renderSiteInfo();
   await renderReportList();
   // 現場ダッシュボード（日誌の内容を表示するだけ。日誌状況の数字を押すと下の日報一覧を絞り込む）
-  await renderSiteDashboard(site, {
-    onFilter: async (filter) => {
-      reportListFilter.value = filter;
-      await renderReportList();
-      document.getElementById("reportListHeading")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  });
+  await renderSiteDashboard(site, dashboardOptions);
 }
+
+const dashboardOptions = {
+  onFilter: async (filter) => {
+    reportListFilter.value = filter;
+    await renderReportList();
+    document.getElementById("reportListHeading")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+};

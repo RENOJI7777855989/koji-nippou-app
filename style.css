@@ -1824,3 +1824,14 @@ dialog h3 {
 .dash-patrol-state { margin: 0 0 6px; font-size: 15px; }
 .dash-patrol-state.is-attention b { color: #b45309; }
 .dash-patrol-state.is-notdone b, .dash-patrol-state.is-none b { color: #4a5568; }
+
+/* 日報カレンダーの「日報なし」の日: この日の状態を登録 */
+.day-status-dialog { width: min(92vw, 460px); }
+.day-status-lead { margin: 0 0 10px; color: #4a5568; }
+.day-status-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+.day-status-choices button { min-height: 64px; font-size: 17px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.day-status-choices button small { font-size: 12px; font-weight: normal; opacity: 0.85; }
+.day-status-choices button[data-day-status="work"] { grid-column: 1 / -1; }
+.day-status-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.day-status-note { font-size: 13px; color: #5b6573; margin: 6px 0 0; }
+#dayStatusQuickForm textarea { width: 100%; }

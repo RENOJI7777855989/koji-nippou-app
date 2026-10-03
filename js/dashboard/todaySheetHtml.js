@@ -167,17 +167,19 @@ export function buildTodaySheetHtml(model) {
   .flow .dlv .mk { color: #b7791f; }
   .flow .ti { font-size: 1.1em; }
   .flow .nt { font-size: 0.85em; color: #444; }
-  .flow .kd { display: inline-block; font-size: 0.8em; border: 0.2mm solid #2b6cb0; color: #2b6cb0; border-radius: 1mm; padding: 0 1mm; margin-right: 1.5mm; }
+  .flow .kd { display: inline-block; white-space: nowrap; font-size: 0.8em; border: 0.2mm solid #2b6cb0; color: #2b6cb0; border-radius: 1mm; padding: 0 1mm; margin-right: 1.5mm; }
   .flow .st { width: 3.4em; text-align: right; color: #555; white-space: nowrap; }
   .cancelled { text-decoration: line-through; color: #888; }
   .flow .dlv.out .mk { color: #2c7a7b; }
   table.dlv { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 0.9em; }
   table.dlv th, table.dlv td { border: 0.2mm solid #999; padding: 0.2em 0.3em; vertical-align: top; overflow-wrap: anywhere; }
   table.dlv th { background: #f2f2f2; font-weight: normal; white-space: nowrap; }
-  table.dlv .c-t { width: 11mm; } table.dlv .c-dir { width: 12mm; } table.dlv .c-item { width: 20mm; } table.dlv .c-q { width: 12mm; }
+  /* 時刻「08:00」・区分「◆搬入」が枠からはみ出して隣の列に重ならない幅（印刷で文字が太字・やや大きくなっても1行で収まる）。
+     広げた分は備考の列（残りの幅）が狭くなるだけで、品名・業者・元・先の幅は変えない（情報の多い日に行が増えないように） */
+  table.dlv .c-t { width: 12mm; } table.dlv .c-dir { width: 12.5mm; } table.dlv .c-item { width: 20mm; } table.dlv .c-q { width: 12mm; }
   table.dlv .c-v { width: 20mm; } table.dlv .c-o, table.dlv .c-d { width: 17mm; } table.dlv .c-car { width: 12mm; } table.dlv .c-st { width: 11mm; }
-  table.dlv td.t { font-weight: bold; white-space: nowrap; }
-  table.dlv td.dir { white-space: nowrap; color: #8a5a12; font-weight: bold; }
+  table.dlv td.t { font-weight: bold; white-space: nowrap; padding-left: 0.15em; padding-right: 0.15em; }
+  table.dlv td.dir { white-space: nowrap; color: #8a5a12; font-weight: bold; padding-left: 0.15em; padding-right: 0.15em; }
   table.dlv tr.out td.dir { color: #22605f; }
   .staff { display: flex; gap: 5mm; align-items: center; }
   .staff .big { font-size: 26pt; font-weight: bold; line-height: 1; }

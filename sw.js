@@ -16,7 +16,7 @@
    そのパスを追加すること（ビルド工程が無い方針のため手動管理）。
    ========================================================== */
 
-const CACHE_NAME = "koji-nippou-v35";
+const CACHE_NAME = "koji-nippou-v36";
 
 const PRECACHE_URLS = [
   "./assets/templates/manifest.json",
@@ -56,6 +56,7 @@ const PRECACHE_URLS = [
   "./js/ui/report-output-view.js",
   "./js/ui/report-template-view.js",
   "./js/ui/site-detail-view.js",
+  "./js/ui/day-status-dialog.js",
   "./js/ui/site-form-view.js",
   "./js/ui/site-list-view.js",
   "./js/ui/user-management-view.js",

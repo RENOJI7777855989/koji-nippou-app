@@ -1006,6 +1006,47 @@
     </form>
   </dialog>
 
+  <!-- 日報カレンダーの「日報なし」の日: この日の状態を登録（js/ui/day-status-dialog.js） -->
+  <dialog id="dayStatusDialog" class="day-status-dialog">
+    <div id="dayStatusChoose">
+      <h3 id="dayStatusDialogTitle">この日の状態を登録</h3>
+      <p class="day-status-lead">この日の状態を選んでください。</p>
+      <div class="day-status-choices">
+        <button type="button" data-day-status="work">通常作業<small>日報を入力する</small></button>
+        <button type="button" data-day-status="nowork">作業なし</button>
+        <button type="button" data-day-status="holiday">休工日</button>
+        <button type="button" data-day-status="office">事務作業日</button>
+      </div>
+      <div class="form-actions">
+        <button type="button" id="dayStatusCancelBtn" class="secondary-btn">キャンセル</button>
+      </div>
+    </div>
+    <form id="dayStatusQuickForm" hidden>
+      <h3 id="dayStatusQuickTitle">この日を登録</h3>
+      <label><span id="dayStatusRemarksLabel">連絡事項（任意）</span>
+        <textarea id="dayStatusRemarks" rows="3"></textarea>
+      </label>
+      <div class="day-status-row">
+        <label>進捗率（％・任意）
+          <input type="number" id="dayStatusProgress" min="0" max="100" step="1" inputmode="numeric" placeholder="例）40">
+        </label>
+        <label>天気
+          <select id="dayStatusWeather">
+            <option value="晴れ">晴れ</option>
+            <option value="曇り">曇り</option>
+            <option value="雨">雨</option>
+            <option value="雪">雪</option>
+          </select>
+        </label>
+      </div>
+      <p class="day-status-note">業者・人数・巡回点検は入力しません（稼働人数・人工には数えず、巡回点検は「未実施」として扱います）。あとから日報の画面で修正できます。</p>
+      <div class="form-actions">
+        <button type="submit" id="dayStatusSaveBtn">登録</button>
+        <button type="button" id="dayStatusBackBtn" class="secondary-btn">戻る</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- 帳票テンプレート登録・編集モーダル -->
   <dialog id="reportTemplateFormDialog">
     <form id="reportTemplateForm">
