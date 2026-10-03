@@ -1091,6 +1091,38 @@
   </dialog>
 
   <!-- 日報カレンダーの「日報なし」の日: この日の状態を登録（js/ui/day-status-dialog.js） -->
+  <!-- 日報カレンダーから搬入・搬出だけを登録（現場作業なし・雨天作業不可日。js/ui/delivery-quick-dialog.js） -->
+  <dialog id="deliveryQuickDialog" class="day-status-dialog delivery-quick-dialog">
+    <form id="deliveryQuickForm" novalidate>
+      <h3 id="deliveryQuickTitle">搬入・搬出を追加</h3>
+      <div class="delivery-quick-dir" role="radiogroup" aria-label="区分">
+        <label><input type="radio" name="direction" value="in" checked><span>◆ 搬入</span></label>
+        <label><input type="radio" name="direction" value="out"><span>◇ 搬出</span></label>
+      </div>
+      <div class="day-status-row">
+        <label>時刻（必須）<input type="time" name="time" step="300"></label>
+        <label>状況<select name="status"></select></label>
+      </div>
+      <label><span data-label="item">搬入物（品名・資材名）</span>（必須）<input type="text" name="item" placeholder="例）外壁材" autocomplete="off"></label>
+      <div class="day-status-row">
+        <label>数量<input type="text" name="quantity" placeholder="例）10t" autocomplete="off"></label>
+        <label><span data-label="vendor">搬入業者</span><input type="text" name="vendor" placeholder="例）○○運送" autocomplete="off"></label>
+        <label><span data-label="origin">搬入元</span><input type="text" name="origin" autocomplete="off"></label>
+        <label><span data-label="destination">搬入先</span><input type="text" name="destination" autocomplete="off"></label>
+        <label>車両<input type="text" name="vehicle" placeholder="例）4t車" autocomplete="off"></label>
+      </div>
+      <label>備考<input type="text" name="note" autocomplete="off"></label>
+      <p id="deliveryQuickStatus" class="delivery-quick-status" role="status"></p>
+      <ul id="deliveryQuickSaved" class="delivery-quick-saved"></ul>
+      <p class="day-status-note">日の状態（現場作業なし・雨天作業不可日）・人数・人工は変わりません。登録した内容は日報の「搬入・搬出」に入り、日報画面で編集・削除できます。</p>
+      <div class="delivery-quick-actions">
+        <button type="button" id="deliveryQuickCloseBtn" class="secondary-btn">閉じる</button>
+        <button type="button" class="secondary-btn delivery-quick-continue">保存して続けて追加</button>
+        <button type="submit">保存して戻る</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- 危険予知活動表の提出状況から業者を削除する確認（js/ui/site-dashboard.js） -->
   <dialog id="kyDeleteDialog" class="day-status-dialog report-delete-dialog">
     <h3 id="kyDeleteText">危険予知活動表の提出状況から削除しますか？</h3>

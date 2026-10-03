@@ -11,6 +11,8 @@ import { dayStatusOf, labelOf, DAY_STATUSES, staffHeadcountInfo, directionOf, DE
 import { calendarDayState, countVendors, countTrades } from "../dashboard/siteDashboardModel.js";
 import { patrolStatusOf } from "../patrolChecklist.js";
 import { escapeHtml } from "../utils.js";
+import { getReport } from "../reports.js";
+import { openDeliveryQuickDialog } from "./delivery-quick-dialog.js";
 import { navigate } from "../router.js";
 
 const dialog = document.getElementById("dayPanelDialog");
@@ -32,8 +34,8 @@ const actualTotal = (report) => (report.companies || []).reduce((s, c) => s + (N
 /**
  * @param {{site: object, report: object, signedCompanyIds?: Set<string>, canEdit: boolean}} p
  */
-export function openDayPanel({ site, report, reports = [report], signedMap = new Map(), signedCompanyIds = new Set(), canEdit }) {
-  current = { siteId: site.id, reportId: report.id };
+export function openDayPanel({ site, report, reports = [report], signedMap = new Map(), signedCompanyIds = new Set(), canEdit, onChanged }) {
+  current = { siteId: site.id, reportId: report.id, args: { site, signedMap, signedCompanyIds, canEdit, onChanged }, report };
   if (reports.length > 1) { openDayList({ site, reports, signedMap, canEdit }); return; }
   const { state, details } = calendarDayState(report, signedCompanyIds);
   const status = dayStatusOf(report);
@@ -62,7 +64,7 @@ export function openDayPanel({ site, report, reports = [report], signedMap = new
   const dlIn = dl.filter((d) => directionOf(d) === "in");
   const dlOut = dl.filter((d) => directionOf(d) === "out");
   const dlLine = (d) => `<li>${escapeHtml([d.time || "--:--", d.item || "（品名なし）", d.quantity, d.vendor].filter(Boolean).join("　"))}${d.status && d.status !== "plan" ? `（${escapeHtml(labelOf(DELIVERY_STATUSES, d.status))}）` : ""}</li>`;
-  const deliveriesHtml = `<div class="day-panel-dlv"><p><b>搬入：${dlIn.length ? `あり（${dlIn.length}件）` : "なし"}</b></p>${dlIn.length ? `<ul>${dlIn.map(dlLine).join("")}</ul>` : ""}${dlOut.length ? `<p><b>搬出：あり（${dlOut.length}件）</b></p><ul>${dlOut.map(dlLine).join("")}</ul>` : ""}</div>`;
+  const deliveriesHtml = `<div class="day-panel-dlv"><p><b>搬入：${dlIn.length ? `あり（${dlIn.length}件）` : "なし"}</b></p>${dlIn.length ? `<ul>${dlIn.map(dlLine).join("")}</ul>` : ""}<p><b>搬出：${dlOut.length ? `あり（${dlOut.length}件）` : "なし"}</b></p>${dlOut.length ? `<ul>${dlOut.map(dlLine).join("")}</ul>` : ""}</div>`;
   bodyEl.innerHTML = `
     <p class="day-panel-state is-${escapeHtml(state)}">日報：<b>${escapeHtml(stateText)}</b></p>
     ${state === "partial" ? `<div class="day-panel-missing"><h4>未記入項目</h4><ul>${details.map((d) => `<li>${escapeHtml(d.label)}</li>`).join("")}</ul></div>` : ""}
@@ -73,6 +75,8 @@ export function openDayPanel({ site, report, reports = [report], signedMap = new
   const buttons = [];
   if (editable && state === "partial") buttons.push(`<button type="button" data-day-go="missing" class="day-panel-main">未記入を入力</button>`);
   if (editable && state !== "partial") buttons.push(`<button type="button" data-day-go="quick" class="day-panel-main">簡単に修正</button>`);
+  // 現場作業なし・雨天作業不可日は、日報画面を開かずに搬入・搬出だけを登録できる（日の状態は変えない。delivery-quick-dialog.js）
+  if (editable && (status === "nowork" || status === "rain")) buttons.push(`<button type="button" data-day-dlv="1" class="secondary-btn">🚚 搬入・搬出を追加</button>`);
   buttons.push(`<button type="button" data-day-go="full" class="secondary-btn">${editable ? "日報を全部見る" : "日報を見る"}</button>`);
   actionsEl.innerHTML = buttons.join("");
   dialog.showModal();
@@ -113,6 +117,21 @@ dialog?.addEventListener("click", (e) => {
   if (open) {
     dialog.close();
     navigate(`/sites/${current.siteId}/report/${open.dataset.dayOpen}?from=calendar`);
+    return;
+  }
+  if (e.target.closest("[data-day-dlv]")) {
+    const { args, report } = current;
+    dialog.close();
+    openDeliveryQuickDialog({
+      report,
+      dateLabel: dayTitle(report.date),
+      onSaved: () => args.onChanged?.(),
+      // 閉じたら、最新の日報でこの日の日報（搬入：あり（n件））を開き直す
+      onClosed: async () => {
+        const fresh = await getReport(report.id);
+        if (fresh && !fresh.isDeleted) openDayPanel({ ...args, report: fresh, reports: [fresh] });
+      }
+    });
     return;
   }
   const btn = e.target.closest("[data-day-go]");

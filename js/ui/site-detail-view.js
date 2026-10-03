@@ -214,7 +214,11 @@ async function openCalendarDay(date) {
   const report = sameDay[0] || null;
   if (report) {
     // 同じ日に複数の日報があるときは、1件ずつ内容を見て選べる一覧を出す（どれが正しいかは推測しない）
-    openDayPanel({ site: currentSite, report, reports: sameDay, signedMap: calendarSigned, signedCompanyIds: calendarSigned.get(report.id) || new Set(), canEdit: hasPermission("editReports") });
+    openDayPanel({
+      site: currentSite, report, reports: sameDay, signedMap: calendarSigned, signedCompanyIds: calendarSigned.get(report.id) || new Set(), canEdit: hasPermission("editReports"),
+      // 搬入・搬出を追加したとき: カレンダー・一覧・ダッシュボードを最新にする（日の状態は変わらない）
+      onChanged: async () => { await renderReportList(); await renderSiteDashboard(currentSite, dashboardOptions); }
+    });
     return;
   }
   // 日報なしの日: この日の状態（通常作業→日報の作成画面／現場作業なし・休工日・雨天作業不可日・事務作業日→簡単な登録）を選ぶ

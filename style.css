@@ -1968,3 +1968,18 @@ dialog h3 {
 .day-panel-dlv { margin: 0 0 10px; padding: 6px 10px; border: 1px solid #f0d9a8; border-radius: 8px; background: #fffaf0; font-size: 15px; }
 .day-panel-dlv p { margin: 2px 0; }
 .day-panel-dlv ul { margin: 0 0 4px; padding-left: 1.3em; }
+/* 日報カレンダーから搬入・搬出だけを登録 */
+.delivery-quick-dialog { width: min(96vw, 620px); }
+.delivery-quick-dialog label { display: block; margin-bottom: 8px; }
+.delivery-quick-dialog input, .delivery-quick-dialog select { min-height: 44px; font-size: 17px; width: 100%; }
+.delivery-quick-dir { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.delivery-quick-dir label { margin: 0; }
+.delivery-quick-dir input { position: absolute; opacity: 0; width: 1px; height: 1px; min-height: 0; }
+.delivery-quick-dir span { display: block; text-align: center; padding: 12px; min-height: 52px; font-size: 18px; font-weight: bold; border: 2px solid #c9d6e8; border-radius: 8px; background: #fff; cursor: pointer; }
+.delivery-quick-dir input:checked + span { background: #2b6cb0; border-color: #2b6cb0; color: #fff; }
+.delivery-quick-dir input:focus-visible + span { outline: 3px solid #f6ad55; }
+.delivery-quick-status { min-height: 1.2em; margin: 4px 0; font-weight: bold; color: #b45309; }
+.delivery-quick-saved { margin: 0 0 6px; padding-left: 1.3em; color: #276749; }
+.delivery-quick-actions { display: grid; grid-template-columns: 1fr 1.4fr 1.4fr; gap: 8px; }
+.delivery-quick-actions button { min-height: 54px; margin: 0; font-size: 16px; }
+.delivery-quick-status.is-ok { color: #276749; }
