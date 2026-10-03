@@ -90,12 +90,13 @@ function renderPatrolChecklistTemplate() {
 }
 renderPatrolChecklistTemplate();
 
-// 新規日報作成時は、全項目を「良」で初期化する（実際には大半が良好であることが
-// 多く、否・該当なしの項目だけを選び直す方が入力の手間が少ないため）。
-// 既存日報の編集時（loadPatrolChecklist）は、保存済みの値をそのまま復元するため
-// この既定値の影響は受けない。
+// 新規日報作成時は、全項目を空欄（未確認）にする。「○」は実際に点検して問題が無かったことを
+// 意味するので、日報を作っただけで○を保存しない（日の状態に関係なく空欄。○・×・該当なしは
+// 監督が選んだ項目だけ保存する）。以前は全項目「良」で初期化していたため、点検していない
+// 休工日・事務作業日まで「実施」・03-2は○になっていた（巡回点検の状況は patrolChecklist.js）。
+// 既存日報の編集時（loadPatrolChecklist）は、保存済みの値をそのまま復元する。
 function resetPatrolChecklist() {
-  patrolChecklistContainer.querySelectorAll("select").forEach((select) => (select.value = "good"));
+  patrolChecklistContainer.querySelectorAll("select").forEach((select) => (select.value = ""));
 }
 
 function loadPatrolChecklist(patrolChecklist = {}) {
