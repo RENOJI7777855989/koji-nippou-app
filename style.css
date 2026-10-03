@@ -1983,3 +1983,7 @@ dialog h3 {
 .delivery-quick-actions { display: grid; grid-template-columns: 1fr 1.4fr 1.4fr; gap: 8px; }
 .delivery-quick-actions button { min-height: 54px; margin: 0; font-size: 16px; }
 .delivery-quick-status.is-ok { color: #276749; }
+/* 日報カレンダーの各日の搬入・搬出（件数。日の状態とは別） */
+.cal-cell .cal-dlv { display: block; font-size: 10px; line-height: 1.25; color: #8a94a3; white-space: nowrap; }
+.cal-cell .cal-dlv.has-in { color: #975a16; font-weight: bold; }
+.cal-cell .cal-dlv.has-out { color: #2c7a7b; font-weight: bold; }

@@ -99,7 +99,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
 
   // 23 カレンダー表示
   await openCal();
-  const cal = await page.evaluate(() => Object.fromEntries(["01", "02", "03", "04", "05", "08", "09"].map((d) => [d, document.querySelector(`#reportCalendar .cal-cell[data-date="2026-09-${d}"]`)?.title || ""])));
+  const cal = await page.evaluate(() => Object.fromEntries(["01", "02", "03", "04", "05", "08", "09"].map((d) => [d, (document.querySelector(`#reportCalendar .cal-cell[data-date="2026-09-${d}"]`)?.title || "").split("・搬入：")[0]])));
   const calSum = await page.textContent("#reportCalendar .cal-summary");
   check("23 カレンダー: 現場作業なし・休工日・雨天作業不可日・事務作業日を区別（日報未入力として扱わない）", cal["02"] === "現場作業なし" && cal["03"] === "休工日" && cal["04"] === "雨天作業不可日" && cal["05"] === "事務作業日" && cal["08"] === "休工日" && /雨天作業不可日 2/.test(calSum) && /現場作業なし 2/.test(calSum), JSON.stringify(cal) + " " + calSum);
 

@@ -10,7 +10,7 @@ import { previewSiteTemplateUpgrade, upgradeSiteTemplate, revertSiteTemplate } f
 import { getReportTemplate } from "../report-output/reportTemplates.js";
 import { renderSiteDashboard, setDashboardTab } from "./site-dashboard.js";
 import { calendarDayState } from "../dashboard/siteDashboardModel.js";
-import { dayStatusOf, labelOf, DAY_STATUSES } from "../dashboard/dailyFlow.js";
+import { dayStatusOf, labelOf, DAY_STATUSES, directionOf } from "../dashboard/dailyFlow.js";
 import { dbGetAll } from "../db.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
 import { openDayStatusDialog } from "./day-status-dialog.js";
@@ -178,9 +178,16 @@ async function renderReportCalendar(reports) {
     else state = "none";
     if (counts[state] != null) counts[state]++;
     const multi = countByDate.get(iso) || 0;
-    const title = (state === "partial" ? `一部未記入（${missing.join("・")}）` : CAL_LABEL[state] || (state === "out" ? "工期外" : "")) + (multi > 1 ? `・日報${multi}件` : "");
+    // 搬入・搬出の有無と件数（日報の搬入・搬出をそのまま数える。日の状態とは別。日報が無い日は搬入・搬出のデータも無いので「なし」。
+    // 同じ日に日報が複数あるときは、ダッシュボードと同じく最後に更新した日報で数える）。工期外・未来で日報の無い日は出さない
+    const showDlv = !!report || state === "none";
+    const dIn = report ? (report.deliveries || []).filter((x) => directionOf(x) === "in").length : 0;
+    const dOut = report ? (report.deliveries || []).filter((x) => directionOf(x) === "out").length : 0;
+    const dlvText = `搬入：${dIn ? `あり（${dIn}件）` : "なし"}・搬出：${dOut ? `あり（${dOut}件）` : "なし"}`;
+    const dlvHtml = showDlv ? `<span class="cal-dlv${dIn ? " has-in" : ""}" data-dlv-in="${dIn}">搬入 ${dIn ? `${dIn}件` : "なし"}</span><span class="cal-dlv${dOut ? " has-out" : ""}" data-dlv-out="${dOut}">搬出 ${dOut ? `${dOut}件` : "なし"}</span>` : "";
+    const title = (state === "partial" ? `一部未記入（${missing.join("・")}）` : CAL_LABEL[state] || (state === "out" ? "工期外" : "")) + (multi > 1 ? `・日報${multi}件` : "") + (showDlv ? `・${dlvText}` : "");
     const clickable = report || state === "none";
-    cells.push(`<button type="button" class="cal-cell cal-${state}${iso === today ? " cal-today" : ""}${iso === calendarFocusDate ? " cal-just-saved" : ""}" data-date="${iso}"${report ? ` data-report-id="${report.id}"` : ""}${clickable ? "" : " disabled"} title="${escapeHtml(title)}"><span class="cal-day">${d}</span><span class="cal-label">${escapeHtml(CAL_LABEL[state] || "")}</span>${multi > 1 ? `<span class="cal-multi">日報${multi}件</span>` : ""}</button>`);
+    cells.push(`<button type="button" class="cal-cell cal-${state}${iso === today ? " cal-today" : ""}${iso === calendarFocusDate ? " cal-just-saved" : ""}" data-date="${iso}"${report ? ` data-report-id="${report.id}"` : ""}${clickable ? "" : " disabled"} title="${escapeHtml(title)}"><span class="cal-day">${d}</span><span class="cal-label">${escapeHtml(CAL_LABEL[state] || "")}</span>${multi > 1 ? `<span class="cal-multi">日報${multi}件</span>` : ""}${dlvHtml}</button>`);
   }
   reportCalendarEl.innerHTML = `
     <div class="cal-head">
@@ -190,7 +197,7 @@ async function renderReportCalendar(reports) {
     </div>
     <p class="cal-summary">日報あり ${counts.ok}・一部未記入 ${counts.partial}・<b>日報なし ${counts.none}</b>・現場作業なし ${counts.nowork}・休工日 ${counts.holiday}・雨天作業不可日 ${counts.rain}・事務作業日 ${counts.office}</p>
     <div class="cal-grid">${["日", "月", "火", "水", "木", "金", "土"].map((w) => `<div class="cal-week">${w}</div>`).join("")}${cells.join("")}</div>
-    <p class="cal-note">「日報なし」は工期内で日報が無い日です（現場作業なし・休工日・雨天作業不可日・事務作業日とは別。日報で選んだ日だけがその表示になります）。日付を押すと、この日の日報の状況（一部未記入なら未記入の項目）を表示し、未記入の入力・簡単な修正ができます。日報なしの日は、この日の状態（通常作業・現場作業なし・休工日・雨天作業不可日・事務作業日）を選んで登録できます。</p>
+    <p class="cal-note">「日報なし」は工期内で日報が無い日です（現場作業なし・休工日・雨天作業不可日・事務作業日とは別。日報で選んだ日だけがその表示になります）。各日の「搬入／搬出」はその日の日報の搬入・搬出の件数です（日の状態とは別。搬入があっても現場作業なしは現場作業なしのまま）。日付を押すと、この日の日報の状況（一部未記入なら未記入の項目、搬入・搬出の内容）を表示し、未記入の入力・簡単な修正ができます。日報なしの日は、この日の状態（通常作業・現場作業なし・休工日・雨天作業不可日・事務作業日）を選んで登録できます。</p>
 `;
 }
 
