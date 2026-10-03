@@ -1965,3 +1965,6 @@ dialog h3 {
   .chorei-row { grid-template-columns: 1fr auto; grid-template-areas: "who who" "plan state" "input next"; }
 }
 .dash-ky-delete { min-height: 40px; padding: 6px 12px; margin: 0; color: #b02b2b; background: #fff; border: 1px solid #b02b2b; border-radius: 6px; cursor: pointer; }
+.day-panel-dlv { margin: 0 0 10px; padding: 6px 10px; border: 1px solid #f0d9a8; border-radius: 8px; background: #fffaf0; font-size: 15px; }
+.day-panel-dlv p { margin: 2px 0; }
+.day-panel-dlv ul { margin: 0 0 4px; padding-left: 1.3em; }

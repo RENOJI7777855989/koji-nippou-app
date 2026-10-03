@@ -238,6 +238,8 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
   // 閲覧専用の日誌（工事完了で確定した日報）では、流れ・搬入・搬出の追加・削除ボタンが出ない
   await page.evaluate(async (id) => { const { dbGet, dbPut } = await import("/js/db.js"); const r = await dbGet("reports", id); await dbPut("reports", { ...r, finalizedAt: new Date().toISOString() }); }, legacy.id);
   await page.goto(`${BASE}#/sites/${site.id}/report/${legacy.id}`); await page.waitForSelector("#view-report-form:not([hidden])");
+  // 画面は日報を読み込む途中で表示され、閲覧専用（read-only-form）になるのは読み込みの後。閲覧専用になってから数える（負荷が高いと先に数えていた）
+  await page.waitForSelector("#reportForm.read-only-form");
   const roButtons = await page.evaluate(() => ["#addTimelineBtn", "#addDeliveryBtn", "#addCarryOutBtn", ".delivery-row .removeRowBtn"].filter((sel) => { const el = document.querySelector(sel); return el && el.offsetParent !== null; }));
   check("閲覧専用の日誌では、流れ・搬入・搬出の追加・削除ボタンが表示されない", roButtons.length === 0, roButtons.join(","));
   await page.evaluate(async (id) => { const { dbGet, dbPut } = await import("/js/db.js"); const r = await dbGet("reports", id); delete r.finalizedAt; await dbPut("reports", r); }, legacy.id);

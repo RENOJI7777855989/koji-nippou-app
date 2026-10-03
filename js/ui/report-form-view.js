@@ -613,7 +613,7 @@ function applyReadOnlyMode(readOnly) {
 /* ---------- 日報カレンダーから開いたとき（簡単に修正・未記入を入力）----------
    既存の日報画面をそのまま使い、よく変える欄・未記入の欄だけを表示する（隠した欄の値は読み込んだまま保存されるので消えない）。
    ・quick（簡単に修正）: 進捗率・天気・日の状態・雨天作業不可日の内容・監督/職員・業者（作業人数・作業時間・作業内容）・
-     流れ・搬入搬出・明日の予定・連絡事項・巡回点検。現場作業なし等の日は業者・流れ・搬入搬出を隠す。
+     流れ・搬入搬出・明日の予定・連絡事項・巡回点検。現場作業なし等の日は業者・流れを隠す（搬入・搬出は作業しない日にもありうるので隠さない）。
    ・missing（未記入を入力）: reportMissingDetails の項目がある欄・業者の行だけ。上の一覧から1つずつ移動して入力する。
    保存・キャンセル後は from（calendar=日報カレンダー／check=今日の確認事項）へ戻る。 */
 const quickBar = document.getElementById("reportQuickBar");
@@ -624,7 +624,8 @@ const showAllBtn = document.getElementById("reportShowAllBtn");
 let formMode = { mode: "", from: "", focus: "", cid: "" };
 let nextMissingIndex = 0;
 const QUICK_HIDDEN_SECTIONS = ["supervisors", "focus", "coordination", "photos"];
-const WORK_ONLY_SECTIONS = ["companies", "timeline", "deliveries"];
+// 現場作業なし・雨天作業不可日などでも搬入・搬出はありうるので、簡単修正でも搬入・搬出の欄は隠さない（業者・流れだけ隠す）
+const WORK_ONLY_SECTIONS = ["companies", "timeline"];
 const shortDate = (iso) => { const [, m, d] = String(iso || "").split("-").map(Number); return m ? `${m}月${d}日` : ""; };
 
 /** 入力中の内容で、未記入の項目（保存したときにカレンダーが「一部未記入」になる項目）を求める */

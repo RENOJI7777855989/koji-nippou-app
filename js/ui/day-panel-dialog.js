@@ -7,7 +7,7 @@
    日報の無い日は day-status-dialog.js（この日の状態を選んで登録）。
    ========================================================== */
 
-import { dayStatusOf, labelOf, DAY_STATUSES, staffHeadcountInfo } from "../dashboard/dailyFlow.js";
+import { dayStatusOf, labelOf, DAY_STATUSES, staffHeadcountInfo, directionOf, DELIVERY_STATUSES } from "../dashboard/dailyFlow.js";
 import { calendarDayState, countVendors, countTrades } from "../dashboard/siteDashboardModel.js";
 import { patrolStatusOf } from "../patrolChecklist.js";
 import { escapeHtml } from "../utils.js";
@@ -57,10 +57,17 @@ export function openDayPanel({ site, report, reports = [report], signedMap = new
   }
   rows.push(["巡回点検", patrolStatusOf(report).label]);
 
+  // 搬入・搬出（日報の deliveries をそのまま。現場作業なし・雨天作業不可日など作業しない日でも、搬入があれば出す。日の状態は変えない）
+  const dl = (report.deliveries || []).slice().sort((a, b) => (a.time ? 0 : 1) - (b.time ? 0 : 1) || String(a.time || "").localeCompare(String(b.time || "")));
+  const dlIn = dl.filter((d) => directionOf(d) === "in");
+  const dlOut = dl.filter((d) => directionOf(d) === "out");
+  const dlLine = (d) => `<li>${escapeHtml([d.time || "--:--", d.item || "（品名なし）", d.quantity, d.vendor].filter(Boolean).join("　"))}${d.status && d.status !== "plan" ? `（${escapeHtml(labelOf(DELIVERY_STATUSES, d.status))}）` : ""}</li>`;
+  const deliveriesHtml = `<div class="day-panel-dlv"><p><b>搬入：${dlIn.length ? `あり（${dlIn.length}件）` : "なし"}</b></p>${dlIn.length ? `<ul>${dlIn.map(dlLine).join("")}</ul>` : ""}${dlOut.length ? `<p><b>搬出：あり（${dlOut.length}件）</b></p><ul>${dlOut.map(dlLine).join("")}</ul>` : ""}</div>`;
   bodyEl.innerHTML = `
     <p class="day-panel-state is-${escapeHtml(state)}">日報：<b>${escapeHtml(stateText)}</b></p>
     ${state === "partial" ? `<div class="day-panel-missing"><h4>未記入項目</h4><ul>${details.map((d) => `<li>${escapeHtml(d.label)}</li>`).join("")}</ul></div>` : ""}
     <dl class="day-panel-summary">${rows.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join("")}</dl>
+    ${deliveriesHtml}
     ${report.finalizedAt ? `<p class="day-status-note">工事完了により確定済みのため、閲覧のみです。</p>` : site.completedAt ? `<p class="day-status-note">工事完了の現場のため、閲覧のみです。</p>` : ""}`;
 
   const buttons = [];
