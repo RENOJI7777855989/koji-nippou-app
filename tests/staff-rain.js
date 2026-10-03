@@ -132,9 +132,9 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   // 画面（監督管理・現場掲示）
   await page.goto(`${BASE}#/sites/${ids.siteId}`); await page.waitForSelector("#siteDashboard:not([hidden])");
   await page.fill("#siteDashboard .dash-date-input", "2026-09-04"); await page.dispatchEvent("#siteDashboard .dash-date-input", "change"); await page.waitForTimeout(500);
-  const dash = await page.evaluate(() => ({ crew: [...document.querySelectorAll("#siteDashboard .dash-crew tr")].map((tr) => tr.textContent.replace(/\s+/g, "")), text: document.getElementById("siteDashboard").textContent.replace(/\s+/g, " "), board: document.querySelector("#siteDashboard [data-panel=board]").textContent.replace(/\s+/g, " ") }));
+  const dash = await page.evaluate(() => ({ crew: [...document.querySelectorAll("#siteDashboard .dash-crew tr")].map((tr) => tr.textContent.replace(/\s+/g, "")), text: document.getElementById("siteDashboard").textContent.replace(/\s+/g, " "), textNoBilling: (() => { const c = document.getElementById("siteDashboard").cloneNode(true); c.querySelectorAll(".dash-billing-card, .billing-monthly").forEach((e) => e.remove()); return c.textContent.replace(/\s+/g, " "); })(), board: document.querySelector("#siteDashboard [data-panel=board]").textContent.replace(/\s+/g, " ") }));
   check("監督管理: 本日の稼働の表で 現場作業員0人・監督/職員2人・全体2人 を分けて表示・作業内容", dash.crew.some((t) => t.startsWith("現場作業員0人0")) && dash.crew.some((t) => t.startsWith("監督・職員2人2")) && dash.crew.some((t) => t.startsWith("全体2人2")) && dash.text.includes("監督・職員の作業内容：現場確認、役所協議"), dash.crew.join(" / "));
-  check("31・32 ダッシュボード（監督管理・現場掲示）に請求人工を出さない", !dash.text.includes("請求"));
+  check("31・32 ダッシュボード（現場掲示・日々の集計）に請求人工を出さない（請求の欄＝月次の請求管理だけ）", !dash.textNoBilling.includes("請求") && !dash.board.includes("請求"));
   check("38・39 現場掲示（画面）に「本日は雨天作業不可日」と中止となった予定作業", dash.board.includes("本日は雨天作業不可日") && dash.board.includes("中止となった予定作業：外壁塗装"));
 
   // ---- 03-2（1日分のExcel）: 社員の行に監督・職員、計・延労働時間に含める。業者の行には混ぜない ----
