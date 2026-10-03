@@ -183,10 +183,13 @@ async function runMainScenario(browser, photoPath) {
   // 以前は「日報削除後、一覧から消える」を確認していたが、仕様変更によりこの確認に置き換えた）
   await page.locator(".report-card").first().click();
   await page.waitForTimeout(200);
-  const deleteVisible = await page.isVisible("#deleteReportBtn");
+  // 2026-10-03 から日報を1件ずつ削除できる（確認ダイアログあり）。押しただけでは削除されない
+  await page.click("#deleteReportBtn"); await page.waitForTimeout(200);
+  const confirmShown = await page.evaluate(() => document.getElementById("reportDeleteDialog").open);
+  await page.click("#reportDeleteCancelBtn"); await page.waitForTimeout(200);
   await page.click("#backToSiteDetailBtn");
   await page.waitForTimeout(200);
-  record("日報は削除できない（削除ボタン非表示・一覧に残る）", !deleteVisible && (await page.locator("#reportList .report-card").count()) === 1);
+  record("日報の削除は確認が出て、キャンセルすれば一覧に残る", confirmShown && (await page.locator("#reportList .report-card").count()) === 1);
 
   // 現場コピー（文字情報のみ、日報コピーなし）
   await page.click("#copySiteBtn");

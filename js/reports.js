@@ -5,7 +5,7 @@
    消さないという運用上の利点もある。
    ========================================================== */
 
-import { dbGetAll, dbGet, dbPut } from "./db.js";
+import { dbGetAll, dbGet, dbPut, dbPutMany } from "./db.js";
 import { stampNew, stampUpdate } from "./utils.js";
 import { recordChange } from "./auditLog.js";
 
@@ -83,15 +83,44 @@ export async function updateReport(id, patch) {
 }
 
 /**
- * 日報の削除は通常操作では行わない（紙を紛失しても再出力できるよう、日報データを元データとして
- * 残し、誤りは「修正」で直す運用）。工事期間中・工事完了後とも、画面からは呼ばれない。
- * データ整理などで本当に必要な場合だけ { force: true } を明示して呼ぶ（論理削除）。
+ * 日報の削除（データ整理用。{ force: true } を明示したときだけ。写真・署名は触らない）。
+ * 画面からの削除は deleteReportWithAttachments を使う。
  */
 export async function deleteReport(id, { force = false } = {}) {
   if (!force) throw new Error("日報は削除できません。内容に誤りがある場合は修正してください。");
   const updated = await applyPatch(id, { isDeleted: true });
   await recordChange({ entityType: "report", entityId: id, action: "delete", summary: `日報（${updated.date || "日付未設定"}）を削除` });
   return updated;
+}
+
+/**
+ * 日報1件を削除する（日報の画面の「この日報を削除」。誤登録・同じ日の重複登録の整理用。2026-10-03）。
+ * ・その日報だけを削除する（日付単位・自動の重複削除・統合はしない）。流れ・搬入搬出・業者・人数・作業時間・進捗率・天気・
+ *   巡回点検・監督/職員・雨天作業不可日・連絡事項などは日報レコードの中にあるので、日報と一緒に削除される。
+ * ・写真・署名は別の保存場所で、1件ずつ reportId でこの日報1件だけに属する（現場のコピーでも複製しない・他の日報と共有しない）。
+ *   この日報の写真・署名だけを一緒に削除済みにする（孤立させない）。他の日報の写真・署名は触らない。
+ * ・削除はこれまでどおり削除済みの印（isDeleted・deletedAt）を付ける方式（論理削除）。日報・写真・署名を1つの
+ *   トランザクションで書き、途中で失敗したらどれも変わらない。画面・出力・集計は削除済みを読まない。
+ * ・工事完了で確定した日報・工事完了の現場の日報は削除できない（確定を解除してから）。
+ * @returns {Promise<{report: object, photos: number, signatures: number}>}
+ */
+export async function deleteReportWithAttachments(id) {
+  const existing = await dbGet("reports", id);
+  if (!existing || existing.isDeleted) throw new Error("日報が見つかりません（すでに削除されている可能性があります）。");
+  if (existing.finalizedAt) throw new Error("この日報は工事完了により確定済みのため削除できません（現場の「工事完了を取り消す」で確定を解除してください）。");
+  const site = existing.siteId ? await dbGet("sites", existing.siteId) : null;
+  if (site?.completedAt) throw new Error("工事完了済みの現場の日報は削除できません（現場の「工事完了を取り消す」で解除できます）。");
+  const deletedAt = new Date().toISOString();
+  const photos = (await dbGetAll("photos", "by_reportId", id)).filter((p) => p.reportId === id && !p.isDeleted);
+  const signatures = (await dbGetAll("signatures", "by_reportId", id)).filter((s) => s.reportId === id && !s.isDeleted);
+  const report = stampUpdate(existing, { isDeleted: true, deletedAt });
+  await dbPutMany([
+    { store: "reports", value: report },
+    ...photos.map((p) => ({ store: "photos", value: stampUpdate(p, { isDeleted: true, deletedAt }) })),
+    ...signatures.map((s) => ({ store: "signatures", value: stampUpdate(s, { isDeleted: true, deletedAt }) }))
+  ]);
+  await recordChange({ entityType: "report", entityId: id, action: "delete", summary: `日報（${existing.date || "日付未設定"}）を削除（写真${photos.length}枚・署名${signatures.length}件も削除）` });
+  return { report, photos: photos.length, signatures: signatures.length };
 }
 
 // ================= 印刷状態・出力履歴・確認・確定 =================

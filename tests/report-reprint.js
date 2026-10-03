@@ -139,8 +139,10 @@ const sha = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
   const hist = r1.outputHistory.map((h) => h.kind).join(",");
   check("出力履歴（Excel・PDF・印刷・再印刷）と変更履歴が残る", hist === "excel,pdf,print,print" && (await dbAll("auditLog")).some((a) => a.summary.includes("再印刷（2回目）")), hist);
 
-  // ===== 8. 削除できない =====
-  check("8 日報画面に削除ボタンが表示されない", !(await page.isVisible("#deleteReportBtn")));
+  // ===== 8. 押しただけでは削除されない（2026-10-03 から日報を1件ずつ削除できる。確認ダイアログでキャンセルすれば残る）=====
+  await page.click("#deleteReportBtn"); await page.waitForFunction(() => document.getElementById("reportDeleteDialog").open);
+  await page.click("#reportDeleteCancelBtn");
+  check("8 削除ボタンを押すと確認が出て、キャンセルすれば日報は残る", !(await page.evaluate(() => document.getElementById("reportDeleteDialog").open)) && !(await reportOf(saved.id)).isDeleted);
   const del = await page.evaluate(async (id) => { try { await (await import("/js/reports.js")).deleteReport(id); return "deleted"; } catch (e) { return e.message; } }, saved.id);
   check("8 通常の削除操作（データ層）でも削除できず、日報は残る", del.includes("削除できません") && !(await reportOf(saved.id)).isDeleted, del);
 

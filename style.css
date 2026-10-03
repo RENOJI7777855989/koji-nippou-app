@@ -1919,3 +1919,18 @@ dialog h3 {
 .board-pdf-status { font-weight: bold; margin: 0 0 8px; }
 .board-pdf-preview { display: block; width: 100%; height: auto; border: 1px solid #c9d6e8; margin: 0 0 10px; background: #fff; }
 .board-pdf-preview[hidden] { display: none; }
+/* 日報の削除（保存ボタンから離し、確認ダイアログで押し間違えにくくする） */
+.delete-report-area { margin-top: 32px; padding-top: 12px; border-top: 1px dashed #e0b4b4; }
+.delete-report-area .deleteReportBtn { min-height: 48px; font-size: 16px; }
+.report-delete-dialog { width: min(94vw, 520px); }
+.report-delete-sameday { font-weight: bold; color: #2b6cb0; margin: 4px 0 8px; }
+.report-delete-warn { color: #9b2c2c; font-weight: bold; margin: 0 0 12px; }
+.report-delete-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.report-delete-actions button { min-height: 56px; font-size: 17px; margin: 0; }
+.report-delete-confirm { background: #b02b2b; border-color: #b02b2b; color: #fff; }
+.cal-cell .cal-multi { display: block; font-size: 10px; font-weight: bold; color: #c53030; }
+.day-panel-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; }
+.day-panel-list li { border: 1px solid #c9d6e8; border-radius: 8px; padding: 8px 10px; }
+.day-panel-list .day-panel-item-head { font-weight: bold; margin: 0 0 4px; }
+.day-panel-list .day-panel-item-meta { font-size: 14px; color: #4a5568; margin: 0 0 6px; }
+.day-panel-list button { min-height: 48px; margin: 0; width: 100%; font-size: 16px; }

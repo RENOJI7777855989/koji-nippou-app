@@ -379,10 +379,13 @@
           <button type="button" id="reportPrintBtn">印刷</button>
           <button type="button" id="reportConfirmBtn" class="secondary-btn">内容を確認済みにする</button>
         </div>
-        <p class="app-subtitle">日報は削除できません。内容に誤りがある場合は修正して保存してください（紙を紛失しても、ここからいつでも同じ帳票を再出力できます）。</p>
+        <p class="app-subtitle">内容に誤りがある場合は修正して保存してください（紙を紛失しても、ここからいつでも同じ帳票を再出力できます）。誤って登録した日報・重複して登録した日報は、画面の一番下の「この日報を削除」で1件ずつ削除できます。</p>
       </section>
       <button type="button" id="goToReportOutputFromReportBtn" class="secondary-btn" hidden>この日報を帳票出力（様式を選んで出力）</button>
-      <button type="button" id="deleteReportBtn" class="deleteReportBtn" hidden>この日報を削除</button>
+      <div id="deleteReportArea" class="delete-report-area" hidden>
+        <p class="app-subtitle">誤って登録した日報・同じ日に重複して登録した日報は、内容を確認してからこの日報だけを削除できます（他の日報・他の日付は変わりません）。</p>
+        <button type="button" id="deleteReportBtn" class="deleteReportBtn">この日報を削除</button>
+      </div>
     </section>
 
     <!-- 帳票出力 -->
@@ -1088,6 +1091,18 @@
   </dialog>
 
   <!-- 日報カレンダーの「日報なし」の日: この日の状態を登録（js/ui/day-status-dialog.js） -->
+  <!-- 日報の削除の確認（js/ui/report-form-view.js） -->
+  <dialog id="reportDeleteDialog" class="day-status-dialog report-delete-dialog">
+    <h3>この日報を削除しますか？</h3>
+    <dl id="reportDeleteSummary" class="day-panel-summary"></dl>
+    <p id="reportDeleteSameDay" class="report-delete-sameday"></p>
+    <p class="report-delete-warn">この日報と、この日報の写真・職長サインを削除します。この操作は画面からは元に戻せません（削除する前に取ったバックアップからは復元できます）。</p>
+    <div class="report-delete-actions">
+      <button type="button" id="reportDeleteCancelBtn" class="secondary-btn" autofocus>キャンセル</button>
+      <button type="button" id="reportDeleteConfirmBtn" class="report-delete-confirm">この日報を削除</button>
+    </div>
+  </dialog>
+
   <!-- 現場掲示のPDF保存・共有（A3横・1ページ。js/ui/board-pdf.js） -->
   <dialog id="boardPdfDialog" class="day-status-dialog board-pdf-dialog">
     <h3>現場掲示のPDF（A3横・1ページ）</h3>

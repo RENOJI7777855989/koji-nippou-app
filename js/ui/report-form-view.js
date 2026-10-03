@@ -5,7 +5,9 @@
    各行のcompanyId（生成後は再利用）で署名レコードと紐付ける。
    ========================================================== */
 
-import { getReport, listReportsBySite, createReport, updateReport, getPrintStatus, isEditedAfterPrint, PRINT_STATUS_LABELS, recordReportOutput, setReportConfirmed } from "../reports.js";
+import { getReport, listReportsBySite, createReport, updateReport, getPrintStatus, isEditedAfterPrint, PRINT_STATUS_LABELS, recordReportOutput, setReportConfirmed, deleteReportWithAttachments } from "../reports.js";
+import { DAY_STATUSES, labelOf as dayLabelOf, dayStatusOf } from "../dashboard/dailyFlow.js";
+import { countVendors, countTrades } from "../dashboard/siteDashboardModel.js";
 import { exportReportExcel, buildReportPrintHtml } from "../reportPrint.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
 import { getSite } from "../sites.js";
@@ -87,6 +89,7 @@ const photoInput = document.getElementById("photoInput");
 const photoGrid = document.getElementById("photoGrid");
 const cancelBtn = document.getElementById("reportCancelBtn");
 const deleteBtn = document.getElementById("deleteReportBtn");
+const deleteArea = document.getElementById("deleteReportArea");
 const backBtn = document.getElementById("backToSiteDetailBtn");
 const goToReportOutputBtn = document.getElementById("goToReportOutputFromReportBtn");
 const outputPanel = document.getElementById("reportOutputPanel");
@@ -602,7 +605,7 @@ function applyReadOnlyMode(readOnly) {
     el.disabled = readOnly;
   });
   reportSaveBtn.hidden = readOnly;
-  if (readOnly) deleteBtn.hidden = true;
+  if (readOnly) deleteArea.hidden = true;
   cancelBtn.textContent = readOnly ? "一覧に戻る" : "キャンセル";
   progressSlider?.sync();
 }
@@ -756,7 +759,7 @@ export async function initReportFormViewNew(params) {
   editingReportId = null;
   draftReportId = createId();
   titleEl.textContent = "日報を作成";
-  deleteBtn.hidden = true;
+  deleteArea.hidden = true; // 保存前の新規の日報には削除は無い
   goToReportOutputBtn.hidden = true; // 保存前（帳票出力対象になる日報がまだ存在しない）
   resetForm();
   // 一覧の「未入力（日報のない日）」から来た場合はその日付を初期値にする
@@ -786,8 +789,8 @@ export async function initReportFormViewEdit(params) {
     return;
   }
   const report = await getReport(params.reportId);
-  if (!report) {
-    showMessage("日報が見つかりませんでした。", true);
+  if (!report || report.isDeleted) {
+    showMessage(report ? "この日報は削除されています。" : "日報が見つかりませんでした。", true);
     navigate(`/sites/${currentSiteId}`);
     return;
   }
@@ -795,7 +798,8 @@ export async function initReportFormViewEdit(params) {
   editingReportId = report.id;
   draftReportId = null;
   titleEl.textContent = report.finalizedAt ? "日報（確定済み・閲覧のみ）" : "日報を編集";
-  deleteBtn.hidden = true; // 日報は削除しない（修正で対応）
+  // 削除は、編集できる日報（確定済みでない・工事完了の現場でない）だけ。表示は applyReadOnlyMode の後で決める
+  deleteArea.hidden = true;
   goToReportOutputBtn.hidden = false;
 
   form.reset();
@@ -848,6 +852,7 @@ export async function initReportFormViewEdit(params) {
 
   await renderPhotoGrid(report.id);
   applyReadOnlyMode(!hasPermission("editReports") || !!report.finalizedAt);
+  deleteArea.hidden = !hasPermission("editReports") || !!report.finalizedAt || !!site.completedAt;
   renderOutputPanel(report);
   setupFormMode(params);
   focusRequestedSection();
@@ -1104,7 +1109,55 @@ goToReportOutputBtn.addEventListener("click", () => {
   navigate(`/report-output?siteId=${currentSiteId}&reportId=${editingReportId}`);
 });
 
-// 日報は通常操作では削除できない（削除ボタンは常に非表示。誤りは修正で対応する）
-deleteBtn.addEventListener("click", () => {
-  showMessage("日報は削除できません。内容に誤りがある場合は修正して保存してください。", true);
+/* ---------- 日報の削除（この日報1件だけ。reports.js の deleteReportWithAttachments）----------
+   すぐには削除せず、確認ダイアログで日付・内容・同じ日の日報の件数・一緒に削除する写真と職長サインを見せる。
+   削除したら日報カレンダー（その日の月）へ戻る。 */
+const deleteDialog = document.getElementById("reportDeleteDialog");
+const deleteSummaryEl = document.getElementById("reportDeleteSummary");
+const deleteSameDayEl = document.getElementById("reportDeleteSameDay");
+const deleteConfirmBtn = document.getElementById("reportDeleteConfirmBtn");
+const fmtWhen = (iso) => (iso ? new Date(iso).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "不明");
+
+deleteBtn.addEventListener("click", async () => {
+  if (!editingReportId) return;
+  const report = await getReport(editingReportId);
+  if (!report || report.isDeleted) { showMessage("この日報は削除されています。", true); return; }
+  const [photos, signatures, sameDay] = await Promise.all([listPhotosByReport(report.id), listSignaturesByReport(report.id), listReportsBySite(report.siteId)]);
+  const cs = (report.companies || []).filter((c) => (c.companyName || "").trim() || (c.occupation || "").trim());
+  const workers = cs.reduce((n, c) => n + (Number(c.actualWorkerCount) || 0), 0);
+  const rows = [
+    ["日付", (report.date || "日付未設定").replace(/-/g, "/")],
+    ["日の状態", dayLabelOf(DAY_STATUSES, dayStatusOf(report))],
+    ["作業人数", `${workers}人`],
+    ["業者", cs.length ? `${countVendors(cs)}社・${countTrades(cs)}工種` : "なし"],
+    ["進捗率", report.progressPercent != null && report.progressPercent !== "" ? `${report.progressPercent}%` : "未入力"],
+    ["作成", fmtWhen(report.createdAt)],
+    ["最終更新", fmtWhen(report.updatedAt)],
+    ["一緒に削除", `写真${photos.length}枚・職長サイン${signatures.length}件`]
+  ];
+  deleteSummaryEl.innerHTML = rows.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join("");
+  const same = sameDay.filter((r) => r.date === report.date).length;
+  deleteSameDayEl.textContent = same > 1 ? `この日（${report.date.replace(/-/g, "/")}）の日報は${same}件あります。削除するのはこの1件だけで、残りの${same - 1}件は残ります。` : "この日の日報はこの1件だけです。削除するとこの日は「日報なし」になります。";
+  deleteConfirmBtn.disabled = false;
+  deleteDialog.showModal();
+  document.getElementById("reportDeleteCancelBtn").focus(); // 押し間違えにくいよう、最初はキャンセルを選んだ状態
+});
+
+document.getElementById("reportDeleteCancelBtn").addEventListener("click", () => deleteDialog.close());
+
+deleteConfirmBtn.addEventListener("click", async () => {
+  deleteConfirmBtn.disabled = true;
+  try {
+    const before = await getReport(editingReportId);
+    const result = await deleteReportWithAttachments(editingReportId);
+    const left = (await listReportsBySite(before.siteId)).filter((r) => r.date === before.date).length;
+    deleteDialog.close();
+    showMessage(`日報（${(before.date || "").replace(/-/g, "/")}・作成 ${fmtWhen(before.createdAt)}）を削除しました（写真${result.photos}枚・職長サイン${result.signatures}件も削除）。この日の日報は${left ? `残り${left}件` : "ありません（日報なし）"}です。`);
+    // 日報カレンダー（その日の月）へ戻る
+    formMode.from = "calendar";
+    returnAfterForm(before.date, true);
+  } catch (err) {
+    showMessage(err.message, true);
+    deleteConfirmBtn.disabled = false;
+  }
 });

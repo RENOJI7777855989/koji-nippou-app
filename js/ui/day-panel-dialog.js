@@ -32,8 +32,9 @@ const actualTotal = (report) => (report.companies || []).reduce((s, c) => s + (N
 /**
  * @param {{site: object, report: object, signedCompanyIds?: Set<string>, canEdit: boolean}} p
  */
-export function openDayPanel({ site, report, signedCompanyIds = new Set(), canEdit }) {
+export function openDayPanel({ site, report, reports = [report], signedMap = new Map(), signedCompanyIds = new Set(), canEdit }) {
   current = { siteId: site.id, reportId: report.id };
+  if (reports.length > 1) { openDayList({ site, reports, signedMap, canEdit }); return; }
   const { state, details } = calendarDayState(report, signedCompanyIds);
   const status = dayStatusOf(report);
   const editable = canEdit && !site.completedAt && !report.finalizedAt;
@@ -70,7 +71,43 @@ export function openDayPanel({ site, report, signedCompanyIds = new Set(), canEd
   dialog.showModal();
 }
 
+const WHEN = (iso) => (iso ? new Date(iso).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "不明");
+
+/**
+ * 同じ日に日報が複数あるとき: 1件ずつ（日の状態・作業人数・業者・進捗率・作成と最終更新の日時）を並べ、開く日報を選ぶ。
+ * 削除は開いた日報の画面の「この日報を削除」で1件ずつ行う（ここでは削除・統合しない）。
+ */
+function openDayList({ site, reports, signedMap, canEdit }) {
+  titleEl.textContent = dayTitle(reports[0].date);
+  const items = reports.map((r, i) => {
+    const { state } = calendarDayState(r, signedMap.get(r.id) || new Set());
+    const status = dayStatusOf(r);
+    const cs = (r.companies || []).filter((c) => (c.companyName || "").trim() || (c.occupation || "").trim());
+    const meta = [
+      status === "work" ? `作業人数 ${actualTotal(r)}人` : labelOf(DAY_STATUSES, status),
+      status === "work" ? (cs.length ? `業者 ${countVendors(cs)}社・${countTrades(cs)}工種` : "業者 未入力") : "",
+      `進捗率 ${r.progressPercent != null && r.progressPercent !== "" ? `${r.progressPercent}%` : "未入力"}`,
+      `作成 ${WHEN(r.createdAt)}`,
+      `最終更新 ${WHEN(r.updatedAt)}`
+    ].filter(Boolean).join("／");
+    const st = state === "partial" ? "一部未記入" : state === "ok" ? "記入済み" : labelOf(DAY_STATUSES, status);
+    return `<li><p class="day-panel-item-head">${i + 1}. 日報（${escapeHtml(st)}）</p><p class="day-panel-item-meta">${escapeHtml(meta)}</p><button type="button" class="secondary-btn" data-day-open="${escapeHtml(r.id)}">この日報を開く</button></li>`;
+  });
+  bodyEl.innerHTML = `
+    <p class="day-panel-state is-partial">この日の日報：<b>${reports.length}件</b></p>
+    <p class="day-status-note">同じ日に日報が複数あります。1件ずつ開いて内容を確認し、不要な日報は日報の画面の下の「この日報を削除」で削除できます（自動では削除・統合しません）。${!canEdit || site.completedAt ? "（この現場・権限では閲覧のみです）" : ""}</p>
+    <ul class="day-panel-list">${items.join("")}</ul>`;
+  actionsEl.innerHTML = "";
+  dialog.showModal();
+}
+
 dialog?.addEventListener("click", (e) => {
+  const open = e.target.closest("[data-day-open]");
+  if (open) {
+    dialog.close();
+    navigate(`/sites/${current.siteId}/report/${open.dataset.dayOpen}?from=calendar`);
+    return;
+  }
   const btn = e.target.closest("[data-day-go]");
   if (!btn) return;
   const mode = btn.dataset.dayGo;

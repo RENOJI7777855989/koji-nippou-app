@@ -155,7 +155,12 @@ async function renderReportCalendar(reports) {
   }
   calendarSigned = signed;
   const byDate = new Map();
-  for (const r of reports) if (r.date && !byDate.has(r.date)) byDate.set(r.date, r); // 新しい順に並んでいるので最初が最後に更新したもの
+  const countByDate = new Map(); // 同じ日付の日報の件数（重複登録が分かるように表示する。自動では削除・統合しない）
+  for (const r of reports) {
+    if (!r.date) continue;
+    if (!byDate.has(r.date)) byDate.set(r.date, r); // 新しい順に並んでいるので最初が最後に更新したもの
+    countByDate.set(r.date, (countByDate.get(r.date) || 0) + 1);
+  }
   const [y, m] = calendarMonth.split("-").map(Number);
   const first = new Date(y, m - 1, 1);
   const days = new Date(y, m, 0).getDate();
@@ -172,9 +177,10 @@ async function renderReportCalendar(reports) {
     else if (iso > today) state = "future";
     else state = "none";
     if (counts[state] != null) counts[state]++;
-    const title = state === "partial" ? `一部未記入（${missing.join("・")}）` : CAL_LABEL[state] || (state === "out" ? "工期外" : "");
+    const multi = countByDate.get(iso) || 0;
+    const title = (state === "partial" ? `一部未記入（${missing.join("・")}）` : CAL_LABEL[state] || (state === "out" ? "工期外" : "")) + (multi > 1 ? `・日報${multi}件` : "");
     const clickable = report || state === "none";
-    cells.push(`<button type="button" class="cal-cell cal-${state}${iso === today ? " cal-today" : ""}${iso === calendarFocusDate ? " cal-just-saved" : ""}" data-date="${iso}"${report ? ` data-report-id="${report.id}"` : ""}${clickable ? "" : " disabled"} title="${escapeHtml(title)}"><span class="cal-day">${d}</span><span class="cal-label">${escapeHtml(CAL_LABEL[state] || "")}</span></button>`);
+    cells.push(`<button type="button" class="cal-cell cal-${state}${iso === today ? " cal-today" : ""}${iso === calendarFocusDate ? " cal-just-saved" : ""}" data-date="${iso}"${report ? ` data-report-id="${report.id}"` : ""}${clickable ? "" : " disabled"} title="${escapeHtml(title)}"><span class="cal-day">${d}</span><span class="cal-label">${escapeHtml(CAL_LABEL[state] || "")}</span>${multi > 1 ? `<span class="cal-multi">日報${multi}件</span>` : ""}</button>`);
   }
   reportCalendarEl.innerHTML = `
     <div class="cal-head">
@@ -204,9 +210,11 @@ reportCalendarEl?.addEventListener("click", async (e) => {
 
 /** カレンダーの日付（または今日の確認事項の「日報 未入力」）を押したとき */
 async function openCalendarDay(date) {
-  const report = (await listReportsBySite(currentSite.id)).find((r) => r.date === date) || null;
+  const sameDay = (await listReportsBySite(currentSite.id)).filter((r) => r.date === date);
+  const report = sameDay[0] || null;
   if (report) {
-    openDayPanel({ site: currentSite, report, signedCompanyIds: calendarSigned.get(report.id) || new Set(), canEdit: hasPermission("editReports") });
+    // 同じ日に複数の日報があるときは、1件ずつ内容を見て選べる一覧を出す（どれが正しいかは推測しない）
+    openDayPanel({ site: currentSite, report, reports: sameDay, signedMap: calendarSigned, signedCompanyIds: calendarSigned.get(report.id) || new Set(), canEdit: hasPermission("editReports") });
     return;
   }
   // 日報なしの日: この日の状態（通常作業→日報の作成画面／現場作業なし・休工日・雨天作業不可日・事務作業日→簡単な登録）を選ぶ

@@ -228,3 +228,22 @@ export async function dbDelete(storeName, key) {
     tx.onerror = () => reject(tx.error);
   });
 }
+
+/**
+ * 複数の保存場所へのまとめた書き込み（1つのトランザクション）。途中で失敗したらすべて元のまま（一部だけ書き換わらない）。
+ * @param {{store: string, value: object}[]} entries
+ */
+export async function dbPutMany(entries) {
+  if (!entries.length) return;
+  const db = await openDb();
+  const stores = [...new Set(entries.map((e) => e.store))];
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(stores, "readwrite");
+    let lastReq = null;
+    for (const e of entries) lastReq = tx.objectStore(e.store).put(e.value);
+    const fail = () => reject(storageError(lastReq?.error || tx.error, stores.join(",")));
+    tx.oncomplete = () => resolve();
+    tx.onerror = fail;
+    tx.onabort = fail;
+  });
+}
