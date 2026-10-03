@@ -1934,3 +1934,33 @@ dialog h3 {
 .day-panel-list .day-panel-item-head { font-weight: bold; margin: 0 0 4px; }
 .day-panel-list .day-panel-item-meta { font-size: 14px; color: #4a5568; margin: 0 0 6px; }
 .day-panel-list button { min-height: 48px; margin: 0; width: 100%; font-size: 16px; }
+/* 朝礼入力（今日の業者別の実績人数） */
+.dash-chorei-btn { font-weight: bold; }
+.chorei-dialog { width: min(96vw, 760px); max-height: 92vh; padding: 0; display: flex; flex-direction: column; }
+.chorei-dialog:not([open]) { display: none; }
+.chorei-dialog h3 { margin: 0; padding: 14px 16px 8px; font-size: 19px; }
+.chorei-body { overflow-y: auto; padding: 0 16px; flex: 1 1 auto; }
+.chorei-note { font-size: 16px; line-height: 1.6; }
+.chorei-go { min-height: 52px; font-size: 17px; width: 100%; margin: 6px 0 12px; }
+.chorei-list { list-style: none; margin: 0; padding: 0; }
+.chorei-row { display: grid; grid-template-columns: 1fr auto auto; grid-template-areas: "who input next" "plan state next"; align-items: center; gap: 2px 12px; padding: 10px 0; border-bottom: 1px solid #e2e8f0; }
+.chorei-who { grid-area: who; min-width: 0; }
+.chorei-vendor { display: block; font-size: 21px; font-weight: bold; overflow-wrap: anywhere; }
+.chorei-trade { display: inline-block; font-size: 15px; color: #2b6cb0; border: 1px solid #90cdf4; border-radius: 4px; padding: 0 6px; margin-top: 2px; }
+.chorei-plan { grid-area: plan; font-size: 14px; color: #5b6573; }
+.chorei-input { grid-area: input; display: flex; align-items: center; gap: 6px; font-size: 17px; margin: 0; }
+.chorei-count { width: 4.2em; min-height: 56px; font-size: 30px; font-weight: bold; text-align: center; padding: 4px; }
+.chorei-state { grid-area: state; text-align: right; font-size: 14px; font-weight: bold; }
+.chorei-row[data-state="blank"] .chorei-state { color: #b45309; }
+.chorei-row[data-state="done"] .chorei-state { color: #276749; }
+.chorei-row[data-state="error"] .chorei-state { color: #c53030; }
+.chorei-row[data-state="blank"] .chorei-count { background: #fffaf0; border-color: #f0b35a; }
+.chorei-row[data-state="done"] .chorei-count { background: #f0fff4; border-color: #9ae6b4; }
+.chorei-next { grid-area: next; min-height: 56px; min-width: 64px; margin: 0; font-size: 16px; }
+.chorei-footer { border-top: 2px solid #c9d6e8; padding: 8px 16px 12px; background: #fff; }
+.chorei-progress { margin: 0 0 6px; font-size: 14px; color: #4a5568; }
+.chorei-actions { display: grid; grid-template-columns: 1fr 2fr; gap: 12px; }
+.chorei-actions button { min-height: 56px; font-size: 18px; margin: 0; }
+@media (max-width: 520px) {
+  .chorei-row { grid-template-columns: 1fr auto; grid-template-areas: "who who" "plan state" "input next"; }
+}

@@ -1091,6 +1091,19 @@
   </dialog>
 
   <!-- 日報カレンダーの「日報なし」の日: この日の状態を登録（js/ui/day-status-dialog.js） -->
+  <!-- 朝礼入力（今日の業者別の実績人数。js/ui/chorei-dialog.js） -->
+  <dialog id="choreiDialog" class="chorei-dialog">
+    <h3 id="choreiTitle">朝礼入力</h3>
+    <div id="choreiBody" class="chorei-body"></div>
+    <div class="chorei-footer">
+      <p id="choreiProgress" class="chorei-progress"></p>
+      <div class="chorei-actions">
+        <button type="button" id="choreiCloseBtn" class="secondary-btn">閉じる</button>
+        <button type="button" id="choreiSaveBtn">保存</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- 日報の削除の確認（js/ui/report-form-view.js） -->
   <dialog id="reportDeleteDialog" class="day-status-dialog report-delete-dialog">
     <h3>この日報を削除しますか？</h3>

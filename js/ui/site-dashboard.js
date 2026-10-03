@@ -20,6 +20,7 @@ import { buildTodaySheetHtml } from "../dashboard/todaySheetHtml.js";
 import { BOARD_SECTIONS, BOARD_LAYOUT_VERSION, KY_BOARD_LABELS, buildInfoBand } from "../dashboard/boardContent.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
 import { openBoardPdfDialog } from "./board-pdf.js";
+import { openChoreiDialog } from "./chorei-dialog.js";
 import { listKySubmissions, addKyVendor, setKyState } from "../ky/kySubmissions.js";
 import { showMessage } from "./common.js";
 
@@ -331,7 +332,7 @@ function render(model) {
       <section class="dash-card dash-card-wide"><h3>📅 日報カレンダー</h3><div class="dash-calendar-slot"></div></section>
     </div>
     <div class="dash-actions">
-      ${canEdit ? `<button type="button" data-action="diary">＋日誌</button><button type="button" data-action="deliveries" class="secondary-btn">🚚搬入・搬出</button><button type="button" data-action="companies" class="secondary-btn">👷業者</button>` : ""}
+      ${canEdit ? `<button type="button" data-action="chorei" class="dash-chorei-btn">🗣 朝礼入力（今日の人数）</button><button type="button" data-action="diary">＋日誌</button><button type="button" data-action="deliveries" class="secondary-btn">🚚搬入・搬出</button><button type="button" data-action="companies" class="secondary-btn">👷業者</button>` : ""}
       <button type="button" data-action="print" class="secondary-btn">🖨 現場掲示をA3印刷</button>
       <button type="button" data-action="pdf" class="secondary-btn">📄 PDF保存・共有</button>
     </div>`;
@@ -426,6 +427,10 @@ root?.addEventListener("click", async (e) => {
     });
   }
   // A3印刷と同じ印刷用HTMLから、A3横・1ページのPDFを作って共有・保存する（LINE等へ送る用。board-pdf.js）
+  // 朝礼で聞いた業者ごとの実績人数を、表示している日の日報の実績人数へ続けて入力する（chorei-dialog.js）
+  if (action === "chorei") {
+    openChoreiDialog({ site: current.site, date: current.date, reportId: current.model.reportId, sameDayCount: current.model.sameDayCount, onSaved: () => refresh() });
+  }
   if (action === "pdf") {
     openBoardPdfDialog({ html: buildTodaySheetHtml(current.model), siteName: current.model.header.siteName, date: current.model.header.date });
   }
