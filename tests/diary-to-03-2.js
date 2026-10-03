@@ -127,7 +127,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   const dashText0 = await page.textContent("#siteDashboard");
   check("人工 ケース8: ダッシュボードは稼働人数・作業時間・人工を表示し、請求人工は表示しない", heads.join() === "業者,工種,稼働人数,作業時間,人工,累計人工" && !dashText0.includes("請求") && !dashText0.includes("3.5"), heads.join());
   const foot = await page.$eval("#siteDashboard .dash-vendors tfoot tr", (tr) => [...tr.cells].map((c) => c.textContent.replace(/\s+/g, "")).join("|"));
-  check("ダッシュボード 業者別稼働状況の合計: 稼働人数8人・人工8", foot === "合計（3社）|8人||8|", foot);
+  check("ダッシュボード 業者別稼働状況の合計: 稼働人数8人・人工8", foot === "合計（3社・3工種）|8人||8|", foot);
   const dash = (await page.textContent("#siteDashboard")).replace(/\s+/g, " ");
   check("ダッシュボード: 本日の重点指示・作業間の連絡・調整・資材搬入・巡回点検・累計（社員を含む）", dash.includes("開口部の養生確認を徹底") && dash.includes("時間をずらす") && dash.includes("鋼管") && dash.includes("巡回点検") && dash.includes(`累計（社員を含む）${cumTotal}人`), (dash.match(/累計（社員を含む）\d+人/) || [""])[0]);
 

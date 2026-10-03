@@ -19,6 +19,19 @@
 
 import { labelOf, dayStatusOf, isWorkDay, DAY_STATUSES, directionOf, DELIVERY_DIRECTIONS, DELIVERY_STATUSES, FLOW_STATUSES, FLOW_KINDS, parseWorkHours, formatWorkHours, workMinutes, durationLabel } from "./dailyFlow.js";
 import { PATROL_CHECKLIST_ITEMS, patrolStatusOf } from "../patrolChecklist.js";
+import { normalizeTrade } from "../report-output/tradeAttendance.js";
+
+/*
+ * 業者と工種は別のもの（業者＝施工する会社、工種＝その日の作業の種別）。日報の業者の行は「業者＋工種＋作業内容」で、
+ * 1社が複数の工種（別々の行）を、1つの工種を複数の業者が担当してよい。業者名から工種を決めない。
+ * 業者数は業者名の種類、工種数は工種の種類（03-2の稼動人数表と同じく表記ゆれ（とび＝鳶など）をそろえて）で数える。
+ */
+const vendorNameOf = (c) => String(c?.companyName ?? c?.vendor ?? "").trim();
+const tradeKeyOf = (c) => normalizeTrade(c?.occupation ?? c?.trade ?? "");
+/** 業者数（業者名の種類。同じ会社が複数の工種の行にあっても1社） */
+export const countVendors = (rows) => new Set(rows.map(vendorNameOf).filter(Boolean)).size;
+/** 工種数（工種の種類。同じ工種を複数の業者が担当しても1種） */
+export const countTrades = (rows) => new Set(rows.map(tradeKeyOf).filter(Boolean)).size;
 
 /** 安全注意事項を箇条に分ける（改行ごと。先頭の「・」「-」は取る） */
 const noteItems = (text) => String(text || "").split(/\r?\n/).map((l) => l.replace(/^\s*[・\-－‐●]\s*/, "").trim()).filter(Boolean);
@@ -233,20 +246,22 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
       };
     });
 
-  // ---- 業者別の累計（工事開始から表示日まで。業者名ごと）----
+  // ---- 業者×工種ごとの累計（工事開始から表示日まで）。同じ業者でも工種が違えば別に数える ----
+  const vtKey = (name, trade) => `${name}\u0000${normalizeTrade(trade)}`;
   const vendorTotals = new Map();
   for (const r of workLive.filter((x) => (x.date || "") <= date)) {
     for (const c of r.companies || []) {
       const name = (c.companyName || "").trim();
       if (!name) continue;
-      const t = vendorTotals.get(name) || { workers: 0, manDays: 0 };
+      const k = vtKey(name, c.occupation);
+      const t = vendorTotals.get(k) || { workers: 0, manDays: 0 };
       t.workers += num(c.actualWorkerCount) || 0;
       t.manDays += manDaysOf(c) || 0;
-      vendorTotals.set(name, t);
+      vendorTotals.set(k, t);
     }
   }
   for (const w of works) {
-    const t = vendorTotals.get(w.vendor.trim());
+    const t = vendorTotals.get(vtKey(w.vendor.trim(), w.occupation));
     w.cumulativeWorkers = t?.workers ?? null;
     w.cumulativeManDays = t?.manDays ?? null;
   }
@@ -301,7 +316,8 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
     byOccupation,
     today,
     plannedToday,
-    vendors: works.filter((w) => w.vendor).length,
+    vendors: countVendors(works),
+    trades: countTrades(works),
     foremen: works.filter((w) => w.foreman).length,
     supervisors: supervisorsToday,
     // 累計・延べ労働時間は03-2の稼動人数表の「計」「延労働時間」と同じく社員（現場監督）を含む（1人＝8時間）
@@ -356,18 +372,22 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
   // ---- 今日の確認事項・要確認（日報DBの値だけから判定。新しい必須項目は作らない）----
   const checks = [];
   const add = (label, value, level = "ok") => checks.push({ label, value, level }); // level: ok / warn（要確認） / info
+  // 同じ業者がこの日に複数の工種の行にあるときは「業者（工種）」で、どの行か分かるようにする
+  const vendorRowCount = new Map();
+  for (const c of report?.companies || []) { const n = vendorNameOf(c); if (n) vendorRowCount.set(n, (vendorRowCount.get(n) || 0) + 1); }
+  const rowLabel = (vendor, trade) => (!vendor ? "（業者名なし）" : vendorRowCount.get(vendor.trim()) > 1 && trade ? `${vendor}（${trade}）` : vendor);
   if (!report) {
     add("日報", "未入力", "warn");
   } else {
     add("日報", `入力済み（${labelOf(DAY_STATUSES, dayStatus)}）`);
     add("進捗率", report.progressPercent != null ? `${report.progressPercent}%` : "未入力", report.progressPercent != null ? "ok" : "warn");
     if (isWork) {
-      add("業者", works.length ? `${works.filter((w) => w.vendor).length}社` : "未入力", works.length ? "ok" : "warn");
+      add("業者", works.length ? `${countVendors(works)}社・${countTrades(works)}工種` : "未入力", works.length ? "ok" : "warn");
       add("作業員数", `${today}人`, "info");
       const noHours = works.filter((w) => !w.hours || !w.hours.includes("～") || w.hours.endsWith("～"));
-      add("作業時間", noHours.length ? `${noHours.map((w) => w.vendor || "（業者名なし）").join("・")} 未入力` : "入力済み", noHours.length ? "warn" : "ok");
+      add("作業時間", noHours.length ? `${noHours.map((w) => rowLabel(w.vendor, w.occupation)).join("・")} 未入力` : "入力済み", noHours.length ? "warn" : "ok");
       const signed = signedByReport.get(report.id) || new Set();
-      const unsignedVendors = (report.companies || []).filter((c) => (c.companyName || "").trim() && !signed.has(c.companyId)).map((c) => c.companyName.trim());
+      const unsignedVendors = (report.companies || []).filter((c) => (c.companyName || "").trim() && !signed.has(c.companyId)).map((c) => rowLabel(c.companyName.trim(), c.occupation));
       if (unsignedVendors.length) for (const v of unsignedVendors) add("署名", `${v} 署名未入力`, "warn");
       else if (works.length) add("署名", "全業者 署名済み");
       add("本日の重点指示", report.focusInstructions ? "入力済み" : "未入力", "info");
@@ -404,7 +424,7 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
     if (!r) return null;
     if (!isWorkDay(r)) return { state: labelOf(DAY_STATUSES, dayStatusOf(r)) };
     const cs = (r.companies || []).filter((c) => (c.companyName || "").trim() || num(c.actualWorkerCount));
-    return { workers: actualOf(r), manDays: cs.reduce((s, c) => s + (manDaysOf(c) || 0), 0), vendors: cs.filter((c) => (c.companyName || "").trim()).length, progress: r.progressPercent ?? null };
+    return { workers: actualOf(r), manDays: cs.reduce((s, c) => s + (manDaysOf(c) || 0), 0), vendors: countVendors(cs), trades: countTrades(cs), progress: r.progressPercent ?? null };
   };
   const prevDate = addDays(date, -1);
   const prev = dayFigures(reportOfDate(live, prevDate).report);
@@ -419,7 +439,8 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
     stateLabel: report ? labelOf(DAY_STATUSES, dayStatus) : "日報なし",
     workers: isWork ? today : null,
     manDays: isWork ? works.reduce((s2, w) => s2 + (w.manDays || 0), 0) : null,
-    vendors: isWork ? works.filter((w) => w.vendor).length : null,
+    vendors: isWork ? countVendors(works) : null,
+    trades: isWork ? countTrades(works) : null,
     focus: (report?.focusInstructions || "").split(/\r?\n/)[0] || "",
     attentionCount: attention.length
   };

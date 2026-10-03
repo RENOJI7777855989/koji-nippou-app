@@ -31,7 +31,7 @@ export function buildTodaySheetHtml(model) {
   const works = b.works.length
     ? `<table class="works"><thead><tr><th>業者</th><th>工種</th><th>稼働人数<br><small>予定/実績</small></th><th>人工</th><th>作業時間</th><th>作業内容</th><th>職長</th><th>安全注意事項・使用機械</th></tr></thead><tbody>${b.works
         .map((w) => `<tr><td>${esc(w.vendor)}</td><td>${esc(w.trade)}</td><td class="c">${w.planned ?? ""} / <b>${w.actual ?? ""}</b></td><td class="c">${w.manDays ?? ""}</td><td>${esc(w.hours)}</td><td>${br(w.content)}</td><td>${esc(w.foreman)}</td><td>${br([w.notes, w.machinery ? "機械：" + w.machinery : ""].filter(Boolean).join("\n"))}</td></tr>`)
-        .join("")}</tbody><tfoot><tr><th colspan="2">合計（${b.works.length}社）</th><td class="c"><b>${b.totals.workers}</b>人</td><td class="c">${b.totals.manDays}</td><td colspan="4"></td></tr></tfoot></table>`
+        .join("")}</tbody><tfoot><tr><th colspan="2">合計（${b.totals.vendors ?? b.works.length}社・${b.totals.trades ?? "-"}工種）</th><td class="c"><b>${b.totals.workers}</b>人</td><td class="c">${b.totals.manDays}</td><td colspan="4"></td></tr></tfoot></table>`
     : `<p class="empty">${esc(b.dayStateLabel || "本日の作業（日誌の業者欄）は未入力")}</p>`;
 
   // 流れが多い日は2列に分けて並べる（左列→右列の順に時刻順）。搬入・搬出の詳細は右の表にあるので流れでは1行
@@ -68,7 +68,7 @@ export function buildTodaySheetHtml(model) {
       <div class="big">${s.today}<small>人</small></div>
       <table class="kv">
         ${s.plannedToday ? `<tr><th>予定</th><td>${s.plannedToday}人</td></tr>` : ""}
-        <tr><th>職長</th><td>${s.foremen}人</td></tr><tr><th>業者</th><td>${s.vendors}社</td></tr>
+        <tr><th>職長</th><td>${s.foremen}人</td></tr><tr><th>業者・工種</th><td>${s.vendors}社・${s.trades}種</td></tr>
         ${s.supervisors ? `<tr><th>現場監督</th><td>${s.supervisors}人</td></tr>` : ""}
         <tr><th>累計</th><td>${s.cumulative.toLocaleString()}人</td></tr>
         <tr><th>延べ労働時間</th><td>${s.laborHoursCumulative.toLocaleString()}時間</td></tr>

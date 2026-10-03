@@ -105,6 +105,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   await page.click(`#reportCalendar .cal-cell[data-date="2026-09-08"]`); await page.waitForFunction(() => document.getElementById("dayStatusDialog").open);
   await page.click(`#dayStatusDialog [data-day-status="work"]`); await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(300);
   await page.locator(".company-row").nth(0).locator(".companyName").fill("サンプル塗装");
+  await page.locator(".company-row").nth(0).locator(".occupation").fill("塗装工事"); // 累計人工は業者×工種ごと（9/1 と同じ工種）
   await page.locator(".company-row").nth(0).locator(".actualWorkerCount").fill("4");
   await page.click("#reportSaveBtn"); await page.waitForSelector("#view-site-detail:not([hidden])");
   const work8 = await page.evaluate(async () => (await (await import("/js/db.js")).dbGetAll("reports")).find((r) => r.date === "2026-09-08"));

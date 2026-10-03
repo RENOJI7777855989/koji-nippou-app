@@ -14,7 +14,7 @@ import { dbGetAll } from "../db.js";
 import { hasPermission } from "../auth.js";
 import { escapeHtml } from "../utils.js";
 import { navigate } from "../router.js";
-import { buildDashboardModel } from "../dashboard/siteDashboardModel.js";
+import { buildDashboardModel, countVendors, countTrades } from "../dashboard/siteDashboardModel.js";
 import { buildTodaySheetHtml } from "../dashboard/todaySheetHtml.js";
 import { BOARD_SECTIONS, BOARD_LAYOUT_VERSION, KY_BOARD_LABELS, buildInfoBand } from "../dashboard/boardContent.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
@@ -104,7 +104,7 @@ function render(model) {
     <p class="dash-sub">本日の実績人数${s.plannedToday ? `（予定 ${s.plannedToday}人）` : ""}</p>
     <dl class="dash-dl dash-dl-row">
       ${s.byOccupation.map((o) => `<dt>${escapeHtml(o.occupation)}</dt><dd>${o.count}人<small class="dash-sub">（累計${o.cumulative}人）</small></dd>`).join("")}
-      <dt>職長</dt><dd>${s.foremen}人</dd><dt>業者</dt><dd>${s.vendors}社</dd>
+      <dt>職長</dt><dd>${s.foremen}人</dd><dt>業者</dt><dd>${s.vendors}社</dd><dt>工種</dt><dd>${s.trades}種</dd>
       ${s.supervisors ? `<dt>現場監督</dt><dd>${s.supervisors}人</dd>` : ""}
       ${s.supervisors ? `<dt>計（社員を含む）</dt><dd>${s.totalToday}人</dd>` : ""}
       <dt>累計（社員を含む）</dt><dd>${s.cumulative.toLocaleString()}人</dd>
@@ -130,8 +130,8 @@ function render(model) {
     ? `<div class="dash-table-wrap"><table class="dash-table dash-vendors">
         <thead><tr><th>業者</th><th>工種</th><th class="num">稼働人数</th><th>作業時間</th><th class="num">人工</th><th class="num">累計人工</th></tr></thead>
         <tbody>${vendorRows.map((w) => `<tr><td><b>${escapeHtml(w.vendor || "（業者名なし）")}</b></td><td>${escapeHtml(w.occupation)}</td><td class="num dash-workers"><b>${w.actual ?? "-"}</b>人</td><td>${escapeHtml(w.hours || "-")}${w.hoursDuration ? `<br><small class="dash-sub">${escapeHtml(w.hoursDuration)}</small>` : ""}</td><td class="num">${fmtNum(w.manDays)}</td><td class="num">${fmtNum(w.cumulativeManDays)}</td></tr>`).join("")}</tbody>
-        <tfoot><tr><th colspan="2">合計（${vendorRows.length}社）</th><th class="num"><b>${totalWorkers}</b>人</th><th></th><th class="num">${fmtNum(totalManDays)}</th><th></th></tr></tfoot>
-      </table></div><p class="dash-sub">人工は稼働人数を1人＝1人工として数えた現場集計の値です。</p>`
+        <tfoot><tr><th colspan="2">合計（${countVendors(vendorRows)}社・${countTrades(vendorRows)}工種）</th><th class="num"><b>${totalWorkers}</b>人</th><th></th><th class="num">${fmtNum(totalManDays)}</th><th></th></tr></tfoot>
+      </table></div><p class="dash-sub">人工は稼働人数を1人＝1人工として数えた現場集計の値です。同じ業者が複数の工種を担当する日は工種ごとに行が分かれます（累計人工も業者×工種ごと）。</p>`
     : empty(model.reportId ? "日誌の業者欄に入力すると、ここに業者別の稼働人数が表示されます。" : "この日の日誌はまだありません。");
   const textCard = (text, none) => (text ? `<p class="dash-notice">${escapeHtml(text).replace(/\n/g, "<br>")}</p>` : empty(model.reportId ? none : "この日の日誌はまだありません。"));
   const focusHtml = textCard(model.diary?.focusInstructions, "日誌の「本日の重点指示」に入力すると、ここに表示されます。");
@@ -181,7 +181,7 @@ function render(model) {
   // 昨日 → 今日（片方の日報が無ければ比較しない）
   const cmp = model.compare;
   const fig = (x, key, unit) => (!x ? "日報なし" : x.state ? x.state : x[key] == null ? "未入力" : `${fmtNum(x[key])}${unit}`);
-  const cmpRows = [["作業員", "workers", "人"], ["人工", "manDays", ""], ["進捗率", "progress", "%"], ["業者数", "vendors", "社"]]
+  const cmpRows = [["作業員", "workers", "人"], ["人工", "manDays", ""], ["進捗率", "progress", "%"], ["業者数", "vendors", "社"], ["工種数", "trades", "種"]]
     .map(([label, key, unit]) => `<tr><th>${label}</th><td>${escapeHtml(fig(cmp.prev, key, unit))}</td><td>→</td><td><b>${escapeHtml(fig(cmp.now, key, unit))}</b></td></tr>`).join("");
   const md2 = (iso) => { const [, m2, d2] = iso.split("-").map(Number); return `${m2}/${d2}`; };
   const compareHtml = `<table class="dash-compare"><thead><tr><th></th><th>${md2(cmp.prevDate)}（前日）</th><th></th><th>${md2(h.date)}</th></tr></thead><tbody>${cmpRows}</tbody></table>${!cmp.prev || !cmp.now ? `<p class="dash-sub">日報が無い日は比較しません。</p>` : ""}`;
@@ -193,6 +193,7 @@ function render(model) {
       <dt>本日稼働</dt><dd>${ov.workers != null ? `${ov.workers}人` : escapeHtml(ov.stateLabel)}</dd>
       <dt>人工</dt><dd>${ov.manDays != null ? fmtNum(ov.manDays) : "-"}</dd>
       <dt>業者</dt><dd>${ov.vendors != null ? `${ov.vendors}社` : "-"}</dd>
+      <dt>工種</dt><dd>${ov.trades != null ? `${ov.trades}種` : "-"}</dd>
       <dt>要確認</dt><dd>${ov.attentionCount}件</dd>
     </dl>${ov.focus ? `<p class="dash-sub">本日の重点指示: ${escapeHtml(ov.focus)}</p>` : ""}`;
 

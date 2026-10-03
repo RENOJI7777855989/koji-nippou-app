@@ -184,10 +184,10 @@ function addCompanyRow(data = {}) {
   row.innerHTML = `
     <h3></h3>
     <label>業者名
-      <input type="text" class="companyName" placeholder="例）〇〇建設">
+      <input type="text" class="companyName" list="companyNameSuggestions" placeholder="例）〇〇建設" autocomplete="off">
     </label>
-    <label>職種
-      <input type="text" class="occupation" placeholder="例）鉄筋工">
+    <label>工種
+      <input type="text" class="occupation" list="occupationSuggestions" placeholder="例）塗装" autocomplete="off">
     </label>
     <label>予定人数
       <input type="number" class="plannedWorkerCount" min="0" placeholder="例）5">
@@ -464,6 +464,22 @@ function updateProgressHint() {
 progressInput.addEventListener("input", updateProgressHint);
 
 /** この日より前で、進捗率を入力した一番新しい日誌（参考表示用。値を自動で入れることはしない） */
+/**
+ * 業者名・工種の入力候補（この現場の過去の日報から、業者名と工種を別々に集める）。
+ * 業者と工種は別のもの（1社が複数の工種を、1つの工種を複数の業者が担当する）なので、業者を選んでも工種は自動で入れない。
+ */
+async function loadCompanySuggestions(siteId) {
+  const reports = siteId ? await listReportsBySite(siteId) : [];
+  const names = new Set(), trades = new Set();
+  for (const r of reports) for (const c of r.companies || []) {
+    if ((c.companyName || "").trim()) names.add(c.companyName.trim());
+    if ((c.occupation || "").trim()) trades.add(c.occupation.trim());
+  }
+  const fill = (id, values) => { const el = document.getElementById(id); if (el) el.innerHTML = [...values].sort((a, b) => a.localeCompare(b, "ja")).map((v) => `<option value="${escapeHtml(v)}"></option>`).join(""); };
+  fill("companyNameSuggestions", names);
+  fill("occupationSuggestions", trades);
+}
+
 async function loadPreviousProgress(siteId, date, excludeId) {
   const reports = siteId ? await listReportsBySite(siteId) : [];
   const prev = reports
@@ -529,6 +545,7 @@ export async function initReportFormViewNew(params) {
   dayStatusSelect.value = "work";
   updateDayStatusHint();
   await loadPreviousProgress(currentSiteId, dateInput.value, null);
+  await loadCompanySuggestions(currentSiteId);
   await renderPhotoGrid(draftReportId);
   applyReadOnlyMode(false); // このルートには編集権限があるユーザーしか到達しない
   focusRequestedSection();
@@ -573,6 +590,7 @@ export async function initReportFormViewEdit(params) {
   loadPatrolChecklist(report.patrolChecklist);
   loadFlowAndDeliveries(report);
   await loadPreviousProgress(report.siteId, report.date, report.id);
+  await loadCompanySuggestions(report.siteId);
 
   companiesContainer.innerHTML = "";
   const signatures = await listSignaturesByReport(report.id);
