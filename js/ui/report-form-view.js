@@ -51,10 +51,14 @@ const updateDayStatusHint = () => {
   rainFieldsEl.hidden = dayStatusSelect.value !== "rain";
   staffFieldsEl.hidden = dayStatusSelect.value === "holiday";
   staffHolidayNote.hidden = dayStatusSelect.value !== "holiday";
+  // 巡回点検の空欄の項目の表示: 通常作業は「未確認」、現場作業なし・休工日・雨天作業不可日・事務作業日は「未実施」（保存値は同じ空欄）
+  const blankLabel = dayStatusSelect.value === "work" ? "未確認" : "未実施";
+  document.querySelectorAll('#patrolChecklistContainer select option[value=""]').forEach((o) => { o.textContent = blankLabel; });
 };
 dayStatusSelect.addEventListener("change", () => {
   updateDayStatusHint();
   toggleDefaultTimelineForDayStatus();
+  if (!editingReportId) applyPatrolDefaultsForDayStatus(); // 新規の日報だけ（初期値の印のある項目だけを切り替える）
   if (formMode.mode) applyQuickMode(formMode.mode);
   renderMissingGuide();
 });
@@ -118,20 +122,39 @@ function renderPatrolChecklistTemplate() {
 }
 renderPatrolChecklistTemplate();
 
-// 新規日報作成時は、全項目を空欄（未確認）にする。「○」は実際に点検して問題が無かったことを
-// 意味するので、日報を作っただけで○を保存しない（日の状態に関係なく空欄。○・×・該当なしは
-// 監督が選んだ項目だけ保存する）。以前は全項目「良」で初期化していたため、点検していない
-// 休工日・事務作業日まで「実施」・03-2は○になっていた（巡回点検の状況は patrolChecklist.js）。
-// 既存日報の編集時（loadPatrolChecklist）は、保存済みの値をそのまま復元する。
+// 巡回点検の初期値の変遷: 2026-08-20〜10-03 は日の状態に関係なく全項目「良」（休工日まで「実施」・03-2は○になった）→
+// 10-03 に全項目空欄 → 10-03 に「通常作業は全項目「良」、現場作業なし・休工日・雨天作業不可日・事務作業日は空欄（未確認）」
+// （下の setupNewReportPatrolDefaults）。resetPatrolChecklist はいったん全項目を空欄にする。
+// 既存日報の編集時（loadPatrolChecklist）は、保存済みの値をそのまま復元する（初期値は入れない）。
 function resetPatrolChecklist() {
-  patrolChecklistContainer.querySelectorAll("select").forEach((select) => (select.value = ""));
+  patrolChecklistContainer.querySelectorAll("select").forEach((select) => { select.value = ""; delete select.dataset.auto; });
 }
 
 function loadPatrolChecklist(patrolChecklist = {}) {
   patrolChecklistContainer.querySelectorAll(".patrol-item-row").forEach((row) => {
-    row.querySelector("select").value = patrolChecklist[row.dataset.key] || "";
+    const select = row.querySelector("select");
+    select.value = patrolChecklist[row.dataset.key] || "";
+    delete select.dataset.auto; // 既存の日報の値は初期値ではない（日の状態を変えても書き換えない）
   });
 }
+
+/*
+ * 新規の通常作業の日報: 巡回点検の全項目を初期値「良」にする（2026-10-03。それまでは全項目空欄）。
+ * 初期値で入れた項目には data-auto="1" の印を付け、監督が選び直した項目は印を外す（初期値と監督の入力を区別する）。
+ * 日の状態を現場作業なし・休工日・雨天作業不可日・事務作業日に変えると、印のある（初期値のままの）項目だけを空欄（未確認）にし、
+ * 通常作業に戻すと「良」に戻す。監督が選んだ値（不良・該当なし・空欄に戻したもの等）は書き換えない。既存の日報には使わない。
+ */
+function applyPatrolDefaultsForDayStatus() {
+  const work = dayStatusSelect.value === "work";
+  patrolChecklistContainer.querySelectorAll("select[data-auto]").forEach((select) => { select.value = work ? "good" : ""; });
+}
+function setupNewReportPatrolDefaults() {
+  patrolChecklistContainer.querySelectorAll("select").forEach((select) => { select.dataset.auto = "1"; });
+  applyPatrolDefaultsForDayStatus();
+}
+patrolChecklistContainer.addEventListener("change", (e) => {
+  if (e.target.matches("select")) delete e.target.dataset.auto; // 監督が選んだ値（以後、日の状態を変えても書き換えない）
+});
 
 function collectPatrolChecklist() {
   const result = {};
@@ -745,6 +768,7 @@ export async function initReportFormViewNew(params) {
   dayStatusSelect.value = "work";
   updateDayStatusHint();
   loadDefaultTimeline(); // 新規の通常作業の日報: 本日の現場の流れの基本スケジュール（変更・削除・追加できる）
+  setupNewReportPatrolDefaults(); // 新規の通常作業の日報: 巡回点検の全項目を初期値「良」
   await loadPreviousProgress(currentSiteId, dateInput.value, null);
   await loadCompanySuggestions(currentSiteId);
   await renderPhotoGrid(draftReportId);
