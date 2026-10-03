@@ -3,7 +3,9 @@
    ・月間請求人工は、日報の業者の行に保存されている「請求人工」（companies[].billingManDays。
      以前の版の manDays も請求人工として読む）を、日報の日付の月ごとに業者名で合計して、表示のたびに計算する
      （合計は保存しない＝日報を直せばその月の合計に反映され、二重管理にならない）。
-   ・業者は業者名（前後の空白を除いた文字列）で識別する。同じ業者が複数の工種を担当していても1社として合計する。
+   ・業者は業者名（前後の空白を除いた文字列）で識別する。同じ業者が複数の工種を担当していても1社として合計する（工種別に分けない）。
+   ・月次の一覧・集計の対象は、その月にその業者の請求人工が1件以上入力されている業者だけ。日報に出ただけ・稼働人数や
+     作業時間があるだけ・請求状況だけ保存されている業者は一覧に出さない（未入力の行は合計に入れないだけで、0は保存しない）。
    ・請求状況（未確認／請求あり／請求なし）と月の締め状態（未締め／締め確認中／締め済み）は監督が選んだものだけを、
      現場の記録 site.billingMonths[月] に保存する（DBの構造・バージョンは変えない。バックアップは現場のレコードごと）。
      請求人工が入力されていても「請求あり」にはしない。請求なしでも請求人工を0にはしない。保存されていない月・業者は「未確認」。
@@ -63,12 +65,11 @@ export function buildMonthlyBilling({ reports = [], site = null, month, today })
       else { v.total += b; v.entered++; if (r.date > v.lastDate) v.lastDate = r.date; }
     }
   }
-  // 日報には出ていないが、この月の請求状況を保存した業者も出す
-  for (const name of Object.keys(savedVendors)) ensure(name);
-  const rows = [...byVendor.values()].map((v) => {
+  // 一覧・集計の対象は、この月に請求人工が1件以上入力されている業者だけ
+  const rows = [...byVendor.values()].filter((v) => v.entered > 0).map((v) => {
     const st = savedVendors[v.vendor] || {};
     const status = ["billed", "none", "unconfirmed"].includes(st.status) ? st.status : "unconfirmed";
-    const manDays = v.entered ? Math.round(v.total * 100) / 100 : null; // 1件も入力が無ければ「未入力」
+    const manDays = Math.round(v.total * 100) / 100;
     return {
       vendor: v.vendor,
       manDays,
@@ -80,10 +81,11 @@ export function buildMonthlyBilling({ reports = [], site = null, month, today })
       status,
       statusLabel: labelOf(BILLING_STATUSES, status),
       statusUpdatedAt: st.updatedAt || "",
-      // 請求ありなのに請求人工が入っていない（重要な確認事項）
-      billedWithoutManDays: status === "billed" && manDays == null
     };
   }).sort((a, b) => a.vendor.localeCompare(b.vendor, "ja"));
+  // 請求状況は「請求あり」で保存されているのに、この月の請求人工が1件も入力されていない業者（一覧には出さず、確認事項にだけ出す）
+  const listed = new Set(rows.map((r) => r.vendor));
+  const billedWithoutManDays = Object.entries(savedVendors).filter(([name, st]) => st?.status === "billed" && !listed.has(name)).map(([name]) => name).sort((a, b) => a.localeCompare(b, "ja"));
   const count = (s) => rows.filter((r) => r.status === s).length;
   const closeStatus = ["open", "reviewing", "closed"].includes(saved.closeStatus) ? saved.closeStatus : "open";
   return {
@@ -91,7 +93,8 @@ export function buildMonthlyBilling({ reports = [], site = null, month, today })
     cutoff,
     rows,
     total: Math.round(rows.reduce((s, r) => s + (r.manDays || 0), 0) * 100) / 100,
-    counts: { billed: count("billed"), none: count("none"), unconfirmed: count("unconfirmed"), billedWithoutManDays: rows.filter((r) => r.billedWithoutManDays).length },
+    counts: { billed: count("billed"), none: count("none"), unconfirmed: count("unconfirmed"), billedWithoutManDays: billedWithoutManDays.length },
+    billedWithoutManDays,
     closeStatus,
     closeLabel: labelOf(BILLING_CLOSE_STATUSES, closeStatus),
     closeUpdatedAt: saved.closeUpdatedAt || ""

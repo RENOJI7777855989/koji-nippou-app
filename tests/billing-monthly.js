@@ -1,5 +1,6 @@
 // 請求人工の月次管理（現場×業者×月）を確かめる（架空データ・Chromium）。
 //   ・月間請求人工＝その月の日報の業者ごとの請求人工の合計（業者名ごと。工種が違っても1社）。月をまたいで足さない・未来の日付は入れない
+//   ・一覧に出すのは、その月に請求人工を1件以上入力した業者だけ（日報に出ただけ・請求状況だけの業者は出さない）
 //   ・日報カレンダーの月を切り替えると請求の一覧もその月に切り替わる（前の月の合計・請求状況は残る）
 //   ・請求状況（未確認／請求あり／請求なし）は別に保存（請求人工が入っていても自動で請求ありにしない・請求なしでも0にしない）
 //   ・請求あり・請求人工未入力は確認事項に出す。稼働人数・人工を変えても請求人工は変わらない。03-2・A3は変わらない
@@ -38,6 +39,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
       mk("2026-08-01", [row("a1", "ナダカ工業", "塗装", 3, "2.0"), row("k1", "協栄工業", "足場", 3, "")]),
       mk("2026-08-05", [row("a2", "ナダカ工業", "外壁下地補修", 3, "3.5"), row("a3", "ナダカ工業", "防水", 1, "1.0")]),
       mk("2026-08-10", [row("a4", "ナダカ工業", "塗装", 4, "4.0"), row("n1", "野本建装工業", "塗装", 3, "3.0")]),
+      mk("2026-08-15", [row("a11", "ナダカ工業", "塗装", 2, "")]), // 請求人工が未入力の日（合計に入れない・0として保存しない）
       mk("2026-08-20", [row("a5", "ナダカ工業", "塗装", 5, "5.0")]),
       mk("2026-08-31", [row("a6", "ナダカ工業", "塗装", 3, "3.0")]),
       mk("2026-09-01", [row("a7", "ナダカ工業", "塗装", 2, "2.0")]),
@@ -83,14 +85,19 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   await openSite(); await goMonth("2026-08");
   const aug = await billing();
   check("1・2 8月の月間請求人工: ナダカ工業 2.0+3.5+1.0+4.0+5.0+3.0＝18.5・最終入力日 8/31", aug.rows["ナダカ工業"]?.manDays === "18.5" && aug.rows["ナダカ工業"].last === "8/31", JSON.stringify(aug.rows));
-  check("9・11 複数業者（ナダカ工業・野本建装工業・協栄工業）。ナダカ工業は3工種でも1社として合計", Object.keys(aug.rows).join() === ["協栄工業", "ナダカ工業", "野本建装工業"].sort((a, b) => a.localeCompare(b, "ja")).join() && aug.rows["野本建装工業"].manDays === "3");
-  check("10・請求人工未入力: 協栄工業は「未入力」（稼働人数から計算しない）", aug.rows["協栄工業"].manDays === "未入力");
-  check("13 請求状況の初期値は全業者「未確認」（日報に出た＝請求ありとしない）", Object.values(aug.rows).every((r) => r.status === "unconfirmed") && aug.summary.includes("請求あり 0社・未確認 3社・請求なし 0社"));
-  await setStatus("ナダカ工業", "billed"); await setStatus("野本建装工業", "none"); await setStatus("協栄工業", "billed");
+  check("9・11 請求人工を入力した業者だけ（ナダカ工業・野本建装工業）。ナダカ工業は3工種でも1社として合計", Object.keys(aug.rows).sort().join() === ["ナダカ工業", "野本建装工業"].sort().join() && aug.rows["野本建装工業"].manDays === "3", Object.keys(aug.rows).join());
+  check("10 日報に出ていても8月に請求人工を一度も入力していない協栄工業は一覧に出さない", !aug.rows["協栄工業"]);
+  check("未入力の日（8/15）は合計に入れず、0として保存もしない", aug.rows["ナダカ工業"].manDays === "18.5" && (await page.evaluate(async () => (await (await import("/js/db.js")).dbGetAll("reports")).find((r) => r.date === "2026-08-15").companies[0].billingManDays)) === "");
+  check("13 請求状況の初期値は「未確認」（請求人工が入っていても請求ありとしない）", Object.values(aug.rows).every((r) => r.status === "unconfirmed") && aug.summary.includes("請求あり 0社・未確認 2社・請求なし 0社"));
+  await setStatus("ナダカ工業", "billed"); await setStatus("野本建装工業", "none");
+  // 請求人工を入力していない業者（協栄工業）に請求状況だけ「請求あり」を保存（データ層で）→ 一覧には出さず、確認事項に出す
+  await page.evaluate(async (sid) => { const { setBillingStatus } = await import("/js/billing/billingMonthly.js"); await setBillingStatus(sid, "2026-08", "協栄工業", "billed"); }, ids.siteId);
+  await openSite(); await goMonth("2026-08");
   await page.selectOption("#reportCalendar .billing-close-status", "closed"); await page.waitForTimeout(400);
   const aug2 = await billing();
-  check("14・15 請求あり（ナダカ工業）・請求なし（野本建装工業）を保存。請求なしでも請求人工は3.0のまま（0にしない）", aug2.rows["ナダカ工業"].status === "billed" && aug2.rows["野本建装工業"].status === "none" && aug2.rows["野本建装工業"].manDays === "3" && aug2.summary.includes("請求あり 2社・未確認 0社・請求なし 1社"));
-  check("16 請求あり＋請求人工未入力（協栄工業）は「請求あり・請求人工未入力」と表示", aug2.rows["協栄工業"].warn && aug2.summary.includes("請求あり・請求人工未入力 1社"));
+  check("14・15 請求あり（ナダカ工業）・請求なし（野本建装工業）を保存。請求なしでも請求人工は3.0のまま（0にしない）", aug2.rows["ナダカ工業"].status === "billed" && aug2.rows["野本建装工業"].status === "none" && aug2.rows["野本建装工業"].manDays === "3" && aug2.summary.includes("請求あり 1社・未確認 0社・請求なし 1社"));
+  const warnText = await page.$eval("#reportCalendar .billing-monthly", (s) => s.textContent);
+  check("16 請求状況だけ「請求あり」で請求人工が未入力の協栄工業は一覧に出さず、「請求あり・請求人工未入力」として知らせる", !aug2.rows["協栄工業"] && aug2.summary.includes("請求あり・請求人工未入力 1社") && warnText.includes("請求人工が入力されていない業者（一覧には出しません）：協栄工業"));
   check("月の締め（締め済み）を保存", aug2.close === "closed");
 
   // ---- 3〜6・12 9月（例の「11月」）へ切り替え ----
@@ -100,7 +107,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   check("12 月をまたぐ同じ業者: 8/31の3.0は8月、9/1の2.0は9月（5.0にしない）・9月は 2.0+3.0＝5.0", aug.rows["ナダカ工業"].manDays === "18.5" && sep.rows["ナダカ工業"].manDays === "5");
   await setStatus("ナダカ工業", "billed");
   const sep2 = await billing();
-  check("5・6 9月の請求状況を保存（ナダカ工業 請求あり・西原建設は未確認・請求人工未入力）", sep2.rows["ナダカ工業"].status === "billed" && sep2.rows["西原建設"].status === "unconfirmed" && sep2.rows["西原建設"].manDays === "未入力");
+  check("5・6 9月の請求状況を保存（ナダカ工業 請求あり）。9月に請求人工を入力していない西原建設は一覧に出さない", sep2.rows["ナダカ工業"].status === "billed" && !sep2.rows["西原建設"] && Object.keys(sep2.rows).join() === "ナダカ工業");
 
   // ---- 7・8・21 8月へ戻る ----
   await goMonth("2026-08");
@@ -115,7 +122,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   // ---- ダッシュボードの「今月の請求状況」・確認事項（表示日 8/31）----
   await page.fill("#siteDashboard .dash-date-input", "2026-08-31"); await page.dispatchEvent("#siteDashboard .dash-date-input", "change"); await page.waitForTimeout(500);
   const dash = await page.evaluate(() => ({ card: document.querySelector("#siteDashboard .dash-billing-card")?.textContent.replace(/\s+/g, " ") || "", att: [...document.querySelectorAll("#siteDashboard .dash-attention li")].map((l) => l.textContent.replace(/\s+/g, " ")), board: document.querySelector("#siteDashboard [data-panel=board]").textContent }));
-  check("ダッシュボード: 今月の請求状況（8月）請求あり2社・未確認0社・請求なし1社・月間請求人工 21.5・締め済み", dash.card.includes("8月") && /請求あり\s*2社/.test(dash.card) && /未確認\s*0社/.test(dash.card) && /請求なし\s*1社/.test(dash.card) && dash.card.includes("21.5") && dash.card.includes("締め済み"), dash.card);
+  check("ダッシュボード: 今月の請求状況（8月）請求あり1社・未確認0社・請求なし1社・月間請求人工 21.5・締め済み", dash.card.includes("8月") && /請求あり\s*1社/.test(dash.card) && /未確認\s*0社/.test(dash.card) && /請求なし\s*1社/.test(dash.card) && dash.card.includes("21.5") && dash.card.includes("締め済み"), dash.card);
   check("16 確認事項に「請求 請求あり・請求人工未入力 1社（協栄工業）」", dash.att.some((a) => a === "請求 請求あり・請求人工未入力 1社（協栄工業）"), dash.att.join(" / "));
   check("19（A3） 現場掲示（画面）には請求の情報を出さない", !dash.board.includes("請求"));
   await page.click("#siteDashboard [data-action=billing]"); await page.waitForTimeout(500);
@@ -171,10 +178,10 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   const restored = await p3.evaluate(async (sid) => {
     const { dbGetAll, dbGet } = await import("/js/db.js"); const { buildMonthlyBilling } = await import("/js/billing/billingMonthly.js");
     const site = await dbGet("sites", sid); const reports = (await dbGetAll("reports")).filter((r) => r.siteId === sid);
-    const pick = (m) => { const b = buildMonthlyBilling({ reports, site, month: m, today: "2026-12-31" }); return Object.fromEntries(b.rows.map((r) => [r.vendor, `${r.manDays}/${r.status}`]).concat([["close", b.closeStatus]])); };
+    const pick = (m) => { const b = buildMonthlyBilling({ reports, site, month: m, today: "2026-12-31" }); return Object.fromEntries(b.rows.map((r) => [r.vendor, `${r.manDays}/${r.status}`]).concat([["close", b.closeStatus], ["billedWithout", b.billedWithoutManDays.join()]])); };
     return { aug: pick("2026-08"), sep: pick("2026-09") };
   }, ids.siteId);
-  check("22 バックアップ→復元で8月・9月の請求状況・締め・月間合計が保たれる", restored.aug["ナダカ工業"] === "20.5/billed" && restored.aug["野本建装工業"] === "3/none" && restored.aug["協栄工業"] === "null/billed" && restored.aug.close === "closed" && restored.sep["ナダカ工業"] === "5/billed" && restored.sep["西原建設"] === "null/unconfirmed", JSON.stringify(restored));
+  check("22 バックアップ→復元で8月・9月の請求状況・締め・月間合計が保たれる", restored.aug["ナダカ工業"] === "20.5/billed" && restored.aug["野本建装工業"] === "3/none" && !restored.aug["協栄工業"] && restored.aug.billedWithout === "協栄工業" && restored.aug.close === "closed" && restored.sep["ナダカ工業"] === "5/billed" && !restored.sep["西原建設"], JSON.stringify(restored));
   await ctx2.close();
 
   check("ページエラーが無い", errors.length === 0, errors.slice(0, 2).join(" / "));

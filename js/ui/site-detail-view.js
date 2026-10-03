@@ -190,19 +190,20 @@ function billingMonthlyHtml(reports, today) {
   const canEdit = hasPermission("editReports");
   const md = (iso) => { if (!iso) return ""; const [, mm, dd] = iso.split("-").map(Number); return `${mm}/${dd}`; };
   const statusSelect = (row) => `<select class="billing-status" data-billing-vendor="${escapeHtml(row.vendor)}" aria-label="${escapeHtml(row.vendor)}の請求状況"${canEdit ? "" : " disabled"}>${BILLING_STATUSES.map((s) => `<option value="${s.value}"${s.value === row.status ? " selected" : ""}>${s.label}</option>`).join("")}</select>`;
-  const rows = b.rows.map((r) => `<tr class="billing-${r.status}${r.billedWithoutManDays ? " billing-attention" : ""}" data-billing-row="${escapeHtml(r.vendor)}">
+  const rows = b.rows.map((r) => `<tr class="billing-${r.status}" data-billing-row="${escapeHtml(r.vendor)}">
       <td><b>${escapeHtml(r.vendor)}</b>${r.trades.length ? `<br><small class="empty-message">${escapeHtml(r.trades.join("・"))}</small>` : ""}</td>
-      <td class="num">${r.manDays == null ? "未入力" : r.manDays}${r.missingRows ? `<br><small class="empty-message">未入力の行 ${r.missingRows}</small>` : ""}</td>
-      <td>${statusSelect(r)}${r.billedWithoutManDays ? `<br><small class="billing-warn">請求あり・請求人工未入力</small>` : ""}</td>
+      <td class="num">${r.manDays}${r.missingRows ? `<br><small class="empty-message">未入力の行 ${r.missingRows}（合計に入れない）</small>` : ""}</td>
+      <td>${statusSelect(r)}</td>
       <td>${md(r.lastDate)}</td></tr>`).join("");
   return `<section class="billing-monthly" aria-label="請求人工（月次）" data-billing-month="${calendarMonth}">
     <h4>💴 請求人工（月次）　${y}年${m}月</h4>
     <p class="billing-summary">請求あり <b>${b.counts.billed}</b>社・未確認 <b>${b.counts.unconfirmed}</b>社・請求なし <b>${b.counts.none}</b>社${b.counts.billedWithoutManDays ? `・<span class="billing-warn">請求あり・請求人工未入力 ${b.counts.billedWithoutManDays}社</span>` : ""}　／　月間請求人工 計 <b>${b.total}</b>（${md(b.cutoff)}まで）</p>
     ${b.rows.length
       ? `<div class="dash-table-wrap"><table class="dash-table billing-table"><thead><tr><th>業者</th><th class="num">月間請求人工</th><th>請求状況</th><th>最終入力日</th></tr></thead><tbody>${rows}</tbody></table></div>`
-      : `<p class="empty-message">この月の日報に業者がありません。</p>`}
+      : `<p class="empty-message">この月に請求人工を入力した業者はありません。</p>`}
+    ${b.billedWithoutManDays.length ? `<p class="billing-warn">請求ありで登録されていますが、この月の請求人工が入力されていない業者（一覧には出しません）：${escapeHtml(b.billedWithoutManDays.join("・"))}</p>` : ""}
     <label class="billing-close">月の締め <select class="billing-close-status"${canEdit ? "" : " disabled"}>${BILLING_CLOSE_STATUSES.map((s) => `<option value="${s.value}"${s.value === b.closeStatus ? " selected" : ""}>${s.label}</option>`).join("")}</select></label>
-    <p class="cal-note">月間請求人工は、この月の日報の業者ごとの「請求人工」の合計です（業者名ごと。工種が違っても同じ業者は1社。今日より後の日付は含めない。月をまたいで足さない）。請求状況は請求書を確認して選びます（請求人工が入っていても自動で「請求あり」にはしません。請求なしでも請求人工は0にしません）。前の月に切り替えると、その月の合計・請求状況をそのまま確認できます。</p>
+    <p class="cal-note">月間請求人工は、この月の日報の業者ごとの「請求人工」の合計です（業者名ごと。工種が違っても同じ業者は1社。今日より後の日付は含めない。月をまたいで足さない）。一覧に出すのは、この月に請求人工を1件以上入力した業者だけです（日報に出ただけ・請求状況だけの業者は出しません）。請求状況は請求書を確認して選びます（請求人工が入っていても自動で「請求あり」にはしません。請求なしでも請求人工は0にしません）。前の月に切り替えると、その月の合計・請求状況をそのまま確認できます。</p>
   </section>`;
 }
 

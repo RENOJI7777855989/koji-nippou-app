@@ -449,9 +449,9 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
     add("危険予知活動表", "対象業者 未登録", "info");
   }
   // 今月（表示している日の月）の請求状況（監督管理用。請求人工の月間合計は日報から計算、請求状況は現場の記録）。
-  // 請求ありなのに請求人工が入っていない業者は確認事項に出す
+  // 請求ありで保存されているのに、この月の請求人工が1件も入力されていない業者は確認事項に出す（月次の一覧には出さない）
   const billing = buildMonthlyBilling({ reports: live, site, month: date.slice(0, 7), today: date });
-  if (billing.counts.billedWithoutManDays) add("請求", `請求あり・請求人工未入力 ${billing.counts.billedWithoutManDays}社（${billing.rows.filter((r) => r.billedWithoutManDays).map((r) => r.vendor).join("・")}）`, "warn");
+  if (billing.counts.billedWithoutManDays) add("請求", `請求あり・請求人工未入力 ${billing.counts.billedWithoutManDays}社（${billing.billedWithoutManDays.join("・")}）`, "warn");
   const attention = checks.filter((c) => c.level === "warn");
 
   // ---- 昨日 → 今日（前日の日報と比べる。片方が無ければ比較しない）----
