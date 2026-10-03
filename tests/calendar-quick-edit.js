@@ -3,7 +3,7 @@
 //   ・日報なし → この日の状態を選んで登録（通常作業は日報画面。現場作業なし・休工日・雨天作業不可日・事務作業日は簡易登録）
 //   ・一部未記入 → 未記入の項目（何が・誰の）を表示 → 未記入だけを入力 → 保存でカレンダーへ戻り状態が変わる
 //   ・日報あり → 概要 → 簡単に修正（既存の値を表示）→ 保存でカレンダーへ戻る
-//   ・新規の通常作業の日報に流れの初期値7件（変更・削除・追加・時刻順）。特殊な日・既存の日報には入れない
+//   ・新規の通常作業の日報に流れの初期値8件（変更・削除・追加・時刻順）。特殊な日・既存の日報には入れない
 //   ・流れは日報のデータだけから現場掲示・A3・PDFに出る（変更・追加・削除がそのまま反映）
 //   ・写真・署名・巡回点検・請求人工は消えない・変わらない。Excel・PDF出力・バックアップ・復元
 const path = require("path");
@@ -18,7 +18,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
 // 保存し直すと項目の並び順が整うので、値で比べる
 const flowKey = (rows) => JSON.stringify((rows || []).map((f) => [f.id, f.time, f.kind, f.title, f.status, f.note || ""]));
 const coKey = (c) => JSON.stringify(["companyName", "occupation", "actualWorkerCount", "workHours", "workContent", "billingManDays"].map((k) => c?.[k] ?? ""));
-const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休憩", "12:00|break|昼休憩", "15:00|break|休憩", "16:45|cleanup|片付け開始", "17:00|workend|作業終了"];
+const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休憩", "12:00|break|昼休憩", "13:00|churei|昼礼", "15:00|break|休憩", "16:45|cleanup|片付け開始", "17:00|workend|作業終了"];
 
 (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cal-edit-"));
@@ -79,7 +79,7 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
   const before1 = await getReport(ids.r1);
   const before2 = await getReport(ids.r2);
 
-  // ===== 1・2・13〜20 日報なし → 通常作業 → 新規日報に流れの初期値7件 =====
+  // ===== 1・2・13〜20 日報なし → 通常作業 → 新規日報に流れの初期値8件 =====
   await openSite();
   check("前提: 9/1 一部未記入・9/2 日報あり・9/10 日報なし", (await calState("01")) === "partial" && (await calState("02")) === "ok" && (await calState("10")) === "none");
   await tapDay("10"); await page.waitForFunction(() => document.getElementById("dayStatusDialog").open);
@@ -89,19 +89,19 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
   await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(300);
   const initial = await flowRows();
   check("2 通常作業 → 通常の日報入力画面（日付 9/10・通常作業）", (await page.inputValue("#date")) === "2026-09-10" && (await page.inputValue("#dayStatus")) === "work");
-  check("13 新規の通常作業日報に流れの初期値が7件入る", initial.length === 7, initial.join(" / "));
+  check("13 新規の通常作業日報に流れの初期値が8件入る（13:00 昼礼を含む）", initial.length === 8, initial.join(" / "));
   DEFAULTS.forEach((d, i) => check(`${14 + i} 初期値 ${d.replace(/\|/g, " ")}`, initial[i] === d, initial[i]));
   check("流れの初期値の状態は「予定」・保存ボタンは「保存してカレンダーへ戻る」", (await page.$$eval("#timelineContainer .flowStatus", (ss) => ss.every((s) => s.value === "plan"))) && (await page.textContent("#reportSaveBtn")) === "保存してカレンダーへ戻る");
   // 日の状態を休工日に変えると初期値（変更していない行）は外れ、通常作業に戻すと元に戻る
   await page.selectOption("#dayStatus", "holiday"); await page.waitForTimeout(100);
   const whenHoliday = (await flowRows()).length;
   await page.selectOption("#dayStatus", "work"); await page.waitForTimeout(100);
-  check("28 通常作業以外に変えると初期値の流れは外れ（0件）、通常作業に戻すと7件に戻る", whenHoliday === 0 && (await flowRows()).length === 7, `休工日 ${whenHoliday}件`);
+  check("28 通常作業以外に変えると初期値の流れは外れ（0件）、通常作業に戻すと8件に戻る", whenHoliday === 0 && (await flowRows()).length === 8, `休工日 ${whenHoliday}件`);
   // 21〜25 時刻変更（08:20→08:30）・種別変更（15:00 休憩→現場巡回）・内容変更（15:00 →「3階巡回」）・削除（10:00休憩）・追加（09:30 打ち合わせ）
   const rows = page.locator("#timelineContainer .timeline-row");
   await rows.nth(1).locator(".flowTime").fill("08:30");
-  await rows.nth(4).locator(".flowKind").selectOption("patrol");
-  await rows.nth(4).locator(".flowTitle").fill("3階巡回");
+  await rows.nth(5).locator(".flowKind").selectOption("patrol"); // 15:00 休憩（13:00 昼礼の次）
+  await rows.nth(5).locator(".flowTitle").fill("3階巡回");
   await rows.nth(2).locator(".removeRowBtn").click(); // 初期値のままなので確認なし（入力ありでも確認ダイアログは自動で承認）
   await page.click("#addTimelineBtn");
   const added = page.locator("#timelineContainer .timeline-row").last();
@@ -116,7 +116,7 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
   check("21 時刻変更（08:20→08:30）が保存される", saved10.includes("08:30|work|作業") && !saved10.some((x) => x.startsWith("08:20")), saved10.join(" / "));
   check("22・23 種別変更（休憩→現場巡回）・内容変更（3階巡回）が保存される", saved10.includes("15:00|patrol|3階巡回"));
   check("24 削除（10:00 休憩）が保存される", !saved10.some((x) => x.startsWith("10:00")));
-  check("25・26 追加（09:30 打ち合わせ）・保存は時刻順", saved10.includes("09:30|uchiawase|打ち合わせ") && saved10.join() === [...saved10].sort().join() && saved10.length === 7, saved10.join(" / "));
+  check("25・26 追加（09:30 打ち合わせ）・保存は時刻順", saved10.includes("09:30|uchiawase|打ち合わせ") && saved10.join() === [...saved10].sort().join() && saved10.length === 8, saved10.join(" / "));
   check("11・17 保存後はカレンダー（監督管理タブ）へ戻り、9/10 を表示する", back10.manage && back10.inManage && back10.saved === "2026-09-10", JSON.stringify(back10));
   check("18・19 保存後の状態: 作業時間・署名・巡回点検が未記入なので「一部未記入」", (await calState("10")) === "partial");
 
@@ -128,7 +128,7 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
     return page.$$eval('#siteDashboard .dash-panel[data-panel="board"] .dash-flow-item:not(.is-delivery)', (li) => li.map((x) => `${x.querySelector(".dash-flow-time").textContent} ${x.querySelector(".dash-flow-title").textContent.trim()}`));
   };
   let bf = await boardFlow("2026-09-10");
-  check("29・33 現場掲示に日報の流れが時刻順で表示される（12:00 は種別の印なしで「昼休憩」）", bf.join(" / ") === "08:00 朝礼 / 08:30 作業 / 09:30 打ち合わせ / 12:00 昼休憩 / 15:00 現場巡回3階巡回 / 16:45 片付け開始 / 17:00 作業終了", bf.join(" / "));
+  check("29・33 現場掲示に日報の流れが時刻順で表示される（12:00 は種別の印なしで「昼休憩」）", bf.join(" / ") === "08:00 朝礼 / 08:30 作業 / 09:30 打ち合わせ / 12:00 昼休憩 / 13:00 昼礼 / 15:00 現場巡回3階巡回 / 16:45 片付け開始 / 17:00 作業終了", bf.join(" / "));
   check("30〜32 日報の時刻変更（08:30）・追加（09:30）・削除（10:00）が現場掲示に反映", bf.some((x) => x.startsWith("08:30")) && bf.some((x) => x.startsWith("09:30")) && !bf.some((x) => x.startsWith("10:00")));
   // 日報で 16:45 片付け開始 → 17:00 に変えると現場掲示も変わる（簡単に修正から）
   await page.goto(`${BASE}#/sites/${ids.siteId}/report/${r10.id}?mode=quick&from=calendar`); await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(400);
@@ -257,9 +257,9 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
   const p = await ctx.newPage(); await p.setContent(s10.html); await p.emulateMedia({ media: "print" }); await p.waitForTimeout(300);
   const a3 = await p.evaluate(() => { dispatchEvent(new Event("beforeprint")); return { over: [...document.querySelectorAll(".box .content")].filter((c) => c.scrollHeight > c.clientHeight + 1).map((c) => c.closest("[data-section]")?.dataset.section), flow: [...document.querySelectorAll("table.flow tr:not(.dlv)")].map((tr) => `${tr.querySelector(".t").textContent} ${tr.querySelector(".ti").textContent}`), text: document.body.textContent }; });
   const pdf = Buffer.from(await p.pdf({ preferCSSPageSize: true })).toString("latin1"); await p.close();
-  check("34 A3印刷に日報の流れ（変更・追加・削除後）が時刻順で載る（画面と同じ）", a3.flow.join(" / ") === "08:00 朝礼 / 08:30 作業 / 09:30 打ち合わせ / 12:00 昼休憩 / 15:00 現場巡回3階巡回 / 17:00 片付け開始 / 17:00 作業終了", a3.flow.join(" / "));
+  check("34 A3印刷に日報の流れ（変更・追加・削除後）が時刻順で載る（画面と同じ）", a3.flow.join(" / ") === "08:00 朝礼 / 08:30 作業 / 09:30 打ち合わせ / 12:00 昼休憩 / 13:00 昼礼 / 15:00 現場巡回3階巡回 / 17:00 片付け開始 / 17:00 作業終了", a3.flow.join(" / "));
   check("35・36 PDF（A3横・1ページ）・欄からあふれない・請求人工なし", (pdf.match(/\/Type\s*\/Page[^s]/g) || []).length === 1 && /\/MediaBox\s*\[\s*0\s+0\s+1191/.test(pdf) && a3.over.length === 0 && !a3.text.includes("請求"), a3.over.join(","));
-  // 情報の多い日（初期値7件＋追加・搬入搬出6件・業者8社）でもA3一枚に収まる
+  // 情報の多い日（初期値8件＋追加・搬入搬出6件・業者8社）でもA3一枚に収まる
   const heavy = await db(async () => {
     const { buildDashboardModel } = await import("/js/dashboard/siteDashboardModel.js"); const { buildTodaySheetHtml } = await import("/js/dashboard/todaySheetHtml.js"); const { defaultWorkdayTimeline } = await import("/js/dashboard/dailyFlow.js");
     const timeline = [...defaultWorkdayTimeline(), { time: "09:30", kind: "uchiawase", title: "設備打合せ", status: "plan" }, { time: "13:30", kind: "patrol", title: "現場巡回", status: "plan" }, { time: "14:00", kind: "inspection", title: "配筋検査", status: "plan" }].map((r, i) => ({ ...r, id: "t" + i }));
@@ -271,7 +271,7 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
   const ph = await ctx.newPage(); await ph.setContent(heavy); await ph.emulateMedia({ media: "print" }); await ph.waitForTimeout(300);
   const hv = await ph.evaluate(() => { dispatchEvent(new Event("beforeprint")); return { over: [...document.querySelectorAll(".box .content")].filter((c) => c.scrollHeight > c.clientHeight + 1 || c.scrollWidth > c.clientWidth + 1).map((c) => c.closest("[data-section]")?.dataset.section), flows: document.querySelectorAll("table.flow tr").length }; });
   const hpdf = Buffer.from(await ph.pdf({ preferCSSPageSize: true })).toString("latin1"); await ph.close();
-  check("36 情報の多い日（流れ10件＋搬入搬出6件・業者8社）でもA3一枚・欄からあふれない（項目は削らない）", (hpdf.match(/\/Type\s*\/Page[^s]/g) || []).length === 1 && hv.over.length === 0 && hv.flows === 16, `${hv.over.join(",")} 流れ${hv.flows}行`);
+  check("36 情報の多い日（流れ11件＋搬入搬出6件・業者8社）でもA3一枚・欄からあふれない（項目は削らない）", (hpdf.match(/\/Type\s*\/Page[^s]/g) || []).length === 1 && hv.over.length === 0 && hv.flows === 17, `${hv.over.join(",")} 流れ${hv.flows}行`);
   const s20 = await sheet("2026-09-20");
   const s12 = await sheet("2026-09-12");
   const s13 = await sheet("2026-09-13");

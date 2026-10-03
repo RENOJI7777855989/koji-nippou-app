@@ -14,7 +14,7 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0
 // PDFから取り出した文字は改行で切れ、一部の漢字が互換文字（例: 片→⽚）になるので、NFKCで正規化し空白・改行を除いて「時刻●内容」で照合する
 const flatPdf = (text) => String(text || "").normalize("NFKC").replace(/\s+/g, "");
 const pdfHas = (text, entries) => entries.every((e) => { const [t, ...rest] = e.split(" "); return flatPdf(text).includes(`${t}●${rest.join(" ")}`); });
-const DEFAULT7 = "08:00 朝礼,08:20 作業,10:00 休憩,12:00 昼休憩,15:00 休憩,16:45 片付け開始,17:00 作業終了";
+const DEFAULT7 = "08:00 朝礼,08:20 作業,10:00 休憩,12:00 昼休憩,13:00 昼礼,15:00 休憩,16:45 片付け開始,17:00 作業終了"; // 初期値8件（13:00 昼礼は 2026-10-03 追加）
 
 (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "board-flow-"));
@@ -81,15 +81,15 @@ const DEFAULT7 = "08:00 朝礼,08:20 作業,10:00 休憩,12:00 昼休憩,15:00 �
   await openCalendar(T);
   await page.click(`#reportCalendar .cal-cell[data-date="${T}"]`); await page.waitForFunction(() => document.getElementById("dayStatusDialog").open);
   await page.click('#dayStatusDialog [data-day-status="work"]'); await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(300);
-  check("1 新規の通常作業日報の入力画面に初期値7件", (await page.locator(".timeline-row").count()) === 7);
+  check("1 新規の通常作業日報の入力画面に初期値8件（13:00 昼礼を含む）", (await page.locator(".timeline-row").count()) === 8);
   await page.click("#reportSaveBtn"); await page.waitForSelector("#view-site-detail:not([hidden])"); await page.waitForTimeout(500);
   let r = await reportOf(T);
-  check("2・3 保存した日報データに初期値7件が入っている", (r.timeline || []).map((f) => `${f.time} ${f.title}`).join() === DEFAULT7, (r.timeline || []).map((f) => `${f.time} ${f.title}`).join());
+  check("2・3 保存した日報データに初期値8件（13:00 昼礼／種別 昼礼を含む）が入っている", (r.timeline || []).map((f) => `${f.time} ${f.title}`).join() === DEFAULT7, (r.timeline || []).map((f) => `${f.time} ${f.title}`).join());
   let bf = await boardFlow();
-  check("4 ダッシュボード（現場掲示）が保存した日（今日以外）を表示し、7件が出る（不具合の再発防止）", bf.date === T && bf.flow.join() === DEFAULT7, `${bf.date} ${bf.flow.join()}`);
+  check("4 ダッシュボード（現場掲示）が保存した日（今日以外）を表示し、8件が出る（不具合の再発防止）・13:00 昼礼も出る", bf.date === T && bf.flow.join() === DEFAULT7 && r.timeline.some((f) => f.time === "13:00" && f.kind === "churei" && f.title === "昼礼"), `${bf.date} ${bf.flow.join()}`);
   let out = await a3AndPdf();
-  check("5 A3印刷（印刷画面に渡るHTML）に7件", out.a3.flow.join() === DEFAULT7, out.a3.flow.join());
-  check("6 PDFの文字に7件（時刻・内容）がある", pdfHas(out.pdfText, DEFAULT7.split(",")), out.pdfText.split("\n").filter((x) => /^\d\d:\d\d$/.test(x.trim())).join(","));
+  check("5 A3印刷（印刷画面に渡るHTML）に8件（13:00 昼礼を含む）", out.a3.flow.join() === DEFAULT7, out.a3.flow.join());
+  check("6 PDFの文字に8件（時刻・内容。13:00 昼礼を含む）がある", pdfHas(out.pdfText, DEFAULT7.split(",")), out.pdfText.split("\n").filter((x) => /^\d\d:\d\d$/.test(x.trim())).join(","));
   check("6 PDF（同じHTML）はA3横1ページ・欄からあふれない・レイアウトの版は変えていない・請求人工なし", out.pages === 1 && out.a3land && out.a3.over === 0 && out.a3.ver.includes("2026-10-03-4") && !out.a3.text.includes("請求"), out.a3.ver);
 
   // ===== 7〜14 日報で変更・追加・削除 → ダッシュボード・A3・PDF =====
@@ -108,14 +108,14 @@ const DEFAULT7 = "08:00 朝礼,08:20 作業,10:00 休憩,12:00 昼休憩,15:00 �
   await add.locator(".flowTime").fill("13:30"); await add.locator(".flowKind").selectOption("patrol"); await add.locator(".flowTitle").fill("現場巡回");
   await page.click("#reportSaveBtn"); await page.waitForSelector("#view-site-detail:not([hidden])"); await page.waitForTimeout(500);
   bf = await boardFlow(); out = await a3AndPdf();
-  check("11・12 1件追加（13:30 現場巡回）→ ダッシュボード・A3・PDFに追加（時刻順）", bf.flow.includes("13:30 現場巡回") && out.a3.flow.includes("13:30 現場巡回") && pdfHas(out.pdfText, ["13:30 現場巡回"]) && bf.flow.length === 8 && out.a3.flow.length === 8 && bf.flow.map((x) => x.slice(0, 5)).join() === [...bf.flow.map((x) => x.slice(0, 5))].sort().join(), bf.flow.join());
+  check("11・12 1件追加（13:30 現場巡回）→ ダッシュボード・A3・PDFに追加（時刻順）", bf.flow.includes("13:30 現場巡回") && out.a3.flow.includes("13:30 現場巡回") && pdfHas(out.pdfText, ["13:30 現場巡回"]) && bf.flow.length === 9 && out.a3.flow.length === 9 && bf.flow.map((x) => x.slice(0, 5)).join() === [...bf.flow.map((x) => x.slice(0, 5))].sort().join(), bf.flow.join());
   await page.goto(`${BASE}#/sites/${ids.siteId}/report/${r.id}`); await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(400);
   await page.$$eval(".timeline-row", (rows) => rows.find((x) => x.querySelector(".flowTime").value === "15:00").querySelector(".removeRowBtn").click());
   await page.click("#reportSaveBtn"); await page.waitForSelector("#view-site-detail:not([hidden])"); await page.waitForTimeout(500);
   bf = await boardFlow(); out = await a3AndPdf();
-  check("13・14 1件削除（15:00 休憩）→ ダッシュボード・A3・PDFから削除", !bf.flow.some((x) => x.startsWith("15:00")) && !out.a3.flow.some((x) => x.startsWith("15:00")) && !out.pdfText.includes("15:00") && bf.flow.length === 7 && out.a3.flow.join() === bf.flow.join(), `${bf.flow.join()} / ${out.a3.flow.join()}`);
+  check("13・14 1件削除（15:00 休憩）→ ダッシュボード・A3・PDFから削除", !bf.flow.some((x) => x.startsWith("15:00")) && !out.a3.flow.some((x) => x.startsWith("15:00")) && !out.pdfText.includes("15:00") && bf.flow.length === 8 && out.a3.flow.join() === bf.flow.join(), `${bf.flow.join()} / ${out.a3.flow.join()}`);
 
-  // ===== 15〜18 特殊な日は7件を自動で作らない（日報データ・ダッシュボード・A3）=====
+  // ===== 15〜18 特殊な日は8件を自動で作らない（日報データ・ダッシュボード・A3）=====
   const specials = [["nowork", day(-4)], ["holiday", day(-6)], ["rain", day(-7)], ["office", day(-8)]];
   for (const [st, d] of specials) {
     await openCalendar(d);
@@ -128,14 +128,14 @@ const DEFAULT7 = "08:00 朝礼,08:20 作業,10:00 休憩,12:00 昼休憩,15:00 �
     const rep = await reportOf(d);
     await page.$eval("#siteDashboard .dash-date-input", (el, v) => { el.value = v; el.dispatchEvent(new Event("change", { bubbles: true })); }, d); await page.waitForTimeout(400);
     bf = await boardFlow(); out = await a3AndPdf();
-    check(`${15 + i} ${st}: 日報データ・ダッシュボード・A3に7件を自動で作らない`, rep.dayStatus === st && !(rep.timeline || []).length && bf.flow.length === 0 && out.a3.flow.length === 0 && !out.a3.text.includes("片付け開始"), `${(rep.timeline || []).length}/${bf.flow.length}/${out.a3.flow.length}`);
+    check(`${15 + i} ${st}: 日報データ・ダッシュボード・A3に8件を自動で作らない`, rep.dayStatus === st && !(rep.timeline || []).length && bf.flow.length === 0 && out.a3.flow.length === 0 && !out.a3.text.includes("片付け開始"), `${(rep.timeline || []).length}/${bf.flow.length}/${out.a3.flow.length}`);
   }
-  // 現場作業なしの日を日報画面で開いて保存し直しても、7件は入らない
+  // 現場作業なしの日を日報画面で開いて保存し直しても、8件は入らない
   const nw = await reportOf(day(-4));
   await page.goto(`${BASE}#/sites/${ids.siteId}/report/${nw.id}`); await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(300);
   const nwRows = await page.locator(".timeline-row").count();
   await page.click("#reportSaveBtn"); await page.waitForSelector("#view-site-detail:not([hidden])"); await page.waitForTimeout(400);
-  check("15 現場作業なしの日報を開いて保存し直しても7件は入らない", nwRows === 0 && !((await reportOf(day(-4))).timeline || []).length);
+  check("15 現場作業なしの日報を開いて保存し直しても8件は入らない", nwRows === 0 && !((await reportOf(day(-4))).timeline || []).length);
 
   // ===== 19 日報なしの日 =====
   const none = day(-9);
@@ -147,7 +147,7 @@ const DEFAULT7 = "08:00 朝礼,08:20 作業,10:00 休憩,12:00 昼休憩,15:00 �
   const oldAfter = await page.evaluate(async (id) => JSON.stringify(await (await import("/js/db.js")).dbGet("reports", id)), ids.old);
   await page.$eval("#siteDashboard .dash-date-input", (el, v) => { el.value = v; el.dispatchEvent(new Event("change", { bubbles: true })); }, day(-5)); await page.waitForTimeout(400);
   bf = await boardFlow();
-  check("20 既存の日報には7件を追加しない（データは変わらない・ダッシュボードにも流れなし）", oldAfter === oldBefore && bf.flow.length === 0);
+  check("20 既存の日報には8件を追加しない（データは変わらない・ダッシュボードにも流れなし）", oldAfter === oldBefore && bf.flow.length === 0);
 
   check("ページエラーが無い", errors.length === 0, errors.slice(0, 2).join(" / "));
   await ctx.close();
