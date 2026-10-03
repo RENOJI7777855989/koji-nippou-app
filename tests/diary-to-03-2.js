@@ -5,7 +5,7 @@
 //   ・PDF: 縦書きのセル（巡回点検の分類名）を縦書きで表示、A3横・1ページ・収まらないセル無し
 //   ・台帳: その日の人数・空き行の業種名を各頁に書き、累計・計・延労働時間は様式の数式で計算
 //   ・日誌: 本日の重点指示・作業間の連絡・調整・人工（請求用）の入力と保存、以前の作業時間「8:00から17:00」の読み込み
-//   ・ダッシュボード: 業者別 稼働状況（稼働人数と人工を別に）、本日の重点指示・作業間の連絡・調整、累計（社員を含む）
+//   ・ダッシュボード: 業者別 稼働状況（稼働人数と人工を別に）、本日の重点指示・作業間の連絡・調整、累計（監督・職員を含む）
 // 実行: 静的サーバー（http://localhost:8934）を起動した状態で node tests/diary-to-03-2.js（鍵ファイルが必要）
 const path = require("path");
 const fs = require("fs");
@@ -129,7 +129,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   const foot = await page.$eval("#siteDashboard .dash-vendors tfoot tr", (tr) => [...tr.cells].map((c) => c.textContent.replace(/\s+/g, "")).join("|"));
   check("ダッシュボード 業者別稼働状況の合計: 稼働人数8人・人工8", foot === "合計（3社・3工種）|8人||8|", foot);
   const dash = (await page.textContent("#siteDashboard")).replace(/\s+/g, " ");
-  check("ダッシュボード: 本日の重点指示・作業間の連絡・調整・資材搬入・巡回点検・累計（社員を含む）", dash.includes("開口部の養生確認を徹底") && dash.includes("時間をずらす") && dash.includes("鋼管") && dash.includes("巡回点検") && dash.includes(`累計（社員を含む）${cumTotal}人`), (dash.match(/累計（社員を含む）\d+人/) || [""])[0]);
+  check("ダッシュボード: 本日の重点指示・作業間の連絡・調整・資材搬入・巡回点検・累計（監督・職員を含む）", dash.includes("開口部の養生確認を徹底") && dash.includes("時間をずらす") && dash.includes("鋼管") && dash.includes("巡回点検") && dash.includes(`累計（監督・職員を含む）${cumTotal}人`), (dash.match(/累計（監督・職員を含む）\d+人/) || [""])[0]);
 
   // ---- 人工 ケース4・5: 請求人工を変えても、稼働人数・人工・03-2は変わらない ----
   await page.goto(`${BASE}#/sites/${ids.siteId}/report/${d2.id}`); await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(400);

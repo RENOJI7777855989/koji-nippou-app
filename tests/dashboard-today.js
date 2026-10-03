@@ -52,13 +52,13 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   check("指示・連絡: 本日の重点指示・作業間の連絡・調整・連絡事項が表示される", d3.text.includes("開口部の養生確認") && d3.text.includes("午後は区画を分ける") && d3.text.includes("元請から連絡あり"));
 
   const d4 = await at("2026-09-04");
-  check("作業なし: 「本日は作業なし」・業者別稼働状況を出さない・稼働人数に数えない", d4.state.includes("本日は作業なし") && d4.vendors === 0 && d4.compare[0] === "作業員22人→作業なし", d4.compare[0]);
+  check("現場作業なし: 「本日は現場作業なし」・業者別稼働状況を出さない・稼働人数に数えない", d4.state.includes("本日は現場作業なし") && d4.vendors === 0 && d4.compare[0] === "作業員22人→現場作業なし", d4.compare[0]);
   const d5 = await at("2026-09-05");
-  check("休工日: 「本日は休工日」・連絡事項は表示", d5.state.includes("本日は休工日") && d5.text.includes("日曜のため休工") && d5.compare[0] === "作業員作業なし→休工日", d5.compare[0]);
+  check("休工日: 「本日は休工日」・連絡事項は表示", d5.state.includes("本日は休工日") && d5.text.includes("日曜のため休工") && d5.compare[0] === "作業員現場作業なし→休工日", d5.compare[0]);
   const d6 = await at("2026-09-06");
   check("日報なし（9/6）: 「日報は未入力」・要確認「日報 未入力」（作業なし・休工日とは別）", d6.state.includes("未入力") && d6.att[0] === "日報 未入力" && d6.compare[0] === "作業員休工日→日報なし");
   // 累計: 9/4（作業なし）の塗装3人は累計に数えない
-  const d6staff = (d6.text.match(/累計（社員を含む）(\d+)人/) || [])[1];
+  const d6staff = (d6.text.match(/累計（監督・職員を含む）(\d+)人/) || [])[1];
   check("累計: 作業なしの日の人数を数えない（18+22=40人）", d6staff === "40", d6staff);
 
   // カレンダー（9月）

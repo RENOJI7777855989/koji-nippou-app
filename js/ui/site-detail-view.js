@@ -95,7 +95,7 @@ function matchesFilter(report, filter) {
     case "editedAfterPrint": return isEditedAfterPrint(report);
     case "confirmed": return !!report.confirmedAt;
     case "unconfirmed": return !report.confirmedAt;
-    case "nowork": case "office": case "holiday": return dayStatusOf(report) === filter;
+    case "nowork": case "office": case "holiday": case "rain": return dayStatusOf(report) === filter;
     default: return true;
   }
 }
@@ -130,7 +130,7 @@ const reportCalendarEl = document.getElementById("reportCalendar");
 let calendarMonth = null; // "YYYY-MM"
 let calendarSiteId = null;
 const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const CAL_LABEL = { ok: "日報あり", partial: "一部未入力", none: "日報なし", nowork: "作業なし", office: "事務作業日", holiday: "休工日", out: "", future: "" };
+const CAL_LABEL = { ok: "日報あり", partial: "一部未入力", none: "日報なし", nowork: "現場作業なし", holiday: "休工日", rain: "雨天作業不可日", office: "事務作業日", out: "", future: "" };
 
 async function renderReportCalendar(reports) {
   if (!reportCalendarEl) return;
@@ -155,7 +155,7 @@ async function renderReportCalendar(reports) {
   const days = new Date(y, m, 0).getDate();
   const cells = [];
   for (let i = 0; i < first.getDay(); i++) cells.push(`<div class="cal-cell cal-blank"></div>`);
-  const counts = { ok: 0, partial: 0, none: 0, nowork: 0, office: 0, holiday: 0 };
+  const counts = { ok: 0, partial: 0, none: 0, nowork: 0, holiday: 0, rain: 0, office: 0 };
   for (let d = 1; d <= days; d++) {
     const iso = isoOf(new Date(y, m - 1, d));
     const report = byDate.get(iso) || null;
@@ -176,9 +176,9 @@ async function renderReportCalendar(reports) {
       <b>${y}年${m}月の日報</b>
       <button type="button" class="secondary-btn cal-nav" data-shift="1" aria-label="次の月">▶</button>
     </div>
-    <p class="cal-summary">日報あり ${counts.ok}・一部未入力 ${counts.partial}・<b>日報なし ${counts.none}</b>・作業なし ${counts.nowork}・事務作業日 ${counts.office}・休工日 ${counts.holiday}</p>
+    <p class="cal-summary">日報あり ${counts.ok}・一部未入力 ${counts.partial}・<b>日報なし ${counts.none}</b>・現場作業なし ${counts.nowork}・休工日 ${counts.holiday}・雨天作業不可日 ${counts.rain}・事務作業日 ${counts.office}</p>
     <div class="cal-grid">${["日", "月", "火", "水", "木", "金", "土"].map((w) => `<div class="cal-week">${w}</div>`).join("")}${cells.join("")}</div>
-    <p class="cal-note">「日報なし」は工期内で日報が無い日です（作業なし・休工日・事務作業日とは別。日報で選んだ日だけがその表示になります）。日報のある日を押すと日報を開きます。日報なしの日を押すと、この日の状態（通常作業・作業なし・休工日・事務作業日）を選んで登録できます。</p>`;
+    <p class="cal-note">「日報なし」は工期内で日報が無い日です（現場作業なし・休工日・雨天作業不可日・事務作業日とは別。日報で選んだ日だけがその表示になります）。日報のある日を押すと日報を開きます。日報なしの日を押すと、この日の状態（通常作業・現場作業なし・休工日・雨天作業不可日・事務作業日）を選んで登録できます。</p>`;
 }
 
 reportCalendarEl?.addEventListener("click", async (e) => {

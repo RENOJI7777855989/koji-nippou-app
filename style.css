@@ -1835,3 +1835,12 @@ dialog h3 {
 .day-status-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .day-status-note { font-size: 13px; color: #5b6573; margin: 6px 0 0; }
 #dayStatusQuickForm textarea { width: 100%; }
+.dash-state.is-rain { background: #ebf4ff; color: #1e4e8c; border: 1px solid #90cdf4; }
+.cal-rain { background: #e6f0ff; border-color: #63a4e8; }
+.status-badge.day-rain { background: #e6f0ff; color: #1e4e8c; }
+.dash-crew th { text-align: left; }
+.day-extra { margin: 8px 0; padding: 8px 12px; border: 1px solid #d9dee5; border-radius: 8px; background: #fafcff; }
+.day-extra h3 { margin-top: 0; }
+.day-extra label { display: block; margin-bottom: 6px; }
+.day-extra textarea { width: 100%; }
+#dayStatusStaffFields[hidden], #dayStatusRainFields[hidden], .day-extra[hidden] { display: none; }

@@ -52,7 +52,9 @@ export const ANZEN_EISEI_LEDGER_MAPPING = {
     // 本文の配置は手書印刷用と同じ（原本で位置・文言の一致を確認済み）
     companiesTable: FORM.companiesTable,
     patrolChecklist: FORM.patrolChecklist,
-    staffAttendance: { headcountCell: FORM.staffAttendance.headcountCell },
+    // 稼動人数表の「社員」行（監督・職員）。台帳シートの P50（社員の累計）は数式の無い値の欄なので、
+    // 全頁に工事開始からその日までの累計を書く（計 P51=SUM(P7:P50)・延労働時間 P52=P51*8 に入る）
+    staffAttendance: { headcountCell: FORM.staffAttendance.headcountCell, cumulativeCell: FORM.staffAttendance.cumulativeCell },
     // 稼動人数の業種別（台帳シートは累計・計・延労働時間が数式なので、その日の人数と空き行の業種名だけ書く）。
     // 本日の重点指示・作業間の連絡・調整・資材・機材搬入も手書印刷用と同じ位置（台帳シートで確認済み）
     tradeAttendance: { ...FORM.tradeAttendance, cumulative: false },

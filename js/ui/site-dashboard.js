@@ -15,6 +15,7 @@ import { hasPermission } from "../auth.js";
 import { escapeHtml } from "../utils.js";
 import { navigate } from "../router.js";
 import { buildDashboardModel, countVendors, countTrades } from "../dashboard/siteDashboardModel.js";
+import { labelOf, DAY_STATUSES } from "../dashboard/dailyFlow.js";
 import { buildTodaySheetHtml } from "../dashboard/todaySheetHtml.js";
 import { BOARD_SECTIONS, BOARD_LAYOUT_VERSION, KY_BOARD_LABELS, buildInfoBand } from "../dashboard/boardContent.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
@@ -105,11 +106,26 @@ function render(model) {
     <dl class="dash-dl dash-dl-row">
       ${s.byOccupation.map((o) => `<dt>${escapeHtml(o.occupation)}</dt><dd>${o.count}人<small class="dash-sub">（累計${o.cumulative}人）</small></dd>`).join("")}
       <dt>職長</dt><dd>${s.foremen}人</dd><dt>業者</dt><dd>${s.vendors}社</dd><dt>工種</dt><dd>${s.trades}種</dd>
-      ${s.supervisors ? `<dt>現場監督</dt><dd>${s.supervisors}人</dd>` : ""}
-      ${s.supervisors ? `<dt>計（社員を含む）</dt><dd>${s.totalToday}人</dd>` : ""}
-      <dt>累計（社員を含む）</dt><dd>${s.cumulative.toLocaleString()}人</dd>
+      ${s.supervisors ? `<dt>監督・職員</dt><dd>${s.supervisors}人</dd>` : ""}
+      ${s.supervisors ? `<dt>計（監督・職員を含む）</dt><dd>${s.totalToday}人</dd>` : ""}
+      <dt>累計（監督・職員を含む）</dt><dd>${s.cumulative.toLocaleString()}人</dd>
       <dt>延べ労働時間</dt><dd>${s.laborHoursCumulative.toLocaleString()}時間</dd>
     </dl>`;
+
+  // 本日の稼働: 現場作業員（業者の稼働人数。03-2の業者の行）と監督・職員（03-2の「社員」の行）を分けて出す。
+  // 人工はどちらも1人＝1人工（請求人工ではない）。休工日はどちらも0人
+  const cr = s.crew;
+  const staffCell = cr.staff == null ? "未入力" : `${cr.staff}人${cr.staffSource === "names" ? "（現場監督の氏名から）" : ""}`;
+  const crewHtml = `<div class="dash-table-wrap"><table class="dash-table dash-crew">
+      <thead><tr><th></th><th class="num">稼働人数</th><th class="num">人工</th><th class="num">累計人数</th></tr></thead>
+      <tbody>
+        <tr><th>現場作業員</th><td class="num"><b>${cr.workers}</b>人</td><td class="num">${cr.workerManDays}</td><td class="num">${cr.workersCumulative}人</td></tr>
+        <tr><th>監督・職員</th><td class="num"><b>${escapeHtml(staffCell)}</b></td><td class="num">${cr.staffManDays ?? "-"}</td><td class="num">${cr.staffCumulative}人</td></tr>
+      </tbody>
+      <tfoot><tr><th>全体</th><td class="num"><b>${cr.total}</b>人</td><td class="num">${cr.totalManDays}</td><td class="num">${cr.totalCumulative}人</td></tr></tfoot>
+    </table></div>
+    ${cr.staffWork ? `<p class="dash-sub">監督・職員の作業内容：${escapeHtml(cr.staffWork).replace(/\n/g, "<br>")}</p>` : ""}
+    <p class="dash-sub">人工は1人＝1人工の現場集計の値です。監督・職員は03-2の稼動人数表の「社員」の行に入り、計・延労働時間に含まれます。</p>`;
 
   const d = model.diary;
   const diaryHtml = d
@@ -160,16 +176,19 @@ function render(model) {
   // 現場掲示用の巡回点検（状況・件数・×の項目・是正指示。対応状況は推測しない）
   const patrolBoardHtml = `${patrolStateHtml}${p && ps.state !== "notdone" && ps.state !== "blank" ? `<p class="dash-sub">良好○ ${p.good}　不良× ${p.bad}　該当なし－ ${p.na}${p.unset ? `　未記入 ${p.unset}` : ""}</p>${p.badItems.length || p.comment ? `<div class="dash-patrol-attention"><h4>巡回点検・要確認</h4>${p.badItems.length ? `<ul class="dash-bad">${p.badItems.map((i) => `<li>${escapeHtml(i)}　<b>×</b></li>`).join("")}</ul>` : ""}${p.comment ? `<p class="dash-sub">是正指示</p><p>${escapeHtml(p.comment).replace(/\n/g, "<br>")}</p>` : ""}</div>` : ""}` : ""}`;
 
-  // ① 今日の状態（日報なし／通常作業／作業なし／休工日）
+  // ① 今日の状態（日報なし／通常作業／現場作業なし／休工日／雨天作業不可日／事務作業日）
+  const rainDetail = model.dayStatus === "rain" ? `<br><small>中止となった予定作業：<b>${escapeHtml(model.diary?.rainCancelledWork || "未入力")}</b>${model.diary?.rainReason ? `　中止理由・状況：${escapeHtml(model.diary.rainReason)}` : ""}</small>` : "";
+  const STATE_NOTE = {
+    nowork: "現場作業員の稼働人数・人工には数えません（監督・職員は別に数えます）",
+    holiday: "完全休工。現場作業員・監督/職員とも0人",
+    rain: "現場作業員の稼働人数・人工には数えません（監督・職員は別に数えます）",
+    office: "現場作業員の稼働人数・人工には数えません（監督・職員は別に数えます）"
+  };
   const stateHtml = !model.reportId
     ? `<div class="dash-state is-missing">この日の日報は<b>未入力</b>です</div>`
-    : model.dayStatus === "nowork"
-      ? `<div class="dash-state is-nowork">本日は<b>作業なし</b>（稼働人数・人工には数えません）</div>`
-      : model.dayStatus === "office"
-        ? `<div class="dash-state is-office">本日は<b>事務作業日</b>（稼働人数・人工には数えません）</div>`
-      : model.dayStatus === "holiday"
-        ? `<div class="dash-state is-holiday">本日は<b>休工日</b>（稼働人数・人工には数えません）</div>`
-        : "";
+    : STATE_NOTE[model.dayStatus]
+      ? `<div class="dash-state is-${model.dayStatus}">本日は<b>${escapeHtml(labelOf(DAY_STATUSES, model.dayStatus))}</b>（${STATE_NOTE[model.dayStatus]}）${rainDetail}</div>`
+      : "";
   // ② 今日の確認事項・要確認（日報DBの値から判定）
   const att = model.attention;
   const checksHtml = `
@@ -210,7 +229,7 @@ function render(model) {
     <p class="dash-sub">${escapeHtml(fmtDate(h.date, h.weekday))}までの日誌</p>`;
 
   // 現場掲示に出す日の状態（作業なし・休工日だけ。日報未入力は監督向けの情報なので出さない）
-  const boardStateHtml = { nowork: `<div class="dash-state is-nowork">本日は<b>作業なし</b></div>`, office: `<div class="dash-state is-office">本日は<b>事務作業日</b></div>`, holiday: `<div class="dash-state is-holiday">本日は<b>休工日</b></div>` }[model.dayStatus] || "";
+  const boardStateHtml = STATE_NOTE[model.dayStatus] && model.reportId ? `<div class="dash-state is-${model.dayStatus}">本日は<b>${escapeHtml(labelOf(DAY_STATUSES, model.dayStatus))}</b>${rainDetail}</div>` : "";
 
   // 危険予知活動表（紙のKY活動表が提出されたか。日報とは別の提出物）。掲示は業者ごとの提出済み／未提出だけ（時刻は出さない）
   const ky = model.ky;
@@ -300,6 +319,7 @@ function render(model) {
     <div class="dash-grid dash-panel" data-panel="manage"${currentTab === "manage" ? "" : " hidden"}>
       <section class="dash-card dash-card-wide dash-today"><h3>✅ 今日の確認事項</h3>${stateHtml}${checksHtml}</section>
       <section class="dash-card dash-card-wide dash-ky"><h3>📝 本日の危険予知活動表 提出状況</h3>${kyManageHtml}</section>
+      <section class="dash-card dash-card-wide"><h3>👥 本日の稼働（現場作業員・監督/職員）</h3>${crewHtml}</section>
       <section class="dash-card"><h3>🏗 現場概要</h3>${overviewHtml}</section>
       <section class="dash-card"><h3>📈 昨日 → 今日</h3>${compareHtml}</section>
       <section class="dash-card"><h3>🔍 本日の巡回点検（03-2の巡回点検記録）</h3>${patrolHtml}</section>

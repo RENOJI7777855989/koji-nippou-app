@@ -58,7 +58,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   await page.waitForFunction(() => document.getElementById("dayStatusDialog").open);
   const choices = await page.$$eval("#dayStatusDialog [data-day-status]", (bs) => bs.map((b) => b.childNodes[0].textContent.trim()));
   const title = await page.textContent("#dayStatusDialogTitle");
-  check("1 日報なしの日をタップすると「この日の状態」の選択肢（通常作業・作業なし・休工日・事務作業日）が出る", choices.join() === "通常作業,作業なし,休工日,事務作業日" && title.includes("9/2") && title.includes("日報なし"), `${title} / ${choices.join()}`);
+  check("1 日報なしの日をタップすると「この日の状態」の選択肢（通常作業・現場作業なし・休工日・雨天作業不可日・事務作業日）が出る", choices.join() === "通常作業,現場作業なし,休工日,雨天作業不可日,事務作業日" && title.includes("9/2") && title.includes("日報なし"), `${title} / ${choices.join()}`);
   await page.click(`#dayStatusDialog [data-day-status="work"]`);
   await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(300);
   check("2 通常作業を選ぶと既存の日報作成画面がその日付で開く（巡回点検は空欄）", (await page.inputValue("#date")) === "2026-09-02" && (await page.inputValue("#dayStatus")) === "work" && (await page.$$eval("#patrolChecklistContainer select", (ss) => ss.every((s) => s.value === ""))));

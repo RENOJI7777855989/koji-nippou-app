@@ -141,7 +141,7 @@ const PATROL_ROWS = Array.from({ length: 33 }, (_, i) => 7 + i); // L7〜L39
   // ---- 事務作業日の入力・カレンダー ----
   await page.goto(`${BASE}#/sites/${ids.siteId}/report/${ids.d6}`); await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(400);
   const formDs = await page.evaluate(() => ({ v: document.getElementById("dayStatus").value, opts: [...document.querySelectorAll("#dayStatus option")].map((o) => o.textContent) }));
-  check("日報の入力: 日の状態に「事務作業日」があり、保存済みの事務作業日が選ばれている", formDs.v === "office" && formDs.opts.join() === "通常作業,作業なし,事務作業日,休工日", formDs.opts.join());
+  check("日報の入力: 日の状態に「事務作業日」があり、保存済みの事務作業日が選ばれている", formDs.v === "office" && formDs.opts.join() === "通常作業,現場作業なし,休工日,雨天作業不可日,事務作業日", formDs.opts.join());
   await page.goto(`${BASE}#/sites/${ids.siteId}`); await page.waitForSelector("#siteDashboard:not([hidden])");
   await page.click("#siteDashboard .dash-tab[data-tab=manage]");
   for (let i = 0; i < 24 && !(await page.$(`#reportCalendar .cal-cell[data-date="2026-09-06"]`)); i++) { await page.click("#reportCalendar .cal-nav[data-shift='-1']"); await page.waitForTimeout(150); }

@@ -15,6 +15,7 @@ import { listSignaturesByReport } from "../signatures.js";
 import { getCompanyProfile } from "./companyProfiles.js";
 import { getReportTemplate, getDefaultTemplateForCompany } from "./reportTemplates.js";
 import { buildReportOutputModel } from "./reportDataAdapter.js";
+import { staffHeadcountForDay } from "../dashboard/dailyFlow.js";
 import { getExcelRenderer, getPdfRenderer } from "./rendererRegistry.js";
 import { DEFAULT_EXCEL_MAPPING } from "./renderers/excelDefault.js";
 import { DEFAULT_PDF_MAPPING } from "./renderers/pdfDefault.js";
@@ -33,8 +34,8 @@ const FALLBACK_TEMPLATE = {
 async function sumCumulativeSiteSupervisorCount(siteId, uptoDate) {
   const reports = await listReportsBySite(siteId);
   return reports
-    .filter((r) => (r.date || "") <= (uptoDate || ""))
-    .reduce((sum, r) => sum + (r.siteSupervisorNames || []).filter((n) => n && n.trim()).length, 0);
+    .filter((r) => !r.isDeleted && (r.date || "") <= (uptoDate || ""))
+    .reduce((sum, r) => sum + (staffHeadcountForDay(r) ?? 0), 0); // 監督・職員の人数（休工日は0人。dailyFlow.js）
 }
 
 /** 稼動人数表（業種別の累計）用: 現場の日報全体と、その日までの日報（削除済みを除く。業種と人数だけ） */

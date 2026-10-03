@@ -1,7 +1,8 @@
 /* ==========================================================
    日報カレンダーの「日報なし」の日から、その日の状態を登録するダイアログ
    ・通常作業 → 既存の日報作成画面（#/sites/:id/report/new?date=）を開く（新しい入力画面は作らない）
-   ・作業なし・休工日・事務作業日 → 連絡事項・進捗率（任意）・天気だけで、既存の日報（reports）として
+   ・現場作業なし・休工日・雨天作業不可日・事務作業日 → 連絡事項・進捗率（任意）・天気（未選択可。推測しない）、
+     雨天作業不可日は中止となった予定作業（必須）・中止理由、休工日以外は監督・職員の稼働人数・作業内容を入れて、既存の日報（reports）として
      既存の createReport で保存する。日の状態は既存の dayStatus（dailyFlow.js の DAY_STATUSES）を使い、
      新しい項目は作らない（事務作業の内容は連絡事項に書く）。
    ・業者・人数は入れない（稼働人数・人工に数えない）。巡回点検は空欄のまま（○にしない。
@@ -24,6 +25,12 @@ const remarksEl = document.getElementById("dayStatusRemarks");
 const progressEl = document.getElementById("dayStatusProgress");
 const weatherEl = document.getElementById("dayStatusWeather");
 const saveBtn = document.getElementById("dayStatusSaveBtn");
+const rainFieldsEl = document.getElementById("dayStatusRainFields");
+const rainWorkEl = document.getElementById("dayStatusRainWork");
+const rainReasonEl = document.getElementById("dayStatusRainReason");
+const staffFieldsEl = document.getElementById("dayStatusStaffFields");
+const staffCountEl = document.getElementById("dayStatusStaffCount");
+const staffWorkEl = document.getElementById("dayStatusStaffWork");
 
 let current = { site: null, date: "", status: "", onSaved: null };
 
@@ -63,7 +70,14 @@ dialog?.addEventListener("click", (e) => {
   remarksLabelEl.textContent = status === "office" ? "連絡事項・事務作業の内容（任意）" : "連絡事項（任意）";
   remarksEl.value = "";
   progressEl.value = "";
-  weatherEl.value = "晴れ";
+  weatherEl.value = ""; // 天気は推測しない（雨天作業不可日でも「雨」を自動では入れない）
+  rainFieldsEl.hidden = status !== "rain";
+  rainWorkEl.value = "";
+  rainReasonEl.value = "";
+  // 休工日は完全休工（監督・職員も0人）なので入力欄を出さない
+  staffFieldsEl.hidden = status === "holiday";
+  staffCountEl.value = "";
+  staffWorkEl.value = "";
   chooseEl.hidden = true;
   form.hidden = false;
 });
@@ -79,6 +93,17 @@ form?.addEventListener("submit", async (e) => {
     progressEl.focus();
     return;
   }
+  if (current.status === "rain" && !rainWorkEl.value.trim()) {
+    showMessage("雨天作業不可日は「中止となった予定作業」を入力してください。", true);
+    rainWorkEl.focus();
+    return;
+  }
+  const staffRaw = staffCountEl.value.trim();
+  if (current.status !== "holiday" && (staffCountEl.validity.badInput || (staffRaw !== "" && !/^\d+$/.test(staffRaw)))) {
+    showMessage("監督・職員の稼働人数は0以上の整数で入力してください（分からない場合は空欄のままにしてください）。", true);
+    staffCountEl.focus();
+    return;
+  }
   saveBtn.disabled = true;
   try {
     // 開いている間に別の画面で同じ日の日報が作られていないか（二重登録しない）
@@ -92,7 +117,12 @@ form?.addEventListener("submit", async (e) => {
       remarks: remarksEl.value.trim(),
       progressPercent: raw === "" ? null : Number(raw),
       companies: [],
-      patrolChecklist: {} // 巡回点検は空欄（○にしない）
+      patrolChecklist: {}, // 巡回点検は空欄（○にしない）
+      rainCancelledWork: current.status === "rain" ? rainWorkEl.value.trim() : "",
+      rainReason: current.status === "rain" ? rainReasonEl.value.trim() : "",
+      // 監督・職員（現場作業員とは別）。休工日は入力しない（0人として数える）。空欄は未入力（null）
+      staffCount: current.status === "holiday" || staffRaw === "" ? null : Number(staffRaw),
+      staffWork: current.status === "holiday" ? "" : staffWorkEl.value.trim()
     });
     dialog.close();
     showMessage(`${dateLabel(current.date)} を「${labelOf(DAY_STATUSES, current.status)}」で登録しました。`);

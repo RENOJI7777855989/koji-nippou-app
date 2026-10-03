@@ -377,6 +377,22 @@ export async function renderLedgerWorkbook({ templateBuffer, mapping, site, entr
     }
   }
 
+  // 稼動人数表「社員」行（監督・職員）の累計: 全頁（日報の無い日を含む）に、工事開始からその日までの合計を書く。
+  // 当日の人数（O50）は日報のある頁だけ（buildXlsxCellPlan の staffAttendance.headcountCell）。休工日は0人（dailyFlow.js）
+  const staffCumCell = pageCfgBase.staffAttendance?.cumulativeCell;
+  if (staffCumCell) {
+    const staffByDay = new Map(placements.map(({ entry, dayIndex }) => [dayIndex, Number(entry.model.report?.siteSupervisorCount) || 0]));
+    let cum = 0;
+    for (let d = 0; d <= lastDayIndex; d++) {
+      cum += staffByDay.get(d) || 0;
+      const sheetName = sheetNames[Math.floor(d / profile.pagesPerSheet)];
+      if (!sheetName) continue;
+      const list = writesBySheet.get(sheetName) || [];
+      list.push({ cell: shiftRef(staffCumCell, (d % profile.pagesPerSheet) * profile.pageRows), value: cum, numeric: true });
+      writesBySheet.set(sheetName, list);
+    }
+  }
+
   for (const [name, writes] of writesBySheet) {
     const { sheetXml, skippedFormulaCells } = writeCells(await pkg.getText(pathOf(name)), sharedStrings, writes);
     pkg.setText(pathOf(name), sheetXml);

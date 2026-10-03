@@ -53,6 +53,8 @@ function mapCompanyProfile(profile) {
   };
 }
 
+import { staffHeadcountForDay } from "../dashboard/dailyFlow.js";
+
 /**
  * 日報1件分の帳票用データモデルを組み立てる。
  * 引数はすべて既存データ層（sites.js/reports.js/photos.js/signatures.js/
@@ -87,7 +89,7 @@ export function buildReportOutputModel({ site, report, photos = [], signatures =
       remarks: report?.remarks || "",
       // 本日の重点指示・作業間の連絡・調整（03-2の同名の欄。日誌の入力項目）
       // 日の状態（"work"/"nowork"/"office"/"holiday"。無ければ通常作業）。作業なし・事務作業日・休工日は稼動人数表に数えない
-      dayStatus: ["nowork", "office", "holiday"].includes(report?.dayStatus) ? report.dayStatus : "work",
+      dayStatus: ["nowork", "office", "holiday", "rain"].includes(report?.dayStatus) ? report.dayStatus : "work",
       focusInstructions: report?.focusInstructions || "",
       workCoordination: report?.workCoordination || "",
       // 搬入・搬出（03-2の「資材・機材搬入（ＡＭ／ＰＭ）」へ、ダッシュボードと同じく搬入・搬出の両方を書く。direction の無い行は搬入）
@@ -101,7 +103,12 @@ export function buildReportOutputModel({ site, report, photos = [], signatures =
       // 単一の名前ではなく配列で持つ。件数が帳票側の稼働人数表・
       // 現場監督(社員)行の「人数」欄への反映で使う。
       siteSupervisorNames: report?.siteSupervisorNames || [],
-      siteSupervisorCount: (report?.siteSupervisorNames || []).filter((n) => n && n.trim()).length,
+      // 稼動人数表の「社員」行（O50）に書く監督・職員の人数（dailyFlow.js の staffHeadcountForDay。
+      // 監督・職員の稼働人数→未入力なら現場監督の氏名の数、休工日は0人）。業者の行（現場作業員）には混ぜない
+      siteSupervisorCount: staffHeadcountForDay(report) ?? 0,
+      staffWork: report?.staffWork || "",
+      rainCancelledWork: report?.rainCancelledWork || "",
+      rainReason: report?.rainReason || "",
       cumulativeSiteSupervisorCount
     },
     companies: (report?.companies || []).map((c) => mapCompany(c, foremanSignatureByCompanyId.get(c.companyId))),

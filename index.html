@@ -169,9 +169,10 @@
           <option value="confirmed">確認済み</option>
           <option value="unconfirmed">未確認</option>
           <option value="missing">未入力（日報のない日）</option>
-          <option value="nowork">作業なし</option>
-          <option value="office">事務作業日</option>
+          <option value="nowork">現場作業なし</option>
           <option value="holiday">休工日</option>
+          <option value="rain">雨天作業不可日</option>
+          <option value="office">事務作業日</option>
         </select>
         <input type="search" id="reportListSearch" placeholder="日付・業者名・作業内容で検索" aria-label="日報の検索">
       </div>
@@ -231,9 +232,10 @@
           <label>日の状態
             <select id="dayStatus">
               <option value="work">通常作業</option>
-              <option value="nowork">作業なし</option>
-              <option value="office">事務作業日</option>
+              <option value="nowork">現場作業なし</option>
               <option value="holiday">休工日</option>
+              <option value="rain">雨天作業不可日</option>
+              <option value="office">事務作業日</option>
             </select>
             <small id="dayStatusHint" class="empty-message"></small>
           </label>
@@ -252,6 +254,30 @@
             <input type="number" id="workerCountTotal" min="0" readonly>
           </label>
         </div>
+
+        <!-- 雨天作業不可日の記録（日の状態が「雨天作業不可日」のときだけ表示） -->
+        <div id="rainFields" class="day-extra" hidden>
+          <h3>雨天作業不可日の記録</h3>
+          <label>中止となった予定作業（必須）
+            <input type="text" id="rainCancelledWork" placeholder="例）外壁塗装">
+          </label>
+          <label>雨天による中止理由・状況
+            <textarea id="rainReason" rows="2" placeholder="例）朝から継続的な降雨があり、外壁塗装を中止"></textarea>
+          </label>
+        </div>
+
+        <!-- 監督・職員の稼働（現場作業員とは別。休工日は完全休工のため入力しない） -->
+        <div id="staffFields" class="day-extra">
+          <h3>監督・職員の稼働（現場作業員とは別）</h3>
+          <label>監督・職員の稼働人数
+            <input type="number" id="staffCount" min="0" step="1" inputmode="numeric" placeholder="未入力">
+          </label>
+          <label>監督・職員の作業内容
+            <textarea id="staffWork" rows="2" placeholder="例）現場確認、書類作成、役所協議、工程調整"></textarea>
+          </label>
+          <small class="empty-message">03-2の稼動人数表の「社員」の行に入り、計・延労働時間に含まれます（未入力なら下の現場監督の氏名の人数）。人工は1人＝1人工で、請求人工とは別です。</small>
+        </div>
+        <p id="staffHolidayNote" class="empty-message" hidden>休工日は完全休工のため、現場作業員・監督/職員とも0人として数えます（監督・職員の人数は入力しません）。</p>
 
         <h3>現場監督（職員・当日在席した方のみ追加）</h3>
         <div id="siteSupervisorsContainer"></div>
@@ -1020,8 +1046,9 @@
       <p class="day-status-lead">この日の状態を選んでください。</p>
       <div class="day-status-choices">
         <button type="button" data-day-status="work">通常作業<small>日報を入力する</small></button>
-        <button type="button" data-day-status="nowork">作業なし</button>
+        <button type="button" data-day-status="nowork">現場作業なし</button>
         <button type="button" data-day-status="holiday">休工日</button>
+        <button type="button" data-day-status="rain">雨天作業不可日</button>
         <button type="button" data-day-status="office">事務作業日</button>
       </div>
       <div class="form-actions">
@@ -1030,6 +1057,22 @@
     </div>
     <form id="dayStatusQuickForm" hidden>
       <h3 id="dayStatusQuickTitle">この日を登録</h3>
+      <div id="dayStatusRainFields" hidden>
+        <label>中止となった予定作業（必須）
+          <input type="text" id="dayStatusRainWork" placeholder="例）外壁塗装">
+        </label>
+        <label>雨天による中止理由・状況
+          <textarea id="dayStatusRainReason" rows="2" placeholder="例）朝から継続的な降雨があり、外壁塗装を中止"></textarea>
+        </label>
+      </div>
+      <div id="dayStatusStaffFields" class="day-status-row">
+        <label>監督・職員の稼働人数
+          <input type="number" id="dayStatusStaffCount" min="0" step="1" inputmode="numeric" placeholder="未入力">
+        </label>
+        <label>監督・職員の作業内容
+          <input type="text" id="dayStatusStaffWork" placeholder="例）現場確認、書類作成">
+        </label>
+      </div>
       <label><span id="dayStatusRemarksLabel">連絡事項（任意）</span>
         <textarea id="dayStatusRemarks" rows="3"></textarea>
       </label>
@@ -1039,6 +1082,7 @@
         </label>
         <label>天気
           <select id="dayStatusWeather">
+            <option value="">未選択</option>
             <option value="晴れ">晴れ</option>
             <option value="曇り">曇り</option>
             <option value="雨">雨</option>
@@ -1046,7 +1090,7 @@
           </select>
         </label>
       </div>
-      <p class="day-status-note">業者・人数・巡回点検は入力しません（稼働人数・人工には数えず、巡回点検は「未実施」として扱います）。あとから日報の画面で修正できます。</p>
+      <p class="day-status-note" id="dayStatusNote">業者・現場作業員の人数・巡回点検は入力しません（現場作業員の稼働人数・人工には数えず、巡回点検は「未実施」として扱います）。監督・職員は別に入力できます（休工日は完全休工で0人）。あとから日報の画面で修正できます。</p>
       <div class="form-actions">
         <button type="submit" id="dayStatusSaveBtn">登録</button>
         <button type="button" id="dayStatusBackBtn" class="secondary-btn">戻る</button>

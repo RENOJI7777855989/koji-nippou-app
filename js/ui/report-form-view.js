@@ -29,8 +29,27 @@ const temperatureInput = document.getElementById("temperature");
 const progressInput = document.getElementById("progressPercent");
 const dayStatusSelect = document.getElementById("dayStatus");
 const dayStatusHint = document.getElementById("dayStatusHint");
-const DAY_STATUS_HINT = { work: "", nowork: "作業なしの日は、稼働人数・人工・作業時間・工種別累計に数えません（日報は履歴として残ります）。", office: "事務作業日は、稼働人数・人工・作業時間・工種別累計に数えません（日報は履歴として残ります）。巡回点検の記録が無ければ、03-2の巡回点検の欄は斜線になります。", holiday: "休工日は、稼働人数・人工・作業時間・工種別累計に数えません（日報は履歴として残ります）。" };
-const updateDayStatusHint = () => { dayStatusHint.textContent = DAY_STATUS_HINT[dayStatusSelect.value] || ""; };
+const DAY_STATUS_HINT = {
+  work: "",
+  nowork: "現場作業なしの日は、現場作業員の稼働人数・人工・作業時間・工種別累計に数えません。監督・職員は別に入力できます。",
+  holiday: "休工日は完全休工です。現場作業員・監督/職員とも0人として数えます。",
+  rain: "雨天作業不可日は、中止となった予定作業を記録します。現場作業員の稼働人数・人工には数えません。監督・職員は別に入力できます。巡回点検の記録が無ければ03-2の巡回点検の欄は斜線になります。",
+  office: "事務作業日は、現場作業員の稼働人数・人工・作業時間・工種別累計に数えません。監督・職員は別に入力できます。巡回点検の記録が無ければ、03-2の巡回点検の欄は斜線になります。"
+};
+const rainFieldsEl = document.getElementById("rainFields");
+const staffFieldsEl = document.getElementById("staffFields");
+const staffHolidayNote = document.getElementById("staffHolidayNote");
+const rainCancelledWorkInput = document.getElementById("rainCancelledWork");
+const rainReasonInput = document.getElementById("rainReason");
+const staffCountInput = document.getElementById("staffCount");
+const staffWorkInput = document.getElementById("staffWork");
+// 日の状態に合わせて、雨天作業不可日の記録・監督/職員の欄を出し分ける（休工日は監督・職員を入力しない。値は消さない）
+const updateDayStatusHint = () => {
+  dayStatusHint.textContent = DAY_STATUS_HINT[dayStatusSelect.value] || "";
+  rainFieldsEl.hidden = dayStatusSelect.value !== "rain";
+  staffFieldsEl.hidden = dayStatusSelect.value === "holiday";
+  staffHolidayNote.hidden = dayStatusSelect.value !== "holiday";
+};
 dayStatusSelect.addEventListener("change", updateDayStatusHint);
 const progressHint = document.getElementById("progressPercentHint");
 let previousProgress = null; // 参考表示: この日より前の日誌で最後に入力した進捗率 { date, value }
@@ -577,7 +596,11 @@ export async function initReportFormViewEdit(params) {
   weatherSelect.value = report.weather || "晴れ";
   temperatureInput.value = report.temperature || "";
   progressInput.value = report.progressPercent ?? "";
-  dayStatusSelect.value = ["nowork", "office", "holiday"].includes(report.dayStatus) ? report.dayStatus : "work";
+  dayStatusSelect.value = ["nowork", "office", "holiday", "rain"].includes(report.dayStatus) ? report.dayStatus : "work";
+  rainCancelledWorkInput.value = report.rainCancelledWork || "";
+  rainReasonInput.value = report.rainReason || "";
+  staffCountInput.value = report.staffCount ?? "";
+  staffWorkInput.value = report.staffWork || "";
   updateDayStatusHint();
   tomorrowPlanInput.value = report.tomorrowPlan || "";
   remarksInput.value = report.remarks || "";
@@ -778,6 +801,19 @@ form.addEventListener("submit", async (e) => {
     badManDays.focus();
     return;
   }
+  // 雨天作業不可日は「中止となった予定作業」が必須（後から役所等に説明できる記録にするため）
+  if (dayStatusSelect.value === "rain" && !rainCancelledWorkInput.value.trim()) {
+    showMessage("雨天作業不可日は「中止となった予定作業」を入力してください。", true);
+    rainCancelledWorkInput.focus();
+    return;
+  }
+  // 監督・職員の稼働人数は0以上の整数（空欄＝未入力）
+  const staffRaw = staffCountInput.value.trim();
+  if (dayStatusSelect.value !== "holiday" && (staffCountInput.validity.badInput || (staffRaw !== "" && !/^\d+$/.test(staffRaw)))) {
+    showMessage("監督・職員の稼働人数は0以上の整数で入力してください（分からない場合は空欄のままにしてください）。", true);
+    staffCountInput.focus();
+    return;
+  }
 
   let workerCountTotal = workerCountTotalInput.value.trim();
   if (workerCountTotal !== "" && Number(workerCountTotal) < 0) workerCountTotal = "";
@@ -789,6 +825,11 @@ form.addEventListener("submit", async (e) => {
     temperature: temperatureInput.value.trim(),
     progressPercent: progress.value,
     dayStatus: dayStatusSelect.value,
+    // 雨天作業不可日の記録・監督/職員の稼働（休工日でも保存済みの値は消さない。数えるときに0人として扱う）
+    rainCancelledWork: rainCancelledWorkInput.value.trim(),
+    rainReason: rainReasonInput.value.trim(),
+    staffCount: staffCountInput.value.trim() === "" ? null : Number(staffCountInput.value),
+    staffWork: staffWorkInput.value.trim(),
     workerCountTotal,
     companies: collectCompanies(),
     tomorrowPlan: tomorrowPlanInput.value.trim(),

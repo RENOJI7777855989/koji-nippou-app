@@ -103,7 +103,9 @@ export function buildBoardContent(model) {
       remainingDays: h.remainingDays,
       dayNumber: h.dayNumber
     },
-    dayStateLabel: { nowork: "本日は作業なし", office: "本日は事務作業日", holiday: "本日は休工日" }[model.dayStatus] || "",
+    dayStateLabel: { nowork: "本日は現場作業なし", holiday: "本日は休工日", rain: "本日は雨天作業不可日", office: "本日は事務作業日" }[model.dayStatus] || "",
+    // 雨天作業不可日: 中止となった予定作業・中止理由（現場掲示・A3で確認できるように）
+    rain: model.dayStatus === "rain" ? { cancelledWork: model.diary?.rainCancelledWork || "", reason: model.diary?.rainReason || "" } : null,
     works,
     // 業者数は業者名の種類、工種数は工種の種類（同じ業者の複数工種・同じ工種の複数業者を正しく数える）
     totals: { workers: works.reduce((s, w) => s + (w.actual || 0), 0), manDays: works.reduce((s, w) => s + (w.manDays || 0), 0), vendors: model.staff?.vendors ?? null, trades: model.staff?.trades ?? null },

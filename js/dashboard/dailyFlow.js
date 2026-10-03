@@ -50,21 +50,47 @@ export const labelOf = (list, value) => list.find((x) => x.value === value)?.lab
 /**
  * 日報の「日の状態」。日報が無い日（未入力）とは別。
  *   work    … 通常作業
- *   nowork  … 作業なし（現場作業なし。稼働対象日だが作業が無かった日）
- *   office  … 事務作業日（現場作業は無く、事務作業だけの日）
- *   holiday … 休工日（休日・休工として現場を止めている日）
- * 作業なし・事務作業日・休工日の日報は履歴として残すが、稼働人数・人工・作業時間・業種別累計・業者別稼働には数えない。
+ *   nowork  … 現場作業なし（現場作業員による現場作業が無かった日。監督・職員は稼働してよい）。保存値は以前のまま "nowork"
+ *   holiday … 休工日（完全休工。現場作業員・監督/職員とも0人）
+ *   rain    … 雨天作業不可日（予定していた現場作業が雨天で施工できなかった日。監督・職員は稼働してよい。
+ *              中止となった予定作業 rainCancelledWork・中止理由 rainReason を記録する）
+ *   office  … 事務作業日（現場作業は無く、事務作業だけの日。監督・職員は稼働してよい）
+ * 通常作業以外の日報は履歴として残すが、現場作業員の稼働人数・人工・作業時間・工種別累計・業者別稼働には数えない。
+ * 監督・職員の稼働人数は現場作業員とは別系統（staffHeadcountForDay）。休工日だけ0人として数える。
  * 項目の無い日報（この項目を追加する前の日報）は通常作業として扱う。
  */
 export const DAY_STATUSES = [
   { value: "work", label: "通常作業" },
-  { value: "nowork", label: "作業なし" },
-  { value: "office", label: "事務作業日" },
-  { value: "holiday", label: "休工日" }
+  { value: "nowork", label: "現場作業なし" },
+  { value: "holiday", label: "休工日" },
+  { value: "rain", label: "雨天作業不可日" },
+  { value: "office", label: "事務作業日" }
 ];
-const NON_WORK_DAY_STATUSES = ["nowork", "office", "holiday"];
+export const NON_WORK_DAY_STATUSES = ["nowork", "holiday", "rain", "office"];
 export const dayStatusOf = (report) => (NON_WORK_DAY_STATUSES.includes(report?.dayStatus) ? report.dayStatus : "work");
 export const isWorkDay = (report) => dayStatusOf(report) === "work";
+
+/**
+ * 監督・職員の稼働人数（その日の実際の人数。現場作業員の人数とは別系統。請求人工ではない）
+ *   ① 休工日 → 0人（完全休工。保存されている値・氏名があっても0人として数える。データは変えない）
+ *   ② 日報の「監督・職員の稼働人数」（staffCount）が入力されていればその人数（0人も入力として扱う）
+ *   ③ 未入力なら、以前からある「現場監督（職員）」の氏名欄（siteSupervisorNames）に記録された人数
+ *      （この欄を追加する前の日報の03-2の出力を変えないため。氏名が無ければ未入力＝null）
+ * 03-2の稼動人数表の「社員」行（O50＝当日・P50＝累計）と、計・延労働時間（計×8）に入る。人工は1人＝1人工。
+ * @returns {{count: number|null, source: "holiday"|"count"|"names"|null}}
+ */
+export function staffHeadcountInfo(report) {
+  if (!report) return { count: null, source: null };
+  if (dayStatusOf(report) === "holiday") return { count: 0, source: "holiday" };
+  const v = report.staffCount;
+  if (!(v === null || v === undefined || String(v).trim() === "")) {
+    const n = Number(v);
+    if (Number.isFinite(n) && n >= 0) return { count: n, source: "count" };
+  }
+  const names = (report.siteSupervisorNames || []).filter((n) => n && String(n).trim()).length;
+  return names > 0 ? { count: names, source: "names" } : { count: null, source: null };
+}
+export const staffHeadcountForDay = (report) => staffHeadcountInfo(report).count;
 
 /** "8:00" "08:00" "8時" などを "08:00" にそろえる（読めなければ空） */
 export function normalizeTime(text) {

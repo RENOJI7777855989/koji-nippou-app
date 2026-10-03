@@ -32,7 +32,9 @@ export function buildTodaySheetHtml(model) {
     ? `<table class="works"><thead><tr><th>業者</th><th>工種</th><th>稼働人数<br><small>予定/実績</small></th><th>人工</th><th>作業時間</th><th>作業内容</th><th>職長</th><th>安全注意事項・使用機械</th></tr></thead><tbody>${b.works
         .map((w) => `<tr><td>${esc(w.vendor)}</td><td>${esc(w.trade)}</td><td class="c">${w.planned ?? ""} / <b>${w.actual ?? ""}</b></td><td class="c">${w.manDays ?? ""}</td><td>${esc(w.hours)}</td><td>${br(w.content)}</td><td>${esc(w.foreman)}</td><td>${br([w.notes, w.machinery ? "機械：" + w.machinery : ""].filter(Boolean).join("\n"))}</td></tr>`)
         .join("")}</tbody><tfoot><tr><th colspan="2">合計（${b.totals.vendors ?? b.works.length}社・${b.totals.trades ?? "-"}工種）</th><td class="c"><b>${b.totals.workers}</b>人</td><td class="c">${b.totals.manDays}</td><td colspan="4"></td></tr></tfoot></table>`
-    : `<p class="empty">${esc(b.dayStateLabel || "本日の作業（日誌の業者欄）は未入力")}</p>`;
+    : b.rain
+      ? `<p class="rainday"><b>${esc(b.dayStateLabel)}</b>　中止となった予定作業：<b>${esc(b.rain.cancelledWork || "未入力")}</b>${b.rain.reason ? `　中止理由・状況：${esc(b.rain.reason)}` : ""}</p>`
+      : `<p class="empty">${esc(b.dayStateLabel || "本日の作業（日誌の業者欄）は未入力")}</p>`;
 
   // 流れが多い日は2列に分けて並べる（左列→右列の順に時刻順）。搬入・搬出の詳細は右の表にあるので流れでは1行
   const flowRow = (f) => `<tr class="${f.kind === "delivery" ? `dlv${f.direction === "out" ? " out" : ""}` : ""}${f.cancelled ? " cancelled" : ""}"><td class="t">${esc(f.time || "")}</td><td class="mk">${f.mark}</td><td class="ti">${f.kind !== "delivery" && f.flowKind !== "work" && f.kindLabel && f.title !== f.kindLabel ? `<span class="kd">${esc(f.kindLabel)}</span>` : ""}${esc(f.title)}${f.note && f.kind !== "delivery" ? `<div class="nt">${esc(f.note)}</div>` : ""}</td><td class="st">${esc(f.status || "")}</td></tr>`;
@@ -69,7 +71,7 @@ export function buildTodaySheetHtml(model) {
       <table class="kv">
         ${s.plannedToday ? `<tr><th>予定</th><td>${s.plannedToday}人</td></tr>` : ""}
         <tr><th>職長</th><td>${s.foremen}人</td></tr><tr><th>業者・工種</th><td>${s.vendors}社・${s.trades}種</td></tr>
-        ${s.supervisors ? `<tr><th>現場監督</th><td>${s.supervisors}人</td></tr>` : ""}
+        ${s.supervisors ? `<tr><th>監督・職員</th><td>${s.supervisors}人</td></tr>` : ""}
         <tr><th>累計</th><td>${s.cumulative.toLocaleString()}人</td></tr>
         <tr><th>延べ労働時間</th><td>${s.laborHoursCumulative.toLocaleString()}時間</td></tr>
       </table></div>`;
@@ -201,6 +203,7 @@ export function buildTodaySheetHtml(model) {
   .filled { margin-bottom: 1mm; }
   .ruled div { border-bottom: 0.2mm solid #bbb; height: 7mm; }
   .empty { color: #777; margin: 0 0 2mm; }
+  .rainday { margin: 0; font-size: 1.15em; color: #1e4e8c; }
   @media screen { body { background: #eee; padding: 8mm 0; } .sheet { background: #fff; box-shadow: 0 0 4mm rgba(0,0,0,.2); padding: 0; } }
 </style></head>
 <body>${body}${fitScript}</body></html>`;

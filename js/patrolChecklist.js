@@ -65,8 +65,8 @@ export const PATROL_STATUS_OPTIONS = [
            ④通常作業で記録が無い → 未記入
    ×や是正指示は「要確認」とし、対応状況（対応済み・未対応など）は推測しない（DBに無い）。
    ---------------------------------------------------------- */
-const PATROL_NOT_DONE_LABELS = { nowork: "未実施（現場作業なし）", office: "未実施（事務作業日）", holiday: "未実施（休工日）" };
-const nonWorkDayStatus = (report) => (["nowork", "office", "holiday"].includes(report?.dayStatus) ? report.dayStatus : null);
+const PATROL_NOT_DONE_LABELS = { nowork: "未実施（現場作業なし）", office: "未実施（事務作業日）", holiday: "未実施（休工日）", rain: "未実施（雨天作業不可日）" };
+const nonWorkDayStatus = (report) => (["nowork", "office", "holiday", "rain"].includes(report?.dayStatus) ? report.dayStatus : null);
 
 /** 実際の巡回点検の記録があるか（○・×・－のどれか、または是正指示） */
 export function hasPatrolRecord(report) {
@@ -91,5 +91,5 @@ export function patrolStatusOf(report) {
   return { state: "blank", label: "未記入" };
 }
 
-/** 03-2の巡回点検の欄を斜線にするか（休工日・作業なし・事務作業日で、実際の点検記録が無い日だけ。日報なしは対象外） */
+/** 03-2の巡回点検の欄を斜線にするか（休工日・現場作業なし・雨天作業不可日・事務作業日で、実際の点検記録が無い日だけ。日報なしは対象外） */
 export const patrolSlashApplies = (report) => !!report && !!nonWorkDayStatus(report) && !hasPatrolRecord(report);

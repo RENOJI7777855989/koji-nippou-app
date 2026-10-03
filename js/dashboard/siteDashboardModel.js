@@ -17,6 +17,7 @@
        未印刷   … 印刷状態が未印刷の日報
    ========================================================== */
 
+import { staffHeadcountInfo, staffHeadcountForDay } from "./dailyFlow.js";
 import { labelOf, dayStatusOf, isWorkDay, DAY_STATUSES, directionOf, DELIVERY_DIRECTIONS, DELIVERY_STATUSES, FLOW_STATUSES, FLOW_KINDS, parseWorkHours, formatWorkHours, workMinutes, durationLabel } from "./dailyFlow.js";
 import { PATROL_CHECKLIST_ITEMS, patrolStatusOf } from "../patrolChecklist.js";
 import { normalizeTrade } from "../report-output/tradeAttendance.js";
@@ -322,9 +323,11 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
       if (o) o.cumulative += num(c.actualWorkerCount) || 0;
     }
   }
-  const supervisorCount = (r) => (r?.siteSupervisorNames || []).filter((n) => n && n.trim()).length;
-  const supervisorsToday = supervisorCount(report);
-  const supervisorsCumulative = live.filter((r) => (r.date || "") <= date).reduce((s, r) => s + supervisorCount(r), 0);
+  // 監督・職員（現場作業員とは別系統。dailyFlow.js の staffHeadcountInfo: 入力された人数→未入力なら現場監督の氏名の数、
+  // 休工日は0人）。03-2の稼動人数表の「社員」行と同じ値で、計・延労働時間には社員として入る。人工は1人＝1人工（請求人工ではない）
+  const staffInfo = staffHeadcountInfo(report);
+  const supervisorsToday = staffInfo.count ?? 0;
+  const supervisorsCumulative = live.filter((r) => (r.date || "") <= date).reduce((s, r) => s + (staffHeadcountForDay(r) ?? 0), 0);
   const staff = {
     byOccupation,
     today,
@@ -337,7 +340,14 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
     totalToday: today + supervisorsToday,
     cumulative: cumulative + supervisorsCumulative,
     laborHoursToday: (today + supervisorsToday) * HOURS_PER_PERSON,
-    laborHoursCumulative: (cumulative + supervisorsCumulative) * HOURS_PER_PERSON
+    laborHoursCumulative: (cumulative + supervisorsCumulative) * HOURS_PER_PERSON,
+    // 現場作業員と監督・職員の内訳（監督用の画面で別々に出す）。人工はどちらも1人＝1人工
+    crew: {
+      workers: today, workerManDays: today, workersCumulative: cumulative,
+      staff: staffInfo.count, staffSource: staffInfo.source, staffManDays: staffInfo.count, staffCumulative: supervisorsCumulative,
+      staffWork: report?.staffWork || "",
+      total: today + supervisorsToday, totalManDays: today + supervisorsToday, totalCumulative: cumulative + supervisorsCumulative
+    }
   };
 
   // ---- 日誌状況（表示日まで）----
@@ -377,6 +387,10 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
         remarks: report.remarks || "",
         focusInstructions: report.focusInstructions || "",
         workCoordination: report.workCoordination || "",
+        // 雨天作業不可日の記録と、監督・職員の作業内容
+        rainCancelledWork: report.rainCancelledWork || "",
+        rainReason: report.rainReason || "",
+        staffWork: report.staffWork || "",
         confirmed: !!report.confirmedAt,
         printed: report.printCount > 0
       }
@@ -420,6 +434,9 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
       if (patrolStatus.state === "attention") add("巡回点検・要確認", patrol.bad ? `× ${patrol.bad}件${patrol.comment ? "・是正指示あり" : ""}` : "是正指示あり（×の項目なし）", "warn");
       else add("巡回点検", patrolStatus.label, "info");
     }
+    // 監督・職員（現場作業員とは別。休工日は0人）。雨天作業不可日は中止となった予定作業
+    add("監督・職員", staffInfo.count == null ? "未入力" : `${staffInfo.count}人${staffInfo.source === "names" ? "（現場監督の氏名から）" : ""}`, "info");
+    if (dayStatus === "rain") add("中止となった予定作業", report.rainCancelledWork || "未入力", report.rainCancelledWork ? "info" : "warn");
     add("日報の確認", report.confirmedAt ? "確認済み" : "未確認", "info");
   }
   // 危険予知活動表（日報とは別の提出物。日報の有無・提出とは連動させない）

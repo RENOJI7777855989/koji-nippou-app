@@ -26,7 +26,8 @@ export async function createReport(fields) {
   const base = {
     siteId: fields.siteId,
     date: fields.date || "",
-    weather: fields.weather || "晴れ",
+    // 天気: 渡されなかったときだけ従来どおり「晴れ」。空（未選択）を渡したら空のまま保存する（推測しない）
+    weather: fields.weather ?? "晴れ",
     temperature: fields.temperature || "",
     workerCountTotal: fields.workerCountTotal || "",
     companies: fields.companies || [],
@@ -46,10 +47,16 @@ export async function createReport(fields) {
     // 進捗率（％、0〜100の整数。未入力は null）。その日の日誌に記録した値で、現場の現在値を上書きする項目ではない
     progressPercent: fields.progressPercent ?? null,
     // 本日の重点指示・作業間の連絡・調整（03-2の同名の欄へ出力。連絡事項 remarks とは別の項目）
-    // 日の状態: "work"（通常作業）/"nowork"（作業なし）/"office"（事務作業日）/"holiday"（休工日）。無い日報は通常作業として扱う
+    // 日の状態: "work"（通常作業）/"nowork"（現場作業なし）/"holiday"（休工日）/"rain"（雨天作業不可日）/"office"（事務作業日）。無い日報は通常作業として扱う
     dayStatus: fields.dayStatus || "work",
     focusInstructions: fields.focusInstructions || "",
-    workCoordination: fields.workCoordination || ""
+    workCoordination: fields.workCoordination || "",
+    // 監督・職員の稼働人数（現場作業員とは別系統。未入力は null、0人は 0）と作業内容。03-2には書かない。請求人工ではない
+    staffCount: fields.staffCount ?? null,
+    staffWork: fields.staffWork || "",
+    // 雨天作業不可日（dayStatus "rain"）の記録: 中止となった予定作業・雨天による中止理由・状況
+    rainCancelledWork: fields.rainCancelledWork || "",
+    rainReason: fields.rainReason || ""
   };
   if (fields.id) base.id = fields.id; // 新規作成前に写真/署名を紐付けるため、事前発行IDを許容する
   const report = stampNew(base);
