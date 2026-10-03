@@ -8,12 +8,13 @@ import { listReportsBySite, getPrintStatus, isEditedAfterPrint, PRINT_STATUS_LAB
 import { exportReportsExcelZip, buildReportsPrintHtml, exportSiteLedgerExcel, buildSiteLedgerPrintHtml, resolveCompanyTemplateForSite } from "../reportPrint.js";
 import { previewSiteTemplateUpgrade, upgradeSiteTemplate, revertSiteTemplate } from "../report-output/templateResolver.js";
 import { getReportTemplate } from "../report-output/reportTemplates.js";
-import { renderSiteDashboard } from "./site-dashboard.js";
+import { renderSiteDashboard, setDashboardTab } from "./site-dashboard.js";
 import { calendarDayState } from "../dashboard/siteDashboardModel.js";
 import { dayStatusOf, labelOf, DAY_STATUSES } from "../dashboard/dailyFlow.js";
 import { dbGetAll } from "../db.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
 import { openDayStatusDialog } from "./day-status-dialog.js";
+import { openDayPanel } from "./day-panel-dialog.js";
 import { escapeHtml } from "../utils.js";
 import { showView, showMessage } from "./common.js";
 import { navigate } from "../router.js";
@@ -125,12 +126,16 @@ function reportCardHtml(report) {
       <p class="report-card-status">${badges}</p>`;
 }
 
-/* ---------- 日報カレンダー（日報あり／一部未入力／日報なし／作業なし／休工日。推測で補わない）---------- */
+/* ---------- 日報カレンダー（日報あり／一部未記入／日報なし／現場作業なし／休工日／雨天作業不可日／事務作業日。推測で補わない）----------
+   日付を押すと: 日報なし → この日の状態を選んで登録（day-status-dialog.js）、日報あり・一部未記入・各状態 → この日の日報の
+   状況と［未記入を入力］［簡単に修正］［日報を全部見る］（day-panel-dialog.js）。保存後はカレンダーへ戻り、その日を表示する。 */
 const reportCalendarEl = document.getElementById("reportCalendar");
 let calendarMonth = null; // "YYYY-MM"
 let calendarSiteId = null;
+let calendarSigned = new Map(); // 日報id → 職長サインのある業者の companyId
+let calendarFocusDate = null; // 保存して戻ってきた日（その日を目立たせる）
 const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const CAL_LABEL = { ok: "日報あり", partial: "一部未入力", none: "日報なし", nowork: "現場作業なし", holiday: "休工日", rain: "雨天作業不可日", office: "事務作業日", out: "", future: "" };
+const CAL_LABEL = { ok: "日報あり", partial: "一部未記入", none: "日報なし", nowork: "現場作業なし", holiday: "休工日", rain: "雨天作業不可日", office: "事務作業日", out: "", future: "" };
 
 async function renderReportCalendar(reports) {
   if (!reportCalendarEl) return;
@@ -148,6 +153,7 @@ async function renderReportCalendar(reports) {
     if (!signed.has(sg.reportId)) signed.set(sg.reportId, new Set());
     signed.get(sg.reportId).add(sg.companyId);
   }
+  calendarSigned = signed;
   const byDate = new Map();
   for (const r of reports) if (r.date && !byDate.has(r.date)) byDate.set(r.date, r); // 新しい順に並んでいるので最初が最後に更新したもの
   const [y, m] = calendarMonth.split("-").map(Number);
@@ -166,9 +172,9 @@ async function renderReportCalendar(reports) {
     else if (iso > today) state = "future";
     else state = "none";
     if (counts[state] != null) counts[state]++;
-    const title = state === "partial" ? `一部未入力（${missing.join("・")}）` : CAL_LABEL[state] || (state === "out" ? "工期外" : "");
+    const title = state === "partial" ? `一部未記入（${missing.join("・")}）` : CAL_LABEL[state] || (state === "out" ? "工期外" : "");
     const clickable = report || state === "none";
-    cells.push(`<button type="button" class="cal-cell cal-${state}${iso === today ? " cal-today" : ""}" data-date="${iso}"${report ? ` data-report-id="${report.id}"` : ""}${clickable ? "" : " disabled"} title="${escapeHtml(title)}"><span class="cal-day">${d}</span><span class="cal-label">${escapeHtml(state === "partial" ? "一部未入力" : CAL_LABEL[state] || "")}</span></button>`);
+    cells.push(`<button type="button" class="cal-cell cal-${state}${iso === today ? " cal-today" : ""}${iso === calendarFocusDate ? " cal-just-saved" : ""}" data-date="${iso}"${report ? ` data-report-id="${report.id}"` : ""}${clickable ? "" : " disabled"} title="${escapeHtml(title)}"><span class="cal-day">${d}</span><span class="cal-label">${escapeHtml(CAL_LABEL[state] || "")}</span></button>`);
   }
   reportCalendarEl.innerHTML = `
     <div class="cal-head">
@@ -176,9 +182,9 @@ async function renderReportCalendar(reports) {
       <b>${y}年${m}月の日報</b>
       <button type="button" class="secondary-btn cal-nav" data-shift="1" aria-label="次の月">▶</button>
     </div>
-    <p class="cal-summary">日報あり ${counts.ok}・一部未入力 ${counts.partial}・<b>日報なし ${counts.none}</b>・現場作業なし ${counts.nowork}・休工日 ${counts.holiday}・雨天作業不可日 ${counts.rain}・事務作業日 ${counts.office}</p>
+    <p class="cal-summary">日報あり ${counts.ok}・一部未記入 ${counts.partial}・<b>日報なし ${counts.none}</b>・現場作業なし ${counts.nowork}・休工日 ${counts.holiday}・雨天作業不可日 ${counts.rain}・事務作業日 ${counts.office}</p>
     <div class="cal-grid">${["日", "月", "火", "水", "木", "金", "土"].map((w) => `<div class="cal-week">${w}</div>`).join("")}${cells.join("")}</div>
-    <p class="cal-note">「日報なし」は工期内で日報が無い日です（現場作業なし・休工日・雨天作業不可日・事務作業日とは別。日報で選んだ日だけがその表示になります）。日報のある日を押すと日報を開きます。日報なしの日を押すと、この日の状態（通常作業・現場作業なし・休工日・雨天作業不可日・事務作業日）を選んで登録できます。</p>
+    <p class="cal-note">「日報なし」は工期内で日報が無い日です（現場作業なし・休工日・雨天作業不可日・事務作業日とは別。日報で選んだ日だけがその表示になります）。日付を押すと、この日の日報の状況（一部未記入なら未記入の項目）を表示し、未記入の入力・簡単な修正ができます。日報なしの日は、この日の状態（通常作業・現場作業なし・休工日・雨天作業不可日・事務作業日）を選んで登録できます。</p>
 `;
 }
 
@@ -193,19 +199,36 @@ reportCalendarEl?.addEventListener("click", async (e) => {
   }
   const cell = e.target.closest(".cal-cell[data-date]:not([disabled])");
   if (!cell) return;
-  if (cell.dataset.reportId) navigate(`/sites/${currentSite.id}/report/${cell.dataset.reportId}`);
-  // 日報なしの日: この日の状態（通常作業→日報の作成画面／作業なし・休工日・事務作業日→簡単な登録）を選ぶ
-  else if (!currentSite.completedAt && hasPermission("editReports")) {
+  await openCalendarDay(cell.dataset.date);
+});
+
+/** カレンダーの日付（または今日の確認事項の「日報 未入力」）を押したとき */
+async function openCalendarDay(date) {
+  const report = (await listReportsBySite(currentSite.id)).find((r) => r.date === date) || null;
+  if (report) {
+    openDayPanel({ site: currentSite, report, signedCompanyIds: calendarSigned.get(report.id) || new Set(), canEdit: hasPermission("editReports") });
+    return;
+  }
+  // 日報なしの日: この日の状態（通常作業→日報の作成画面／現場作業なし・休工日・雨天作業不可日・事務作業日→簡単な登録）を選ぶ
+  if (!currentSite.completedAt && hasPermission("editReports")) {
     openDayStatusDialog({
       site: currentSite,
-      date: cell.dataset.date,
+      date,
       onSaved: async () => {
+        calendarFocusDate = date;
         await renderReportList();
         await renderSiteDashboard(currentSite, dashboardOptions);
+        scrollToCalendarDay(date);
       }
     });
   }
-});
+}
+
+/** 保存して戻ってきた日をカレンダーで表示する（監督管理タブのカレンダーへ移動し、その日を目立たせる） */
+function scrollToCalendarDay(date) {
+  const cell = reportCalendarEl?.querySelector(`.cal-cell[data-date="${date}"]`);
+  (cell || reportCalendarEl)?.scrollIntoView({ block: "center" });
+}
 
 async function renderReportList() {
   allReports = await listReportsBySite(currentSite.id);
@@ -522,13 +545,28 @@ export async function initSiteDetailView(params) {
   reportListFilter.value = "all";
   reportListSearch.value = "";
 
+  // 日報カレンダーから開いた日報を保存（またはキャンセル）して戻ってきたとき: カレンダー（監督管理タブ）のその日の月を表示する
+  const back = window.__returnToCalendar;
+  window.__returnToCalendar = null;
+  if (back?.siteId === site.id && /^\d{4}-\d{2}-\d{2}$/.test(back.date || "")) {
+    calendarSiteId = site.id;
+    calendarMonth = back.date.slice(0, 7);
+    calendarFocusDate = back.date;
+    setDashboardTab("manage");
+  } else {
+    calendarFocusDate = null;
+  }
+
   renderSiteInfo();
   await renderReportList();
   // 現場ダッシュボード（日誌の内容を表示するだけ。日誌状況の数字を押すと下の日報一覧を絞り込む）
   await renderSiteDashboard(site, dashboardOptions);
+  if (calendarFocusDate && back?.scroll !== false) scrollToCalendarDay(calendarFocusDate);
 }
 
 const dashboardOptions = {
+  // 今日の確認事項の「日報 未入力」: カレンダーで日付を押したときと同じ（この日の状態を選んで登録）
+  onOpenDay: (date) => openCalendarDay(date),
   onFilter: async (filter) => {
     reportListFilter.value = filter;
     await renderReportList();

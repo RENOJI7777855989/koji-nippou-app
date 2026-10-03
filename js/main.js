@@ -81,8 +81,9 @@ async function bootstrap() {
   registerRoute("/backup", () => initBackupView());
   registerRoute("/sites/new", () => initSiteFormViewNew());
   registerRoute("/sites/:id/edit", (params) => initSiteFormViewEdit(params));
-  registerRoute("/sites/:id/report/new", (params, query) => initReportFormViewNew({ ...params, date: query?.date }));
-  registerRoute("/sites/:id/report/:reportId", (params) => initReportFormViewEdit(params));
+  registerRoute("/sites/:id/report/new", (params, query) => initReportFormViewNew({ ...params, date: query?.date, from: query?.from }));
+  // mode=quick（簡単に修正）/ missing（未記入を入力）、focus・cid（開く欄・業者の行）、from=calendar|check（保存後に戻る先）
+  registerRoute("/sites/:id/report/:reportId", (params, query) => initReportFormViewEdit({ ...params, mode: query?.mode, focus: query?.focus, cid: query?.cid, from: query?.from }));
   registerRoute("/sites/:id/estimates/import", (params) => initEstimateImportView(params));
   registerRoute("/sites/:id/estimates/ask", (params) => initEstimateAskView(params));
   registerRoute("/sites/:id/estimates", (params) => initEstimateListView(params));

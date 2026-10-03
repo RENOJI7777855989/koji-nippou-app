@@ -51,6 +51,10 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
   const r2 = page.locator(".company-row").nth(1);
   await r2.locator(".companyName").fill("佐藤鉄筋"); await r2.locator(".occupation").fill("鉄筋工"); await r2.locator(".actualWorkerCount").fill("4"); await r2.locator(".workContent").fill("2階配筋");
   const flows = [["08:00", "chorei", "朝礼・KY", "done"], ["13:00", "work", "午後作業", "plan"], ["17:00", "other", "片付け", "plan"], ["08:30", "work", "型枠工事", "done"]];
+  // 新規の通常作業の日報には流れの初期値（基本スケジュール7件）が入るので、この確認では外して確認用の行だけにする
+  // （初期値そのものの確認は tests/calendar-quick-edit.js）
+  check("新規の通常作業の日報に流れの初期値7件が入っている", (await page.locator(".timeline-row").count()) === 7);
+  await page.evaluate(() => document.querySelectorAll("#timelineContainer .timeline-row").forEach((r) => r.remove()));
   for (const [t, k, title, st] of flows) {
     await page.click("#addTimelineBtn");
     const row = page.locator(".timeline-row").last();

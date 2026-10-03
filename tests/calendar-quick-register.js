@@ -91,12 +91,17 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   await page.reload(); await openSite();
   check("7 再読み込み後も 作業なし・休工日・事務作業日 の表示が保たれる", (await calState("03")) === "nowork" && (await calState("04")) === "holiday" && (await calState("05")) === "office");
 
-  // 8 日報のある日は従来どおり編集画面
+  // 8 日報のある日をタップ → 「この日の日報」（状況）→［日報を全部見る］で編集画面（2026-10-03 から。状態の登録ダイアログは出ない）
   await page.click(`#reportCalendar .cal-cell[data-date="2026-09-01"]`);
+  await page.waitForFunction(() => document.getElementById("dayPanelDialog").open);
+  const statusDialogOpen = await page.evaluate(() => document.getElementById("dayStatusDialog").open);
+  await page.click('#dayPanelActions [data-day-go="full"]');
   await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(300);
-  check("8 日報のある日（9/1）をタップすると従来どおり編集画面が開く（ダイアログは出ない）", (await page.inputValue("#date")) === "2026-09-01" && !(await page.evaluate(() => document.getElementById("dayStatusDialog").open)));
+  check("8 日報のある日（9/1）をタップすると「この日の日報」が出て、［日報を全部見る］で編集画面が開く（状態の登録ダイアログは出ない）", (await page.inputValue("#date")) === "2026-09-01" && !statusDialogOpen);
   // 登録した休工日をタップ → その日報の編集画面（状態は休工日）
   await openSite(); await page.click(`#reportCalendar .cal-cell[data-date="2026-09-04"]`);
+  await page.waitForFunction(() => document.getElementById("dayPanelDialog").open);
+  await page.click('#dayPanelActions [data-day-go="full"]');
   await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(300);
   check("8 登録した休工日をタップすると日報の編集画面（日の状態＝休工日）", (await page.inputValue("#dayStatus")) === "holiday");
 

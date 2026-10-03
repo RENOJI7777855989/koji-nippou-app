@@ -19,7 +19,7 @@
 
 import { staffHeadcountInfo, staffHeadcountForDay } from "./dailyFlow.js";
 import { labelOf, dayStatusOf, isWorkDay, DAY_STATUSES, directionOf, DELIVERY_DIRECTIONS, DELIVERY_STATUSES, FLOW_STATUSES, FLOW_KINDS, parseWorkHours, formatWorkHours, workMinutes, durationLabel } from "./dailyFlow.js";
-import { PATROL_CHECKLIST_ITEMS, patrolStatusOf } from "../patrolChecklist.js";
+import { PATROL_CHECKLIST_ITEMS, patrolStatusOf, hasPatrolRecord } from "../patrolChecklist.js";
 import { normalizeTrade } from "../report-output/tradeAttendance.js";
 
 /*
@@ -67,23 +67,47 @@ function manDaysOf(c) {
 }
 
 /**
- * 日報カレンダー用: 1日の状態。日報が無い日は "none"（未入力。作業なしとは扱わない）。
- * 通常作業の日報で、進捗率・業者・作業時間・職長サインのどれかが足りなければ "partial"（一部未入力）
+ * 通常作業の日報で、本当に入力・確認が必要な項目のうち足りないもの（何が・誰の）。
+ * 対象: 進捗率／業者（1社も無い）／業者ごとの作業時間（開始・終了）／業者ごとの職長サイン／
+ * 巡回点検（記録が1つも無い）。任意の項目（連絡事項・明日の予定・重点指示・搬入搬出・流れ・監督/職員など）は
+ * 空欄でも対象にしない。現場作業なし・休工日・雨天作業不可日・事務作業日は対象外（空の配列）。
+ * @param {object} report
+ * @param {Set<string>} signedCompanyIds 職長サインのある業者行の companyId
+ * @returns {{key: "progress"|"companies"|"workHours"|"signature"|"patrol", category: string, label: string, companyId?: string}[]}
+ */
+export function reportMissingDetails(report, signedCompanyIds = new Set()) {
+  if (!report || dayStatusOf(report) !== "work") return [];
+  const out = [];
+  if (report.progressPercent == null || report.progressPercent === "") out.push({ key: "progress", category: "進捗率", label: "進捗率" });
+  const cs = (report.companies || []).filter((c) => (c.companyName || "").trim());
+  if (!cs.length) out.push({ key: "companies", category: "業者", label: "業者（作業した業者が1社も入力されていません）" });
+  // 同じ業者がこの日に複数の工種の行にあるときは「業者（工種）」で、どの行か分かるようにする
+  const rows = new Map();
+  for (const c of cs) rows.set(c.companyName.trim(), (rows.get(c.companyName.trim()) || 0) + 1);
+  const who = (c) => (rows.get(c.companyName.trim()) > 1 && (c.occupation || "").trim() ? `${c.companyName.trim()}（${c.occupation.trim()}）` : c.companyName.trim());
+  for (const c of cs) {
+    const p = parseWorkHours(c.workHours);
+    if (!p || !p.end) out.push({ key: "workHours", category: "作業時間", label: `${who(c)}：作業時間`, companyId: c.companyId });
+  }
+  for (const c of cs) if (!signedCompanyIds.has(c.companyId)) out.push({ key: "signature", category: "署名", label: `${who(c)}：職長サイン`, companyId: c.companyId });
+  if (!hasPatrolRecord(report)) out.push({ key: "patrol", category: "巡回点検", label: "巡回点検（記録がありません）" });
+  return out;
+}
+
+/**
+ * 日報カレンダー用: 1日の状態。日報が無い日は "none"（日報なし。現場作業なしとは扱わない）。
+ * 通常作業の日報で reportMissingDetails の項目が1つでもあれば "partial"（一部未記入）
  * @param {object|null} report その日の日報
  * @param {Set<string>} signedCompanyIds この日報で職長サインのある業者の companyId
- * @returns {{state: "none"|"ok"|"partial"|"nowork"|"holiday", missing: string[]}}
+ * @returns {{state: "none"|"ok"|"partial"|"nowork"|"holiday"|"rain"|"office", missing: string[], details: object[]}}
  */
 export function calendarDayState(report, signedCompanyIds = new Set()) {
-  if (!report) return { state: "none", missing: [] };
+  if (!report) return { state: "none", missing: [], details: [] };
   const st = dayStatusOf(report);
-  if (st !== "work") return { state: st, missing: [] };
-  const missing = [];
-  if (report.progressPercent == null) missing.push("進捗率");
-  const cs = (report.companies || []).filter((c) => (c.companyName || "").trim());
-  if (!cs.length) missing.push("業者");
-  if (cs.some((c) => { const p = parseWorkHours(c.workHours); return !p || !p.end; })) missing.push("作業時間");
-  if (cs.some((c) => !signedCompanyIds.has(c.companyId))) missing.push("署名");
-  return { state: missing.length ? "partial" : "ok", missing };
+  if (st !== "work") return { state: st, missing: [], details: [] };
+  const details = reportMissingDetails(report, signedCompanyIds);
+  const missing = [...new Set(details.map((d) => d.category))];
+  return { state: details.length ? "partial" : "ok", missing, details };
 }
 
 /** その日の日報（同じ日付が複数あれば最後に更新されたもの） */
@@ -245,6 +269,7 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
       const p = parseWorkHours(c.workHours);
       const minutes = p ? workMinutes(p.start, p.end) : null;
       return {
+      companyId: c.companyId || "",
       vendor: c.companyName || "",
       occupation: c.occupation || "",
       planned: num(c.plannedWorkerCount),
@@ -398,31 +423,32 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
 
   // ---- 今日の確認事項・要確認（日報DBの値だけから判定。新しい必須項目は作らない）----
   const checks = [];
-  const add = (label, value, level = "ok") => checks.push({ label, value, level }); // level: ok / warn（要確認） / info
+  // level: ok / warn（要確認） / info。target は押したときに開く日報の欄（focus: 欄の種類、companyId: 業者の行）
+  const add = (label, value, level = "ok", target = null) => checks.push({ label, value, level, target });
   // 同じ業者がこの日に複数の工種の行にあるときは「業者（工種）」で、どの行か分かるようにする
   const vendorRowCount = new Map();
   for (const c of report?.companies || []) { const n = vendorNameOf(c); if (n) vendorRowCount.set(n, (vendorRowCount.get(n) || 0) + 1); }
   const rowLabel = (vendor, trade) => (!vendor ? "（業者名なし）" : vendorRowCount.get(vendor.trim()) > 1 && trade ? `${vendor}（${trade}）` : vendor);
   if (!report) {
-    add("日報", "未入力", "warn");
+    add("日報", "未入力", "warn", { focus: "day" });
   } else {
     add("日報", `入力済み（${labelOf(DAY_STATUSES, dayStatus)}）`);
-    add("進捗率", report.progressPercent != null ? `${report.progressPercent}%` : "未入力", report.progressPercent != null ? "ok" : "warn");
+    add("進捗率", report.progressPercent != null ? `${report.progressPercent}%` : "未入力", report.progressPercent != null ? "ok" : "warn", { focus: "progress" });
     if (isWork) {
-      add("業者", works.length ? `${countVendors(works)}社・${countTrades(works)}工種` : "未入力", works.length ? "ok" : "warn");
+      add("業者", works.length ? `${countVendors(works)}社・${countTrades(works)}工種` : "未入力", works.length ? "ok" : "warn", { focus: "companies" });
       add("作業員数", `${today}人`, "info");
       const noHours = works.filter((w) => !w.hours || !w.hours.includes("～") || w.hours.endsWith("～"));
-      add("作業時間", noHours.length ? `${noHours.map((w) => rowLabel(w.vendor, w.occupation)).join("・")} 未入力` : "入力済み", noHours.length ? "warn" : "ok");
+      add("作業時間", noHours.length ? `${noHours.map((w) => rowLabel(w.vendor, w.occupation)).join("・")} 未入力` : "入力済み", noHours.length ? "warn" : "ok", { focus: "workHours", companyId: noHours[0]?.companyId });
       const signed = signedByReport.get(report.id) || new Set();
-      const unsignedVendors = (report.companies || []).filter((c) => (c.companyName || "").trim() && !signed.has(c.companyId)).map((c) => rowLabel(c.companyName.trim(), c.occupation));
-      if (unsignedVendors.length) for (const v of unsignedVendors) add("署名", `${v} 署名未入力`, "warn");
+      const unsignedVendors = (report.companies || []).filter((c) => (c.companyName || "").trim() && !signed.has(c.companyId)).map((c) => ({ v: rowLabel(c.companyName.trim(), c.occupation), id: c.companyId }));
+      if (unsignedVendors.length) for (const { v, id } of unsignedVendors) add("署名", `${v} 署名未入力`, "warn", { focus: "signature", companyId: id });
       else if (works.length) add("署名", "全業者 署名済み");
       add("本日の重点指示", report.focusInstructions ? "入力済み" : "未入力", "info");
       add("作業間の連絡・調整", report.workCoordination ? "入力済み" : "未入力", "info");
       // 巡回点検・要確認: ×の項目、または是正指示がある日（是正指示＝未対応とは扱わない。対応状況はDBに無い）
-      if (patrol.bad) add("巡回点検・要確認", `× ${patrol.bad}件${patrol.comment ? "・是正指示あり" : ""}`, "warn");
-      else if (patrol.comment) add("巡回点検・要確認", "是正指示あり（×の項目なし）", "warn");
-      if (patrol.unset) add("巡回点検", `未記入 ${patrol.unset}項目`, "warn");
+      if (patrol.bad) add("巡回点検・要確認", `× ${patrol.bad}件${patrol.comment ? "・是正指示あり" : ""}`, "warn", { focus: "patrol" });
+      else if (patrol.comment) add("巡回点検・要確認", "是正指示あり（×の項目なし）", "warn", { focus: "patrol" });
+      if (patrol.unset) add("巡回点検", `未記入 ${patrol.unset}項目`, "warn", { focus: "patrol" });
       if (!patrol.bad && !patrol.comment && !patrol.unset) add("巡回点検", "全項目 記入済み（×なし）");
       if (deliveries.length) {
         const by = (st) => deliveries.filter((d) => d.status === st).length;
@@ -436,7 +462,7 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
     }
     // 監督・職員（現場作業員とは別。休工日は0人）。雨天作業不可日は中止となった予定作業
     add("監督・職員", staffInfo.count == null ? "未入力" : `${staffInfo.count}人${staffInfo.source === "names" ? "（現場監督の氏名から）" : ""}`, "info");
-    if (dayStatus === "rain") add("中止となった予定作業", report.rainCancelledWork || "未入力", report.rainCancelledWork ? "info" : "warn");
+    if (dayStatus === "rain") add("中止となった予定作業", report.rainCancelledWork || "未入力", report.rainCancelledWork ? "info" : "warn", { focus: "rain" });
     add("日報の確認", report.confirmedAt ? "確認済み" : "未確認", "info");
   }
   // 危険予知活動表（日報とは別の提出物。日報の有無・提出とは連動させない）

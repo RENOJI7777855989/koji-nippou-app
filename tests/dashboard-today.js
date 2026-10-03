@@ -64,9 +64,11 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   // カレンダー（9月）
   check("日報カレンダーは「監督管理」タブの中にある", await page.evaluate(() => !!document.querySelector("#siteDashboard .dash-panel[data-panel=manage] #reportCalendar")));
   const cal = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll("#reportCalendar .cal-cell[data-date]")].map((b) => [b.dataset.date.slice(8), b.className.replace(/cal-cell |cal-today/g, "").trim()])));
-  check("カレンダー: 9/2 は日報あり（入力がそろっている）、9/3 は一部未入力（電気の作業時間・署名）、9/4 作業なし、9/5 休工日、9/1・9/6 日報なし", cal["02"] === "cal-ok" && cal["03"] === "cal-partial" && cal["04"] === "cal-nowork" && cal["05"] === "cal-holiday" && cal["01"] === "cal-none" && cal["06"] === "cal-none", JSON.stringify({ "01": cal["01"], "02": cal["02"], "03": cal["03"], "04": cal["04"], "05": cal["05"], "06": cal["06"] }));
+  check("カレンダー: 9/2 は日報あり（入力がそろっている）、9/3 は一部未記入（電気の作業時間・署名）、9/4 作業なし、9/5 休工日、9/1・9/6 日報なし", cal["02"] === "cal-ok" && cal["03"] === "cal-partial" && cal["04"] === "cal-nowork" && cal["05"] === "cal-holiday" && cal["01"] === "cal-none" && cal["06"] === "cal-none", JSON.stringify({ "01": cal["01"], "02": cal["02"], "03": cal["03"], "04": cal["04"], "05": cal["05"], "06": cal["06"] }));
   await page.click("#siteDashboard .dash-tab[data-tab=manage]"); // 日報カレンダーは「監督管理」タブ
-  await page.click("#reportCalendar .cal-cell[data-date='2026-09-04']"); await page.waitForSelector("#view-report-form:not([hidden])");
+  await page.click("#reportCalendar .cal-cell[data-date='2026-09-04']");
+  await page.waitForFunction(() => document.getElementById("dayPanelDialog").open); // この日の日報（状況）→［日報を全部見る］
+  await page.click('#dayPanelActions [data-day-go="full"]'); await page.waitForSelector("#view-report-form:not([hidden])");
   check("カレンダー: 日付を押すとその日の日報が開き、日の状態「作業なし」が選ばれている", (await page.inputValue("#dayStatus")) === "nowork" && (await page.inputValue("#date")) === "2026-09-04");
   // 日の状態を画面で変えて保存
   await page.selectOption("#dayStatus", "holiday"); await page.click("#reportSaveBtn"); await page.waitForSelector("#view-site-detail:not([hidden])");

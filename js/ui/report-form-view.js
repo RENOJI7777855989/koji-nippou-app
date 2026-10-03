@@ -17,7 +17,9 @@ import { PATROL_CHECKLIST_ITEMS, PATROL_STATUS_OPTIONS } from "../patrolChecklis
 import { hasPermission, canAccessSite } from "../auth.js";
 import { showView, showMessage } from "./common.js";
 import { navigate } from "../router.js";
-import { FLOW_KINDS, FLOW_STATUSES, DELIVERY_DIRECTIONS, DELIVERY_STATUSES, WORK_TIME_OPTIONS, directionOf, normalizeFlowRow, normalizeDeliveryRow, parseWorkHours, formatWorkHours, workMinutes, durationLabel } from "../dashboard/dailyFlow.js";
+import { FLOW_KINDS, FLOW_STATUSES, DELIVERY_DIRECTIONS, DELIVERY_STATUSES, WORK_TIME_OPTIONS, directionOf, normalizeFlowRow, normalizeDeliveryRow, parseWorkHours, formatWorkHours, workMinutes, durationLabel, defaultWorkdayTimeline, isUntouchedDefaultFlowRow } from "../dashboard/dailyFlow.js";
+import { reportMissingDetails } from "../dashboard/siteDashboardModel.js";
+import { attachProgressSlider } from "./progress-slider.js";
 
 const reportSaveBtn = document.getElementById("reportSaveBtn");
 
@@ -50,8 +52,15 @@ const updateDayStatusHint = () => {
   staffFieldsEl.hidden = dayStatusSelect.value === "holiday";
   staffHolidayNote.hidden = dayStatusSelect.value !== "holiday";
 };
-dayStatusSelect.addEventListener("change", updateDayStatusHint);
+dayStatusSelect.addEventListener("change", () => {
+  updateDayStatusHint();
+  toggleDefaultTimelineForDayStatus();
+  if (formMode.mode) applyQuickMode(formMode.mode);
+  renderMissingGuide();
+});
 const progressHint = document.getElementById("progressPercentHint");
+// 進捗率のスライダー（指で操作。保存する値は従来どおり #progressPercent。空欄＝未入力のまま）
+const progressSlider = attachProgressSlider(progressInput);
 let previousProgress = null; // 参考表示: この日より前の日誌で最後に入力した進捗率 { date, value }
 const workerCountTotalInput = document.getElementById("workerCountTotal");
 const companiesContainer = document.getElementById("companiesContainer");
@@ -322,11 +331,12 @@ function addTimelineRow(data = {}) {
   const row = document.createElement("div");
   row.className = "timeline-row";
   row.dataset.rowId = data.id || createId();
+  if (data.isDefault) row.dataset.default = "1";
   row.innerHTML = `
     <label>時刻<input type="time" class="flowTime" step="300"></label>
     <label>種別<select class="flowKind">${optionsHtml(FLOW_KINDS, data.kind || "work")}</select></label>
     <label class="full-row">内容<input type="text" class="flowTitle" placeholder="例）全体朝礼・KY／○○工事打合せ／3階巡回"></label>
-    <label>状態（予定／実施済み）<select class="flowStatus">${optionsHtml(FLOW_STATUSES, data.status || "plan")}</select></label>
+    <label>状態<select class="flowStatus" aria-label="状態（予定／実施済み）">${optionsHtml(FLOW_STATUSES, data.status || "plan")}</select></label>
     <label class="full-row">メモ<input type="text" class="flowNote" placeholder="任意"></label>
     <button type="button" class="removeRowBtn secondary-btn">この行を削除</button>`;
   row.querySelector(".flowTime").value = data.time || "";
@@ -385,7 +395,40 @@ function collectTimeline() {
       status: row.querySelector(".flowStatus").value,
       note: row.querySelector(".flowNote").value
     }))
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => (a.r.time ? 0 : 1) - (b.r.time ? 0 : 1) || a.r.time.localeCompare(b.r.time) || a.i - b.i)
+    .map(({ r }) => r);
+}
+
+/* ---------- 本日の現場の流れの初期値（新しく作る通常作業の日報だけ。dailyFlow.js の DEFAULT_WORKDAY_TIMELINE）----------
+   現場作業なし・休工日・雨天作業不可日・事務作業日には入れない。日の状態をそれらに変えたときは、初期値のまま
+   （変更していない）の行だけを外して覚えておき、通常作業に戻すと元に戻す（変更した行・自分で足した行は外さない）。 */
+const timelineDefaultNote = document.getElementById("timelineDefaultNote");
+let stashedDefaultRows = [];
+
+function loadDefaultTimeline() {
+  for (const r of defaultWorkdayTimeline()) addTimelineRow({ ...r, isDefault: true });
+}
+
+function readTimelineRow(row) {
+  return { time: row.querySelector(".flowTime").value, kind: row.querySelector(".flowKind").value, title: row.querySelector(".flowTitle").value, status: row.querySelector(".flowStatus").value, note: row.querySelector(".flowNote").value };
+}
+
+function toggleDefaultTimelineForDayStatus() {
+  if (form.classList.contains("read-only-form")) return;
+  if (dayStatusSelect.value !== "work") {
+    const rows = [...timelineContainer.querySelectorAll(".timeline-row")].filter((row) => isUntouchedDefaultFlowRow(readTimelineRow(row)));
+    if (!rows.length) return;
+    stashedDefaultRows.push(...rows.map((row) => ({ id: row.dataset.rowId, ...readTimelineRow(row), isDefault: true })));
+    rows.forEach((row) => row.remove());
+    timelineDefaultNote.textContent = `通常作業の基本スケジュール（初期値のまま変更していない${rows.length}行）を外しました。通常作業に戻すと元に戻ります。`;
+    timelineDefaultNote.hidden = false;
+  } else if (stashedDefaultRows.length) {
+    stashedDefaultRows.forEach((r) => addTimelineRow(r));
+    stashedDefaultRows = [];
+    timelineDefaultNote.hidden = true;
+  }
 }
 
 function collectDeliveries() {
@@ -407,6 +450,8 @@ function collectDeliveries() {
 }
 
 function loadFlowAndDeliveries(report = {}) {
+  stashedDefaultRows = [];
+  timelineDefaultNote.hidden = true;
   timelineContainer.innerHTML = "";
   deliveriesContainer.innerHTML = "";
   (report.timeline || []).forEach((r) => addTimelineRow(r));
@@ -479,6 +524,7 @@ function updateProgressHint() {
   progressInput.classList.toggle("is-invalid", !!r.error);
   progressHint.classList.toggle("is-warn", !!r.error || r.value == null);
   progressHint.textContent = r.error ? r.error : r.value == null ? `進捗率が未入力です${prev ? `（${prev}）` : ""}` : prev;
+  progressSlider?.sync();
 }
 progressInput.addEventListener("input", updateProgressHint);
 
@@ -509,8 +555,11 @@ async function loadPreviousProgress(siteId, date, excludeId) {
 }
 dateInput.addEventListener("change", () => loadPreviousProgress(currentSiteId, dateInput.value, editingReportId));
 
+const labelOfDayStatus = () => dayStatusSelect.selectedOptions[0]?.textContent || "";
+
 function resetForm() {
   form.reset();
+  weatherSelect.querySelectorAll("option[data-extra]").forEach((o) => o.remove());
   companiesContainer.innerHTML = "";
   addCompanyRow();
   siteSupervisorsContainer.innerHTML = "";
@@ -532,6 +581,135 @@ function applyReadOnlyMode(readOnly) {
   reportSaveBtn.hidden = readOnly;
   if (readOnly) deleteBtn.hidden = true;
   cancelBtn.textContent = readOnly ? "一覧に戻る" : "キャンセル";
+  progressSlider?.sync();
+}
+
+/* ---------- 日報カレンダーから開いたとき（簡単に修正・未記入を入力）----------
+   既存の日報画面をそのまま使い、よく変える欄・未記入の欄だけを表示する（隠した欄の値は読み込んだまま保存されるので消えない）。
+   ・quick（簡単に修正）: 進捗率・天気・日の状態・雨天作業不可日の内容・監督/職員・業者（作業人数・作業時間・作業内容）・
+     流れ・搬入搬出・明日の予定・連絡事項・巡回点検。現場作業なし等の日は業者・流れ・搬入搬出を隠す。
+   ・missing（未記入を入力）: reportMissingDetails の項目がある欄・業者の行だけ。上の一覧から1つずつ移動して入力する。
+   保存・キャンセル後は from（calendar=日報カレンダー／check=今日の確認事項）へ戻る。 */
+const quickBar = document.getElementById("reportQuickBar");
+const quickTitleEl = document.getElementById("reportQuickTitle");
+const missingGuideEl = document.getElementById("reportMissingGuide");
+const nextMissingBtn = document.getElementById("reportNextMissingBtn");
+const showAllBtn = document.getElementById("reportShowAllBtn");
+let formMode = { mode: "", from: "", focus: "", cid: "" };
+let nextMissingIndex = 0;
+const QUICK_HIDDEN_SECTIONS = ["supervisors", "focus", "coordination", "photos"];
+const WORK_ONLY_SECTIONS = ["companies", "timeline", "deliveries"];
+const shortDate = (iso) => { const [, m, d] = String(iso || "").split("-").map(Number); return m ? `${m}月${d}日` : ""; };
+
+/** 入力中の内容で、未記入の項目（保存したときにカレンダーが「一部未記入」になる項目）を求める */
+function formMissingDetails() {
+  const signed = new Set([...companiesContainer.querySelectorAll(".company-row")]
+    .filter((row) => row.dataset.existingSignatureId || (row._signaturePad && !row._signaturePad.isEmpty()))
+    .map((row) => row.dataset.companyId));
+  return reportMissingDetails({
+    dayStatus: dayStatusSelect.value,
+    progressPercent: readProgress().value,
+    companies: collectCompanies(),
+    patrolChecklist: collectPatrolChecklist(),
+    patrolComment: patrolCommentInput.value
+  }, signed);
+}
+
+function applyQuickMode(mode) {
+  formMode.mode = mode;
+  form.classList.toggle("is-quick", !!mode);
+  quickBar.hidden = !mode;
+  const isWork = dayStatusSelect.value === "work";
+  const details = mode === "missing" ? formMissingDetails() : [];
+  const keys = new Set(details.map((d) => d.key));
+  form.querySelectorAll(".rf-sec[data-qsec]").forEach((sec) => {
+    const k = sec.dataset.qsec;
+    let hide = false;
+    if (mode === "quick") hide = QUICK_HIDDEN_SECTIONS.includes(k) || (!isWork && WORK_ONLY_SECTIONS.includes(k));
+    if (mode === "missing") hide = !((k === "companies" && (keys.has("companies") || keys.has("workHours") || keys.has("signature"))) || (k === "patrol" && keys.has("patrol")));
+    sec.classList.toggle("q-hide", hide);
+  });
+  // 未記入を入力: 監督・職員・雨天作業不可日の欄、記入済みの業者の行は隠す（値はそのまま保存される）
+  staffFieldsEl.classList.toggle("q-hide", mode === "missing");
+  rainFieldsEl.classList.toggle("q-hide", mode === "missing");
+  const missingRows = new Set(details.filter((d) => d.companyId).map((d) => d.companyId));
+  companiesContainer.querySelectorAll(".company-row").forEach((row) => row.classList.toggle("q-hide", mode === "missing" && keys.size > 0 && !keys.has("companies") && !missingRows.has(row.dataset.companyId)));
+  const date = shortDate(dateInput.value);
+  quickTitleEl.textContent = mode === "missing" ? `${date}　未記入を入力` : mode === "quick" ? `${date}　簡単に修正（よく変更する項目だけを表示しています）` : "";
+  renderMissingGuide();
+}
+
+function renderMissingGuide() {
+  if (!formMode.mode) return;
+  const details = formMissingDetails();
+  nextMissingBtn.hidden = !details.length;
+  missingGuideEl.innerHTML = details.length
+    ? `<p class="report-missing-head">未記入 ${details.length}件（押すとその欄へ移動します）</p><ul>${details.map((d, i) => `<li><button type="button" class="report-missing-item" data-missing="${i}">${escapeHtml(d.label)}</button></li>`).join("")}</ul>`
+    : `<p class="report-missing-done">${dayStatusSelect.value === "work" ? "未記入の項目はありません。保存すると「日報あり」になります。" : "この日の状態では、未記入の判定はありません。"}</p>`;
+}
+
+/** 未記入の欄へ移動して目立たせる（隠れていれば表示する） */
+function goToMissing(item) {
+  if (!item) return;
+  let el = null;
+  let focusEl = null;
+  const row = item.companyId ? companiesContainer.querySelector(`.company-row[data-company-id="${CSS.escape(item.companyId)}"]`) : null;
+  if (item.key === "progress") { el = progressInput.closest("label"); focusEl = progressInput; }
+  else if (item.key === "companies") { el = companiesContainer.querySelector(".company-row") || addCompanyBtn; focusEl = el.querySelector?.(".companyName"); }
+  else if (item.key === "workHours" && row) { el = row.querySelector(".work-hours-field"); focusEl = row.querySelector(".workStart"); }
+  else if (item.key === "signature" && row) { el = row.querySelector(".foreman-signature-block"); }
+  else if (item.key === "patrol") { focusEl = [...patrolChecklistContainer.querySelectorAll("select")].find((x) => !x.value); el = focusEl?.closest(".patrol-item-row") || patrolChecklistContainer; }
+  else if (item.key === "rain") { el = rainFieldsEl; focusEl = rainCancelledWorkInput; }
+  if (!el) return;
+  form.querySelectorAll(".is-target").forEach((x) => x.classList.remove("is-target")); // 前に移動した欄の強調を消す
+  for (let p = el; p && p !== form; p = p.parentElement) p.classList?.remove("q-hide");
+  el.scrollIntoView({ block: "center" });
+  el.classList.add("is-target");
+  setTimeout(() => el.classList.remove("is-target"), 2500);
+  try { focusEl?.focus({ preventScroll: true }); } catch { /* 古いブラウザ */ }
+}
+
+missingGuideEl.addEventListener("click", (e) => {
+  const btn = e.target.closest(".report-missing-item");
+  if (btn) goToMissing(formMissingDetails()[Number(btn.dataset.missing)]);
+});
+nextMissingBtn.addEventListener("click", () => {
+  const details = formMissingDetails();
+  if (!details.length) return;
+  goToMissing(details[nextMissingIndex++ % details.length]);
+});
+showAllBtn.addEventListener("click", () => {
+  applyQuickMode("");
+  form.querySelectorAll(".q-hide").forEach((el) => el.classList.remove("q-hide"));
+});
+form.addEventListener("input", () => renderMissingGuide());
+form.addEventListener("change", () => renderMissingGuide());
+companiesContainer.addEventListener("pointerup", () => setTimeout(renderMissingGuide, 0));
+
+/** 開いたときのモード（カレンダー・今日の確認事項から）。読み取り専用のときは使わない */
+function setupFormMode(params) {
+  formMode = { mode: "", from: ["calendar", "check"].includes(params.from) ? params.from : "", focus: params.focus || "", cid: params.cid || "" };
+  nextMissingIndex = 0;
+  const readOnly = form.classList.contains("read-only-form");
+  const mode = readOnly ? "" : ["quick", "missing"].includes(params.mode) ? params.mode : "";
+  form.querySelectorAll(".q-hide").forEach((el) => el.classList.remove("q-hide"));
+  form.querySelectorAll(".is-target").forEach((el) => el.classList.remove("is-target"));
+  applyQuickMode(mode);
+  reportSaveBtn.textContent = formMode.from === "calendar" ? "保存してカレンダーへ戻る" : "保存";
+  if (mode && formMode.focus) {
+    const details = formMissingDetails();
+    const item = details.find((d) => d.key === formMode.focus && (!formMode.cid || d.companyId === formMode.cid))
+      || { key: formMode.focus, companyId: formMode.cid };
+    setTimeout(() => goToMissing(item), 0);
+  } else if (mode) {
+    window.scrollTo(0, 0);
+  }
+}
+
+/** 保存・キャンセル後に戻る（カレンダー・今日の確認事項から開いたときは、現場詳細の監督管理タブのカレンダーのその日へ） */
+function returnAfterForm(date) {
+  if (formMode.from && currentSiteId) window.__returnToCalendar = { siteId: currentSiteId, date, scroll: formMode.from === "calendar" };
+  navigate(currentSiteId ? `/sites/${currentSiteId}` : "/sites");
 }
 
 export async function initReportFormViewNew(params) {
@@ -563,10 +741,12 @@ export async function initReportFormViewNew(params) {
   progressInput.value = "";
   dayStatusSelect.value = "work";
   updateDayStatusHint();
+  loadDefaultTimeline(); // 新規の通常作業の日報: 本日の現場の流れの基本スケジュール（変更・削除・追加できる）
   await loadPreviousProgress(currentSiteId, dateInput.value, null);
   await loadCompanySuggestions(currentSiteId);
   await renderPhotoGrid(draftReportId);
   applyReadOnlyMode(false); // このルートには編集権限があるユーザーしか到達しない
+  setupFormMode({ from: params.from });
   focusRequestedSection();
 }
 
@@ -593,7 +773,15 @@ export async function initReportFormViewEdit(params) {
 
   form.reset();
   dateInput.value = report.date || "";
-  weatherSelect.value = report.weather || "晴れ";
+  // 天気は保存された値のまま（未選択 "" を「晴れ」に変えない。選択肢に無い値は選択肢を足して残す）
+  weatherSelect.querySelectorAll("option[data-extra]").forEach((o) => o.remove());
+  const weather = report.weather ?? "晴れ";
+  if (weather && ![...weatherSelect.options].some((o) => o.value === weather)) {
+    const opt = new Option(weather, weather);
+    opt.dataset.extra = "1";
+    weatherSelect.add(opt);
+  }
+  weatherSelect.value = weather;
   temperatureInput.value = report.temperature || "";
   progressInput.value = report.progressPercent ?? "";
   dayStatusSelect.value = ["nowork", "office", "holiday", "rain"].includes(report.dayStatus) ? report.dayStatus : "work";
@@ -634,6 +822,7 @@ export async function initReportFormViewEdit(params) {
   await renderPhotoGrid(report.id);
   applyReadOnlyMode(!hasPermission("editReports") || !!report.finalizedAt);
   renderOutputPanel(report);
+  setupFormMode(params);
   focusRequestedSection();
 }
 
@@ -865,8 +1054,10 @@ form.addEventListener("submit", async (e) => {
     await saveSignature({ reportId: report.id, companyId: row.dataset.companyId, blob });
   }
 
-  showMessage(`保存しました（${report.date}）${progress.value == null ? "。進捗率が未入力です（日誌を開いて入力できます）" : ""}`);
-  navigate(`/sites/${currentSiteId}`);
+  const left = formMissingDetails();
+  const stateNote = formMode.from ? `。カレンダーの表示: ${dayStatusSelect.value !== "work" ? labelOfDayStatus() : left.length ? `一部未記入（残り: ${left.map((d) => d.label).join("・")}）` : "日報あり"}` : "";
+  showMessage(`保存しました（${report.date}）${progress.value == null ? "。進捗率が未入力です（日誌を開いて入力できます）" : ""}${stateNote}`);
+  returnAfterForm(report.date);
 });
 
 cancelBtn.addEventListener("click", async () => {
@@ -877,7 +1068,7 @@ cancelBtn.addEventListener("click", async () => {
     const photos = await listPhotosByReport(draftReportId);
     for (const p of photos) await deletePhoto(p.id);
   }
-  navigate(currentSiteId ? `/sites/${currentSiteId}` : "/sites");
+  returnAfterForm(dateInput.value);
 });
 
 backBtn.addEventListener("click", () => cancelBtn.click());

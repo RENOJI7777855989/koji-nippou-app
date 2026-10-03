@@ -1863,3 +1863,54 @@ dialog h3 {
 .vm-days tr.vm-notworked td { color: #718096; }
 .vm-days .vm-report { min-height: 36px; }
 .billing-close { white-space: nowrap; }
+
+/* 日報カレンダーから簡単に記入・修正（この日の日報・簡単修正モード・進捗率のスライダー） */
+.day-status-row .day-status-full { grid-column: 1 / -1; }
+.cal-just-saved { box-shadow: 0 0 0 3px #f6ad55; animation: cal-saved-pulse 1.2s ease-in-out 2; }
+@keyframes cal-saved-pulse { 50% { box-shadow: 0 0 0 6px #fbd38d; } }
+.day-panel-dialog { width: min(94vw, 520px); }
+.day-panel-state { font-size: 18px; margin: 0 0 8px; padding: 8px 12px; border-radius: 8px; background: #f0fff4; border: 1px solid #9ae6b4; }
+.day-panel-state.is-partial { background: #fffaf0; border-color: #f6ad55; }
+.day-panel-state.is-nowork, .day-panel-state.is-holiday, .day-panel-state.is-rain, .day-panel-state.is-office { background: #edf2f7; border-color: #a0aec0; }
+.day-panel-missing { margin: 0 0 8px; padding: 8px 12px; border: 1px solid #f0b35a; border-radius: 8px; background: #fffaf0; }
+.day-panel-missing h4 { margin: 0 0 4px; color: #b45309; font-size: 16px; }
+.day-panel-missing ul { margin: 0; padding-left: 1.3em; }
+.day-panel-missing li { font-size: 16px; padding: 3px 0; }
+.day-panel-summary { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 10px; font-size: 16px; }
+.day-panel-summary dt { color: #5b6573; }
+.day-panel-summary dd { margin: 0; font-weight: bold; }
+.day-panel-actions { display: grid; gap: 10px; margin-bottom: 6px; }
+.day-panel-actions button { min-height: 56px; font-size: 18px; margin: 0; }
+.progress-slider { margin-top: 6px; }
+.progress-slider-value { font-size: 30px; font-weight: bold; color: #2b6cb0; line-height: 1.2; }
+.progress-slider.is-unset .progress-slider-value { color: #b45309; font-size: 22px; }
+.progress-slider-row { display: flex; align-items: center; gap: 8px; }
+.progress-slider-row .progress-step { min-width: 48px; min-height: 44px; margin: 0; padding: 4px 8px; font-size: 16px; }
+.progress-range { flex: 1 1 auto; min-width: 0; height: 44px; margin: 0; accent-color: #2b6cb0; }
+.progress-range::-webkit-slider-thumb { width: 32px; height: 32px; }
+.progress-slider.is-unset .progress-range { opacity: 0.4; }
+.progress-clear { font-size: 13px; margin: 2px 0 0; }
+.report-quick-bar { position: sticky; top: 0; z-index: 5; margin: 0 0 12px; padding: 10px 12px; border: 2px solid #f0b35a; border-radius: 10px; background: #fffaf0; box-shadow: 0 2px 6px rgba(0,0,0,0.08); max-height: 45vh; overflow-y: auto; }
+.report-quick-title { margin: 0 0 6px; font-weight: bold; font-size: 17px; }
+.report-missing-head { margin: 0 0 4px; color: #b45309; font-weight: bold; }
+.report-missing-guide ul { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.report-missing-item { min-height: 44px; margin: 0; padding: 6px 12px; font-size: 15px; background: #fff; color: #b45309; border: 1px solid #f0b35a; }
+.report-missing-done { margin: 0 0 6px; color: #276749; font-weight: bold; }
+.report-quick-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.report-quick-actions button { min-height: 44px; margin: 0; }
+#reportForm.is-quick .q-hide { display: none !important; }
+#reportForm.is-quick .form-actions { position: sticky; bottom: 0; z-index: 5; background: #fff; padding: 10px 0; border-top: 2px solid #c9d6e8; }
+#reportForm.is-quick #reportSaveBtn { min-height: 56px; font-size: 18px; min-width: 60%; }
+.is-target { outline: 3px solid #dd6b20 !important; outline-offset: 3px; border-radius: 6px; transition: outline-color 0.3s; }
+.dash-att-go { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; width: 100%; min-height: 44px; margin: 2px 0; padding: 6px 10px; text-align: left; font-size: 15px; background: #fff; color: #1f2933; border: 1px solid #f0b35a; border-radius: 6px; cursor: pointer; }
+.dash-att-go::after { content: "入力する ›"; margin-left: auto; color: #b45309; font-size: 14px; white-space: nowrap; }
+.dash-attention li:has(.dash-att-go) { list-style: none; margin-left: -1.3em; }
+/* 本日の現場の流れ: iPad・PCでは「時刻｜種別｜内容｜状態」を1行に、メモと削除を2行目に（行が多くても画面が長くなりすぎない） */
+@media (min-width: 600px) {
+  .timeline-row { display: grid; grid-template-columns: 7.5em 9.5em 1fr 8em; gap: 4px 10px; padding: 8px 10px; margin-bottom: 8px; align-items: end; }
+  .timeline-row label { margin: 0; }
+  .timeline-row .full-row { grid-column: auto; }
+  .timeline-row label.full-row:has(.flowNote) { grid-column: 1 / 4; }
+  .timeline-row .removeRowBtn { grid-column: 4; width: 100%; min-height: 40px; margin: 0; padding: 6px; font-size: 14px; }
+}
+.timeline-row select, .timeline-row input { min-height: 44px; }

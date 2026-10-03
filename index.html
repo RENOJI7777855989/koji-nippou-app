@@ -222,12 +222,21 @@
       <button type="button" id="backToSiteDetailBtn" class="link-btn">← 現場詳細に戻る</button>
       <h2 id="reportFormTitle">日報を作成</h2>
       <form id="reportForm" novalidate>
+        <!-- 日報カレンダーから開いたときの「簡単に修正」「未記入を入力」（js/ui/report-form-view.js の quick モード） -->
+        <div id="reportQuickBar" class="report-quick-bar" hidden>
+          <p id="reportQuickTitle" class="report-quick-title"></p>
+          <div id="reportMissingGuide" class="report-missing-guide"></div>
+          <div class="report-quick-actions">
+            <button type="button" id="reportNextMissingBtn" class="secondary-btn">次の未記入へ</button>
+            <button type="button" id="reportShowAllBtn" class="secondary-btn">すべての項目を表示</button>
+          </div>
+        </div>
         <div class="field-grid">
           <label>日付 <span class="required">必須</span>
             <input type="date" id="date" required>
           </label>
           <label class="progress-field">進捗率（％）
-            <input type="number" id="progressPercent" min="0" max="100" step="1" inputmode="numeric" placeholder="例）40">
+            <input type="number" id="progressPercent" min="0" max="100" step="1" inputmode="numeric" placeholder="未入力">
             <small id="progressPercentHint" class="progress-hint"></small>
           </label>
           <label>日の状態
@@ -242,7 +251,8 @@
           </label>
           <label>天気
             <select id="weather">
-              <option value="晴れ">晴れ</option>
+              <option value="">未選択</option>
+              <option value="晴れ" selected>晴れ</option>
               <option value="曇り">曇り</option>
               <option value="雨">雨</option>
               <option value="雪">雪</option>
@@ -280,45 +290,63 @@
         </div>
         <p id="staffHolidayNote" class="empty-message" hidden>休工日は完全休工のため、現場作業員・監督/職員とも0人として数えます（監督・職員の人数は入力しません）。</p>
 
+        <div class="rf-sec" data-qsec="supervisors">
         <h3>現場監督（職員・当日在席した方のみ追加）</h3>
         <div id="siteSupervisorsContainer"></div>
         <button type="button" id="addSiteSupervisorBtn" class="secondary-btn">＋ 現場監督を追加</button>
+        </div>
 
+        <div class="rf-sec" data-qsec="companies">
         <h3 id="companiesHeading">業者ごとの作業内容・職長サイン</h3>
         <div id="companiesContainer"></div>
         <!-- 業者名・工種の入力候補（業者と工種は別々。業者を選んでも工種は自動で入らない） -->
         <datalist id="companyNameSuggestions"></datalist>
         <datalist id="occupationSuggestions"></datalist>
         <button type="button" id="addCompanyBtn">＋ 業者を追加</button>
+        </div>
 
+        <div class="rf-sec" data-qsec="timeline">
         <h3>本日の現場の流れ（時刻順に現場ダッシュボード・今日の現場シートへ表示）</h3>
-        <p class="app-subtitle">朝礼・打ち合わせ・昼礼・現場巡回・作業などを時刻つきで何件でも登録できます。搬入・搬出は下の「搬入・搬出」に入れると、流れにも自動で表示されます（搬入◆・搬出◇）。</p>
+        <p class="app-subtitle">新しく作る通常作業の日報には、基本スケジュール（08:00朝礼・08:20作業・10:00休憩・12:00昼休憩・15:00休憩・16:45片付け開始・17:00作業終了）が初期値として入ります。時刻・種別・内容は自由に変更・削除でき、打ち合わせ・現場巡回なども追加できます（表示は時刻順）。搬入・搬出は下の「搬入・搬出」に入れると、流れにも自動で表示されます（搬入◆・搬出◇）。</p>
         <div id="timelineContainer"></div>
-        <button type="button" id="addTimelineBtn" class="secondary-btn">＋ 予定・作業を追加</button>
+        <p id="timelineDefaultNote" class="empty-message" hidden></p>
+        <button type="button" id="addTimelineBtn" class="secondary-btn">＋ 流れを追加</button>
+        </div>
 
+        <div class="rf-sec" data-qsec="deliveries">
         <h3 id="deliveriesHeading">搬入・搬出</h3>
         <div id="deliveriesContainer"></div>
         <div class="delivery-add-btns">
           <button type="button" id="addDeliveryBtn" class="secondary-btn">＋ 搬入を追加</button>
           <button type="button" id="addCarryOutBtn" class="secondary-btn">＋ 搬出を追加</button>
         </div>
+        </div>
 
+        <div class="rf-sec" data-qsec="tomorrow">
         <label>明日の予定
           <textarea id="tomorrowPlan" rows="3"></textarea>
         </label>
+        </div>
+        <div class="rf-sec" data-qsec="focus">
         <label>本日の重点指示
           <textarea id="focusInstructions" rows="3" placeholder="例）開口部の養生確認を徹底、重機作業時は誘導員を配置"></textarea>
           <small class="empty-message">03-2の「本日の重点指示」欄（5行）に1行ずつ出力し、ダッシュボードにも表示します。</small>
         </label>
+        </div>
+        <div class="rf-sec" data-qsec="coordination">
         <label>作業間の連絡・調整
           <textarea id="workCoordination" rows="3" placeholder="例）午後は塗装と足場解体が同じ区画のため時間をずらす"></textarea>
           <small class="empty-message">03-2の「作業間の連絡・調整」欄（6行）に1行ずつ出力し、ダッシュボードにも表示します。</small>
         </label>
+        </div>
+        <div class="rf-sec" data-qsec="remarks">
         <label>連絡事項
           <textarea id="remarks" rows="3" placeholder="例）○○搬入予定、明日の作業変更、元請からの連絡など"></textarea>
           <small class="empty-message">現場ダッシュボード・今日の現場シートの「連絡事項」に表示されます（以前の「備考」と同じ欄です）。</small>
         </label>
+        </div>
 
+        <div class="rf-sec" data-qsec="patrol">
         <h3>巡回点検記録</h3>
         <label>巡回者
           <input type="text" id="patrolInspectorName" placeholder="例）山田太郎">
@@ -327,12 +355,15 @@
         <label>巡回点検項目に対する是正指示（コメント）
           <textarea id="patrolComment" rows="3"></textarea>
         </label>
+        </div>
 
+        <div class="rf-sec" data-qsec="photos">
         <h3>写真</h3>
         <label class="full-width" id="photoInputLabel">写真を追加（複数選択可）
           <input type="file" id="photoInput" accept="image/*" multiple capture="environment">
         </label>
         <div id="photoGrid" class="photo-grid"></div>
+        </div>
 
         <div class="form-actions">
           <button type="submit" id="reportSaveBtn">保存</button>
@@ -1057,6 +1088,16 @@
   </dialog>
 
   <!-- 日報カレンダーの「日報なし」の日: この日の状態を登録（js/ui/day-status-dialog.js） -->
+  <!-- 日報カレンダーで日報のある日を押したとき: この日の日報の状況（js/ui/day-panel-dialog.js） -->
+  <dialog id="dayPanelDialog" class="day-status-dialog day-panel-dialog">
+    <h3 id="dayPanelTitle"></h3>
+    <div id="dayPanelBody"></div>
+    <div id="dayPanelActions" class="day-panel-actions"></div>
+    <div class="form-actions">
+      <button type="button" id="dayPanelCloseBtn" class="secondary-btn">閉じる</button>
+    </div>
+  </dialog>
+
   <dialog id="dayStatusDialog" class="day-status-dialog">
     <div id="dayStatusChoose">
       <h3 id="dayStatusDialogTitle">この日の状態を登録</h3>
@@ -1094,8 +1135,8 @@
         <textarea id="dayStatusRemarks" rows="3"></textarea>
       </label>
       <div class="day-status-row">
-        <label>進捗率（％・任意）
-          <input type="number" id="dayStatusProgress" min="0" max="100" step="1" inputmode="numeric" placeholder="例）40">
+        <label class="day-status-full">進捗率（％・任意）
+          <input type="number" id="dayStatusProgress" min="0" max="100" step="1" inputmode="numeric" placeholder="未入力">
         </label>
         <label>天気
           <select id="dayStatusWeather">

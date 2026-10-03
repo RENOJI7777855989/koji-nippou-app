@@ -17,10 +17,38 @@ export const FLOW_KINDS = [
   { value: "churei", label: "昼礼" },
   { value: "patrol", label: "現場巡回" },
   { value: "work", label: "作業" },
+  { value: "break", label: "休憩" },
+  { value: "cleanup", label: "片付け開始" },
+  { value: "workend", label: "作業終了" },
   { value: "inspection", label: "検査・立会" },
   { value: "other", label: "その他" },
   { value: "meeting", label: "朝礼・打合せ", legacy: true }
 ];
+
+/**
+ * 通常作業の日報を新しく作るときに「本日の現場の流れ」へ入れる初期値（基本スケジュール）。
+ * 固定値ではなく、入力画面で時刻・種別・内容の変更・削除・追加ができる。12:00は「昼休憩」という
+ * 種別は作らず、種別「休憩」・内容「昼休憩」とする。
+ * 入れるのは新規の通常作業の日報だけ（既存の日報には足さない。現場作業なし・休工日・雨天作業不可日・
+ * 事務作業日には入れない）。現場掲示・A3はこの日報のデータをそのまま表示する（別のデータは作らない）。
+ */
+export const DEFAULT_WORKDAY_TIMELINE = [
+  { time: "08:00", kind: "chorei", title: "朝礼" },
+  { time: "08:20", kind: "work", title: "作業" },
+  { time: "10:00", kind: "break", title: "休憩" },
+  { time: "12:00", kind: "break", title: "昼休憩" },
+  { time: "15:00", kind: "break", title: "休憩" },
+  { time: "16:45", kind: "cleanup", title: "片付け開始" },
+  { time: "17:00", kind: "workend", title: "作業終了" }
+];
+
+/** 初期値の流れの行（id は呼び出し側で付ける）。状態は「予定」 */
+export const defaultWorkdayTimeline = () => DEFAULT_WORKDAY_TIMELINE.map((r) => ({ ...r, status: "plan", note: "" }));
+
+/** 初期値のまま（時刻・種別・内容・状態・メモを変えていない）行か */
+export const isUntouchedDefaultFlowRow = (row) =>
+  DEFAULT_WORKDAY_TIMELINE.some((d) => d.time === normalizeTime(row?.time) && d.kind === row?.kind && d.title === String(row?.title || "").trim())
+  && (row?.status || "plan") === "plan" && !String(row?.note || "").trim();
 
 /** 状態。done は「実際に行った」の意味なので表示は「実施済み」（保存値は以前と同じ。以前の表示は「実績」） */
 export const FLOW_STATUSES = [

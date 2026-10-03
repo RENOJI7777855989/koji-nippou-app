@@ -55,6 +55,9 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
   const kinds = [["08:00", "chorei", "全体朝礼"], ["10:00", "uchiawase", "設備打合せ"], ["12:00", "churei", "昼礼・連絡"], ["14:00", "patrol", "3階確認"]];
   const kindOptions = await page.evaluate(() => { document.getElementById("addTimelineBtn").click(); const o = [...document.querySelector(".timeline-row:last-child .flowKind").options].map((x) => x.textContent); document.querySelector(".timeline-row:last-child").remove(); return o; });
   check("種別の選択肢: 朝礼・打ち合わせ・昼礼・現場巡回が別々にある（以前の「朝礼・打合せ」は新しい行には出さない）", ["朝礼", "打ち合わせ", "昼礼", "現場巡回"].every((k) => kindOptions.includes(k)) && !kindOptions.includes("朝礼・打合せ"), kindOptions.join("・"));
+  // 新規の通常作業の日報には流れの初期値（基本スケジュール7件）が入るので、この確認では外して確認用の行だけにする
+  // （初期値そのものの確認は tests/calendar-quick-edit.js）
+  await page.evaluate(() => document.querySelectorAll("#timelineContainer .timeline-row").forEach((r) => r.remove()));
   for (const [t, k, title] of kinds) {
     await page.click("#addTimelineBtn");
     const row = page.locator(".timeline-row").last();

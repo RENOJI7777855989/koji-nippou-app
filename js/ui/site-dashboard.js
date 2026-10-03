@@ -23,7 +23,7 @@ import { listKySubmissions, addKyVendor, setKyState } from "../ky/kySubmissions.
 import { showMessage } from "./common.js";
 
 const root = document.getElementById("siteDashboard");
-let current = { site: null, date: null, onFilter: null };
+let current = { site: null, date: null, onFilter: null, onOpenDay: null };
 // 表示中のタブ（board=現場掲示 / manage=監督管理）。端末ごとの表示の好みとして覚える（保存できなくても動く）
 const TAB_KEY = "siteDashboardTab";
 let currentTab = (() => { try { return localStorage.getItem(TAB_KEY) === "manage" ? "manage" : "board"; } catch { return "board"; } })();
@@ -43,6 +43,8 @@ const fmtDate = (iso, weekday) => {
   const [, m, d] = iso.split("-").map(Number);
   return `${m}/${d}（${weekday}）`;
 };
+
+const fmtShortDate = (iso) => { const [, m, d] = String(iso || "").split("-").map(Number); return m ? `${m}/${d}` : ""; };
 
 async function loadModel(site, date) {
   const reports = (await listReportsBySite(site.id)).filter((r) => !r.isDeleted);
@@ -73,7 +75,7 @@ function render(model) {
         .map((f) => `<li class="dash-flow-item${f.kind === "delivery" ? ` is-delivery${f.direction === "out" ? " is-out" : ""}` : ""}${f.cancelled ? " is-cancelled" : ""}">
           <span class="dash-flow-time">${escapeHtml(f.time || "--:--")}</span>
           <span class="dash-flow-mark" aria-hidden="true">${f.mark}</span>
-          <span class="dash-flow-body"><span class="dash-flow-title">${f.kind !== "delivery" && f.kindLabel && f.title !== f.kindLabel ? `<span class="dash-kind">${escapeHtml(f.kindLabel)}</span>` : ""}${escapeHtml(f.title)}</span>${f.note ? `<span class="dash-flow-note">${escapeHtml(f.note)}</span>` : ""}</span>
+          <span class="dash-flow-body"><span class="dash-flow-title">${f.kind !== "delivery" && f.kindLabel && f.title !== f.kindLabel && !(f.flowKind === "break" && String(f.title || "").includes("休憩")) ? `<span class="dash-kind">${escapeHtml(f.kindLabel)}</span>` : ""}${escapeHtml(f.title)}</span>${f.note ? `<span class="dash-flow-note">${escapeHtml(f.note)}</span>` : ""}</span>
           ${f.status ? `<span class="dash-badge">${escapeHtml(f.status)}</span>` : ""}
         </li>`)
         .join("")}</ol>`
@@ -193,8 +195,8 @@ function render(model) {
   const att = model.attention;
   const checksHtml = `
     <div class="dash-attention${att.length ? " has-items" : ""}">
-      <h4>要確認 ${att.length}件</h4>
-      ${att.length ? `<ul>${att.map((c) => `<li><b>${escapeHtml(c.label)}</b>　${escapeHtml(c.value)}</li>`).join("")}</ul>` : `<p class="dash-sub">要確認の項目はありません。</p>`}
+      <h4>要確認 ${att.length}件（${escapeHtml(fmtShortDate(model.header.date))}の日報）</h4>
+      ${att.length ? `<ul>${att.map((c, i) => `<li>${canEdit && c.target ? `<button type="button" class="dash-att-go" data-att="${i}"><b>${escapeHtml(c.label)}</b>　${escapeHtml(c.value)}</button>` : `<b>${escapeHtml(c.label)}</b>　${escapeHtml(c.value)}`}</li>`).join("")}</ul>` : `<p class="dash-sub">要確認の項目はありません。</p>`}
     </div>
     <dl class="dash-checks">${model.checks.map((c) => `<dt>${escapeHtml(c.label)}</dt><dd class="lv-${c.level}">${escapeHtml(c.value)}</dd>`).join("")}</dl>`;
   // 昨日 → 今日（片方の日報が無ければ比較しない）
@@ -345,6 +347,12 @@ function parkCalendar() {
   if (cal && calendarHome && root.contains(cal)) calendarHome.after(cal);
 }
 
+/** 表示するタブを切り替える（日報カレンダーから開いた日報を保存して戻ったときは監督管理） */
+export function setDashboardTab(tab) {
+  currentTab = tab === "manage" ? "manage" : "board";
+  try { localStorage.setItem(TAB_KEY, currentTab); } catch { /* 保存できない環境でも切り替えは動く */ }
+}
+
 async function refresh() {
   const model = await loadModel(current.site, current.date);
   current.model = model;
@@ -384,6 +392,17 @@ root?.addEventListener("click", async (e) => {
   if (nav) {
     current.date = nav.dataset.today ? todayIso() : shiftDate(current.date, Number(nav.dataset.shift));
     await refresh();
+    return;
+  }
+  // 今日の確認事項・要確認: その日の日報の該当箇所を開く（日報なしはカレンダーと同じ「この日の状態」）
+  const attBtn = e.target.closest(".dash-att-go[data-att]");
+  if (attBtn) {
+    const c = current.model?.attention?.[Number(attBtn.dataset.att)];
+    if (!c?.target) return;
+    if (c.target.focus === "day" || !current.model.reportId) { current.onOpenDay?.(current.date); return; }
+    const q = new URLSearchParams({ mode: "missing", focus: c.target.focus, from: "check" });
+    if (c.target.companyId) q.set("cid", c.target.companyId);
+    navigate(`/sites/${current.site.id}/report/${current.model.reportId}?${q}`);
     return;
   }
   const statusBtn = e.target.closest(".dash-status-row[data-filter]");
@@ -427,9 +446,9 @@ root?.addEventListener("change", async (e) => {
  * @param {object} site
  * @param {{onFilter?: (filter: string) => void}} [options] 日誌状況の数字を押したときに日報一覧を絞り込む
  */
-export async function renderSiteDashboard(site, { onFilter } = {}) {
+export async function renderSiteDashboard(site, { onFilter, onOpenDay } = {}) {
   if (!root) return;
   const keepDate = current.site?.id === site.id && current.date ? current.date : todayIso();
-  current = { site, date: keepDate, onFilter, model: null };
+  current = { site, date: keepDate, onFilter, onOpenDay, model: null };
   await refresh();
 }

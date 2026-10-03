@@ -37,7 +37,7 @@ export function buildTodaySheetHtml(model) {
       : `<p class="empty">${esc(b.dayStateLabel || "本日の作業（日誌の業者欄）は未入力")}</p>`;
 
   // 流れが多い日は2列に分けて並べる（左列→右列の順に時刻順）。搬入・搬出の詳細は右の表にあるので流れでは1行
-  const flowRow = (f) => `<tr class="${f.kind === "delivery" ? `dlv${f.direction === "out" ? " out" : ""}` : ""}${f.cancelled ? " cancelled" : ""}"><td class="t">${esc(f.time || "")}</td><td class="mk">${f.mark}</td><td class="ti">${f.kind !== "delivery" && f.flowKind !== "work" && f.kindLabel && f.title !== f.kindLabel ? `<span class="kd">${esc(f.kindLabel)}</span>` : ""}${esc(f.title)}${f.note && f.kind !== "delivery" ? `<div class="nt">${esc(f.note)}</div>` : ""}</td><td class="st">${esc(f.status || "")}</td></tr>`;
+  const flowRow = (f) => `<tr class="${f.kind === "delivery" ? `dlv${f.direction === "out" ? " out" : ""}` : ""}${f.cancelled ? " cancelled" : ""}"><td class="t">${esc(f.time || "")}</td><td class="mk">${f.mark}</td><td class="ti">${f.kind !== "delivery" && f.flowKind !== "work" && f.kindLabel && f.title !== f.kindLabel && !(f.flowKind === "break" && String(f.title || "").includes("休憩")) ? `<span class="kd">${esc(f.kindLabel)}</span>` : ""}${esc(f.title)}${f.note && f.kind !== "delivery" ? `<div class="nt">${esc(f.note)}</div>` : ""}</td><td class="st">${esc(f.status || "")}</td></tr>`;
   const FLOW_TWO_COLUMNS_FROM = 18;
   const flowTable = (rows) => `<table class="flow">${rows.map(flowRow).join("")}</table>`;
   const flow = !b.flow.length

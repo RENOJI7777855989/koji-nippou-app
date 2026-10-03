@@ -14,6 +14,7 @@ import { createReport, listReportsBySite } from "../reports.js";
 import { DAY_STATUSES, labelOf } from "../dashboard/dailyFlow.js";
 import { navigate } from "../router.js";
 import { showMessage } from "./common.js";
+import { attachProgressSlider } from "./progress-slider.js";
 
 const dialog = document.getElementById("dayStatusDialog");
 const chooseEl = document.getElementById("dayStatusChoose");
@@ -31,6 +32,7 @@ const rainReasonEl = document.getElementById("dayStatusRainReason");
 const staffFieldsEl = document.getElementById("dayStatusStaffFields");
 const staffCountEl = document.getElementById("dayStatusStaffCount");
 const staffWorkEl = document.getElementById("dayStatusStaffWork");
+const progressSlider = attachProgressSlider(progressEl); // 進捗率のスライダー（空欄＝未入力のまま）
 
 let current = { site: null, date: "", status: "", onSaved: null };
 
@@ -62,7 +64,7 @@ dialog?.addEventListener("click", (e) => {
   if (status === "work") {
     // 通常作業は既存の日報作成画面で入力する
     dialog.close();
-    navigate(`/sites/${current.site.id}/report/new?date=${current.date}`);
+    navigate(`/sites/${current.site.id}/report/new?date=${current.date}&from=calendar`); // 保存後はカレンダーへ戻る
     return;
   }
   current.status = status;
@@ -70,6 +72,7 @@ dialog?.addEventListener("click", (e) => {
   remarksLabelEl.textContent = status === "office" ? "連絡事項・事務作業の内容（任意）" : "連絡事項（任意）";
   remarksEl.value = "";
   progressEl.value = "";
+  progressSlider?.sync();
   weatherEl.value = ""; // 天気は推測しない（雨天作業不可日でも「雨」を自動では入れない）
   rainFieldsEl.hidden = status !== "rain";
   rainWorkEl.value = "";
