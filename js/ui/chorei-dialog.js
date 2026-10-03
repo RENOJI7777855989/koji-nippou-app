@@ -99,7 +99,14 @@ const focusNext = (index) => {
 
 bodyEl?.addEventListener("input", updateProgress);
 // 欄に移ったら中身を選択する（既に入っている人数をそのまま打ち直せる）
-bodyEl?.addEventListener("focusin", (e) => { if (e.target.classList.contains("chorei-count")) setTimeout(() => e.target.select(), 0); });
+// select() はその欄へ入力の場所を移すので、少し後で実行する選択は「その欄にまだ入力の場所があり、まだ何も打っていない」ときだけ
+// （すばやく次の欄へ移ったときに、前の欄へ入力の場所が戻って数字が前の欄に入る・消えるのを防ぐ）
+bodyEl?.addEventListener("focusin", (e) => {
+  const input = e.target;
+  if (!input.classList.contains("chorei-count")) return;
+  const valueAtFocus = input.value;
+  setTimeout(() => { if (document.activeElement === input && input.value === valueAtFocus) input.select(); }, 0);
+});
 bodyEl?.addEventListener("keydown", (e) => {
   if (e.key !== "Enter" || !e.target.classList.contains("chorei-count")) return;
   e.preventDefault();

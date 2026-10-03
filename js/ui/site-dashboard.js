@@ -21,7 +21,7 @@ import { BOARD_SECTIONS, BOARD_LAYOUT_VERSION, KY_BOARD_LABELS, buildInfoBand } 
 import { openReportPrintDialog } from "./report-print-dialog.js";
 import { openBoardPdfDialog } from "./board-pdf.js";
 import { openChoreiDialog } from "./chorei-dialog.js";
-import { listKySubmissions, addKyVendor, setKyState } from "../ky/kySubmissions.js";
+import { listKySubmissions, addKyVendor, setKyState, deleteKyVendor } from "../ky/kySubmissions.js";
 import { showMessage } from "./common.js";
 
 const root = document.getElementById("siteDashboard");
@@ -245,14 +245,15 @@ function render(model) {
   const kyRowHtml = (r) => `<tr class="ky-${r.state}"><td><b>${escapeHtml(r.vendorName)}</b></td>
       <td><div class="dash-ky-states" role="group" aria-label="${escapeHtml(r.vendorName)}の提出状況">${[["submitted", "提出済み"], ["not_submitted", "未提出"], ["excluded", "対象外"]]
         .map(([v, label]) => `<button type="button" class="dash-ky-state${r.state === v ? " is-on" : ""}" data-ky-id="${escapeHtml(r.id)}" data-ky-state="${v}" aria-pressed="${r.state === v}"${canEdit ? "" : " disabled"}>${label}</button>`).join("")}</div></td>
-      <td class="num">${hhmm(r.submittedAt)}</td></tr>`;
+      <td class="num">${hhmm(r.submittedAt)}</td>
+      <td>${canEdit ? `<button type="button" class="dash-ky-delete" data-ky-delete="${escapeHtml(r.id)}" data-ky-name="${escapeHtml(r.vendorName)}" data-ky-time="${escapeHtml(r.submittedAt ? hhmm(r.submittedAt) : "")}">削除</button>` : ""}</td></tr>`;
   const candidateChips = (names) => names.map((n) => `<button type="button" class="dash-ky-add" data-ky-add="${escapeHtml(n)}"${canEdit ? "" : " disabled"}>＋ ${escapeHtml(n)}</button>`).join("");
   const prevLabel = ky.candidates.previousDate ? (() => { const [, pm, pd] = ky.candidates.previousDate.split("-").map(Number); return `${pm}/${pd}`; })() : "";
   const kyManageHtml = `
     ${kyManageSummary}
     ${ky.notSubmittedCount ? `<p class="dash-ky-missing">未提出: ${ky.notSubmittedNames.map((n) => escapeHtml(n)).join("・")}</p>` : ""}
     ${ky.rows.length
-      ? `<div class="dash-table-wrap"><table class="dash-table dash-ky-table"><thead><tr><th>業者</th><th>状態</th><th class="num">提出時刻</th></tr></thead><tbody>${ky.rows.map(kyRowHtml).join("")}</tbody></table></div>`
+      ? `<div class="dash-table-wrap"><table class="dash-table dash-ky-table"><thead><tr><th>業者</th><th>状態</th><th class="num">提出時刻</th><th>操作</th></tr></thead><tbody>${ky.rows.map(kyRowHtml).join("")}</tbody></table></div>`
       : `<p class="dash-sub">対象業者を選んで登録してください（日報がまだ無くても登録できます）。</p>`}
     ${canEdit
       ? `<div class="dash-ky-candidates">
@@ -385,6 +386,17 @@ root?.addEventListener("click", async (e) => {
     catch (err) { showMessage(err.message, true); }
     return;
   }
+  // 誤って登録した業者を提出状況から削除（確認のうえ。提出時刻も一緒に消える。日報の業者は変えない）
+  const kyDel = e.target.closest("[data-ky-delete]");
+  if (kyDel) {
+    const dlg = document.getElementById("kyDeleteDialog");
+    document.getElementById("kyDeleteText").textContent = `危険予知活動表の提出状況から「${kyDel.dataset.kyName}」を削除しますか？`;
+    document.getElementById("kyDeleteNote").textContent = `${kyDel.dataset.kyTime ? `提出時刻（${kyDel.dataset.kyTime}）も削除されます。` : "提出時刻は記録されていません。"}日報や業者の情報（人数・作業時間・署名・写真・請求人工など）は削除されません。`;
+    dlg.dataset.kyId = kyDel.dataset.kyDelete;
+    dlg.showModal();
+    document.getElementById("kyDeleteCancelBtn").focus();
+    return;
+  }
   const kyAdd = e.target.closest("[data-ky-add]");
   if (kyAdd) {
     try { await addKyVendor({ siteId: current.site.id, date: current.date, vendorName: kyAdd.dataset.kyAdd }); await refresh(); }
@@ -434,6 +446,17 @@ root?.addEventListener("click", async (e) => {
   if (action === "pdf") {
     openBoardPdfDialog({ html: buildTodaySheetHtml(current.model), siteName: current.model.header.siteName, date: current.model.header.date });
   }
+});
+
+document.getElementById("kyDeleteCancelBtn")?.addEventListener("click", () => document.getElementById("kyDeleteDialog").close());
+document.getElementById("kyDeleteConfirmBtn")?.addEventListener("click", async () => {
+  const dlg = document.getElementById("kyDeleteDialog");
+  try {
+    const removed = await deleteKyVendor(dlg.dataset.kyId);
+    dlg.close();
+    showMessage(`危険予知活動表の提出状況から「${removed.vendorName}」を削除しました（提出時刻も削除）。`);
+    await refresh();
+  } catch (err) { showMessage(err.message, true); }
 });
 
 root?.addEventListener("submit", async (e) => {

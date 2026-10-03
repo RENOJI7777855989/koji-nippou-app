@@ -1964,3 +1964,4 @@ dialog h3 {
 @media (max-width: 520px) {
   .chorei-row { grid-template-columns: 1fr auto; grid-template-areas: "who who" "plan state" "input next"; }
 }
+.dash-ky-delete { min-height: 40px; padding: 6px 12px; margin: 0; color: #b02b2b; background: #fff; border: 1px solid #b02b2b; border-radius: 6px; cursor: pointer; }

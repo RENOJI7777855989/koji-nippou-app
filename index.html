@@ -1091,6 +1091,16 @@
   </dialog>
 
   <!-- 日報カレンダーの「日報なし」の日: この日の状態を登録（js/ui/day-status-dialog.js） -->
+  <!-- 危険予知活動表の提出状況から業者を削除する確認（js/ui/site-dashboard.js） -->
+  <dialog id="kyDeleteDialog" class="day-status-dialog report-delete-dialog">
+    <h3 id="kyDeleteText">危険予知活動表の提出状況から削除しますか？</h3>
+    <p id="kyDeleteNote" class="report-delete-warn"></p>
+    <div class="report-delete-actions">
+      <button type="button" id="kyDeleteCancelBtn" class="secondary-btn">キャンセル</button>
+      <button type="button" id="kyDeleteConfirmBtn" class="report-delete-confirm">削除する</button>
+    </div>
+  </dialog>
+
   <!-- 朝礼入力（今日の業者別の実績人数。js/ui/chorei-dialog.js） -->
   <dialog id="choreiDialog" class="chorei-dialog">
     <h3 id="choreiTitle">朝礼入力</h3>

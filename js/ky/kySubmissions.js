@@ -11,7 +11,8 @@
    ・日報の提出・確認とは連動しない（日報提出済み＝KY提出済み、とは扱わない。逆も同じ）。
    ========================================================== */
 
-import { dbGet, dbGetAll, dbPut } from "../db.js";
+import { dbGet, dbGetAll, dbPut, dbDelete } from "../db.js";
+import { recordChange } from "../auditLog.js";
 import { stampNew, stampUpdate } from "../utils.js";
 
 /** 業者ごとの状態。target=対象か、submitted=提出済か */
@@ -71,6 +72,22 @@ export async function addKyVendor({ siteId, date, vendorName }) {
   const record = stampNew({ siteId, date, vendorName: name, target: true, submitted: false, submittedAt: null, order: existing.length, history: [{ state: "not_submitted", at: new Date().toISOString() }] });
   await dbPut("kySubmissions", record);
   return { record, created: true };
+}
+
+/**
+ * 誤って登録した業者を、この日の危険予知活動表の提出状況から削除する（2026-10-03）。
+ * 削除するのはこの1件（現場×日付×業者名）の記録だけで、提出状況・提出時刻（submittedAt）・状態の変更履歴（history。
+ * 提出した時刻を含む）をまとめて保存場所から消す（削除済みの印ではなく完全に消すので、提出時刻だけが残ることはなく、
+ * 以後のバックアップにも入らない）。日報の業者・工種・人数・作業時間・署名・写真・請求人工などは参照も変更もしない
+ * （KYの記録は日報とは独立していて、業者名の文字列を持つだけ）。日報に無い業者でも削除できる。工事完了の現場は不可。
+ */
+export async function deleteKyVendor(id) {
+  const record = await dbGet("kySubmissions", id);
+  if (!record || record.isDeleted) throw new Error("危険予知活動表の記録が見つかりません（すでに削除されている可能性があります）");
+  await assertSiteEditable(record.siteId);
+  await dbDelete("kySubmissions", id);
+  await recordChange({ entityType: "kySubmission", entityId: id, action: "delete", summary: `危険予知活動表の提出状況（${record.date}）から「${record.vendorName}」を削除` });
+  return record;
 }
 
 /** 状態（提出済／未提出／対象外）を変える */
