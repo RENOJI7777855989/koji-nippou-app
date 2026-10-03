@@ -1802,8 +1802,6 @@ dialog h3 {
 .dash-ky-missing { margin: 0 0 6px; color: #b42318; font-weight: bold; }
 .dash-ky-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .dash-ky-list li { font-size: 15px; }
-.dash-ky-list li.is-ok { color: #276749; }
-.dash-ky-list li.is-missing { color: #b42318; }
 .dash-ky-states { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .dash-ky-state { min-height: 40px; padding: 6px 10px; border: 1px solid #c9d6e8; border-radius: 6px; background: #fff; color: #2d3748; cursor: pointer; }
 .dash-ky-state.is-on[data-ky-state="submitted"] { background: #276749; border-color: #276749; color: #fff; }
@@ -1815,3 +1813,8 @@ dialog h3 {
 .dash-ky-add { min-height: 40px; padding: 6px 10px; border: 1px dashed #2b6cb0; border-radius: 6px; background: #f5f9ff; color: #2b6cb0; cursor: pointer; }
 .dash-ky-form { display: flex; gap: 6px; margin-top: 4px; }
 .dash-ky-form input { flex: 1 1 auto; min-width: 0; min-height: 40px; }
+.dash-subhead { margin: 10px 0 4px; font-size: 14px; color: #2d3748; }
+.dash-board-ver { grid-column: 1 / -1; text-align: right; }
+.dash-ky-list li.is-submitted { color: #276749; }
+.dash-ky-list li.is-not_submitted { color: #b42318; }
+.dash-ky-list li.is-excluded { color: #888; }

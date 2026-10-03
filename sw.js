@@ -16,7 +16,7 @@
    そのパスを追加すること（ビルド工程が無い方針のため手動管理）。
    ========================================================== */
 
-const CACHE_NAME = "koji-nippou-v32";
+const CACHE_NAME = "koji-nippou-v33";
 
 const PRECACHE_URLS = [
   "./assets/templates/manifest.json",
@@ -312,6 +312,7 @@ const PRECACHE_URLS = [
   "./js/dashboard/dailyFlow.js",
   "./js/dashboard/siteDashboardModel.js",
   "./js/dashboard/todaySheetHtml.js",
+  "./js/dashboard/boardContent.js",
   "./js/ky/kySubmissions.js",
   "./js/ui/site-dashboard.js",
   "./js/ui/report-print-dialog.js",
@@ -344,7 +345,10 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
+      // ブラウザの一時保存（HTTPキャッシュ。GitHub Pagesは10分）を通さず、必ずサーバーから取り直す。
+      // 一時保存の古いファイルが新しい版のキャッシュに混ざると、画面は新しいのに印刷（A3）だけ古い、
+      // のように版の違うファイルが組み合わさることがあるため
+      .then((cache) => cache.addAll(PRECACHE_URLS.map((url) => new Request(url, { cache: "reload" }))))
       .then(() => self.skipWaiting())
   );
 });

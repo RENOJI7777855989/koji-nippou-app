@@ -127,7 +127,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
     const site = await dbGet("sites", sid); const reports = (await dbGetAll("reports")).filter((r) => r.siteId === sid);
     return buildTodaySheetHtml(buildDashboardModel({ site, reports, signatures: await dbGetAll("signatures"), date, kySubmissions: await listKySubmissions(sid, date) }));
   }, { sid: ids.siteId, date: D });
-  check("10 A3に「本日の危険予知活動表」（サンプル工業 ✓ 提出済み・新規塗装 未提出・提出済み1／対象2）", sheet.includes("本日の危険予知活動表") && sheet.includes("サンプル工業 ✓ 提出済み") && sheet.includes("新規塗装 未提出") && sheet.includes("提出済み 1／対象 2業者"));
+  check("10 A3に「本日の危険予知活動表」（サンプル工業 ✓ 提出済み・新規塗装 未提出・対象2／提出済み1／未提出1）", sheet.includes("本日の危険予知活動表") && sheet.includes("サンプル工業 ✓ 提出済み") && sheet.includes("新規塗装 未提出") && sheet.includes("対象 2　提出済み 1　未提出 1"));
   check("11 A3に監督向けの日誌状況（提出予定・未提出の日数・未署名・未承認・未印刷）・請求人工が無い", !sheet.includes("日誌状況") && !sheet.includes("未承認") && !sheet.includes("未印刷") && !sheet.includes("未署名") && !sheet.includes("提出予定") && !sheet.includes("請求"));
   const sheetPrev = await page.evaluate(async ({ sid }) => {
     const { buildDashboardModel } = await import("/js/dashboard/siteDashboardModel.js"); const { buildTodaySheetHtml } = await import("/js/dashboard/todaySheetHtml.js");
@@ -136,7 +136,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
     const r = reports.find((x) => x.date === "2026-09-28"); r.focusInstructions = "開口部の養生確認";
     return buildTodaySheetHtml(buildDashboardModel({ site, reports, signatures: [], date: "2026-09-28", kySubmissions: [] }));
   }, { sid: ids.siteId });
-  check("A3: 本日の重点指示の欄・業者ごとの人工（稼働人数3→3）があり、請求人工2.5は載らない", sheetPrev.includes("<h2>本日の重点指示</h2>") && sheetPrev.includes("開口部の養生確認") && sheetPrev.includes("<th>人工</th>") && sheetPrev.includes('<td class="c"> / 3</td><td class="c">3</td>') && !sheetPrev.includes("2.5"));
+  check("A3: 本日の重点指示の欄・業者ごとの人工（稼働人数3→3）があり、請求人工2.5は載らない", sheetPrev.includes("<h2>本日の重点指示</h2>") && sheetPrev.includes("開口部の養生確認") && sheetPrev.includes("<th>人工</th>") && sheetPrev.includes(' / <b>3</b></td><td class="c">3</td>') && !sheetPrev.split("<body>")[1].includes("2.5") && !sheetPrev.includes("請求"));
   // A3が1枚に収まる（各欄の文字が切れていない）
   const p2 = await ctx.newPage(); await p2.setContent(sheet); await p2.waitForTimeout(300);
   const fit = await p2.evaluate(() => { dispatchEvent(new Event("beforeprint")); return [...document.querySelectorAll(".box .content")].filter((c) => c.scrollHeight > c.clientHeight + 1).length; });
@@ -158,7 +158,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
     const site = await dbGet("sites", sid); const reports = (await dbGetAll("reports")).filter((r) => r.siteId === sid);
     return buildTodaySheetHtml(buildDashboardModel({ site, reports, signatures: [], date, kySubmissions: await listKySubmissions(sid, date) }));
   }, { sid: ids.siteId, date: D });
-  check("7 対象外: 監督管理では「対象外 1業者」と表に出て、対象の数（2）には入らない。現場掲示・A3には出さない", manage2.includes("対象外 1業者") && manage2.includes("対象 2業者") && manage2.includes("対象外工業") && !board2.includes("対象外工業") && !sheet2.includes("対象外工業"));
+  check("7 対象外: 監督管理では「対象外 1業者」と表に出て、対象の数（2）には入らない。現場掲示・A3には「対象外」と表示", manage2.includes("対象外 1業者") && manage2.includes("対象 2業者") && manage2.includes("対象外工業") && board2.includes("対象外工業 対象外") && sheet2.includes("対象外工業 対象外") && sheet2.includes("対象 2　提出済み 1　未提出 1　対象外 1"));
 
   // ---- 8 日報を後から作っても危険予知活動表は変わらない／日報の確認とは連動しない ----
   const kyBefore = await page.evaluate(async () => JSON.stringify((await (await import("/js/db.js")).dbGetAll("kySubmissions")).sort((a, b) => a.id.localeCompare(b.id))));

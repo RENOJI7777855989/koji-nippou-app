@@ -16,6 +16,7 @@ import { escapeHtml } from "../utils.js";
 import { navigate } from "../router.js";
 import { buildDashboardModel } from "../dashboard/siteDashboardModel.js";
 import { buildTodaySheetHtml } from "../dashboard/todaySheetHtml.js";
+import { BOARD_SECTIONS, BOARD_LAYOUT_VERSION, KY_BOARD_LABELS } from "../dashboard/boardContent.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
 import { listKySubmissions, addKyVendor, setKyState } from "../ky/kySubmissions.js";
 import { showMessage } from "./common.js";
@@ -216,11 +217,9 @@ function render(model) {
 
   // 危険予知活動表（紙のKY活動表が提出されたか。日報とは別の提出物）。掲示は業者ごとの提出済み／未提出だけ（時刻は出さない）
   const ky = model.ky;
-  const kyTargets = ky.rows.filter((r) => r.state !== "excluded");
-  const kySummary = `<p class="dash-ky-summary">対象 <b>${ky.targetCount}</b>業者　提出済み <b>${ky.submittedCount}</b>業者　未提出 <b>${ky.notSubmittedCount}</b>業者</p>`;
   const kyManageSummary = `<p class="dash-ky-summary">対象 <b>${ky.targetCount}</b>業者　提出済み <b>${ky.submittedCount}</b>業者　未提出 <b>${ky.notSubmittedCount}</b>業者　対象外 <b>${ky.excludedCount}</b>業者</p>`;
-  const kyBoardHtml = kyTargets.length
-    ? `<ul class="dash-ky-list">${kyTargets.map((r) => `<li class="${r.state === "submitted" ? "is-ok" : "is-missing"}"><b>${escapeHtml(r.vendorName)}</b>　${r.state === "submitted" ? "✓ 提出済み" : "未提出"}</li>`).join("")}</ul>${kySummary}`
+  const kyBoardHtml = ky.rows.length
+    ? `<ul class="dash-ky-list">${ky.rows.map((r) => `<li class="is-${r.state}"><b>${escapeHtml(r.vendorName)}</b>　${KY_BOARD_LABELS[r.state]}</li>`).join("")}</ul><p class="dash-ky-summary">対象 <b>${ky.targetCount}</b>業者　提出済み <b>${ky.submittedCount}</b>業者　未提出 <b>${ky.notSubmittedCount}</b>業者${ky.excludedCount ? `　対象外 <b>${ky.excludedCount}</b>業者` : ""}</p>`
     : empty("本日の危険予知活動表の対象業者は、まだ登録されていません。");
   const hhmm = (iso) => { if (!iso) return "—"; const t = new Date(iso); return Number.isNaN(t.getTime()) ? "—" : `${t.getHours()}:${String(t.getMinutes()).padStart(2, "0")}`; };
   const kyRowHtml = (r) => `<tr class="ky-${r.state}"><td><b>${escapeHtml(r.vendorName)}</b></td>
@@ -246,11 +245,30 @@ function render(model) {
 
   const worksHtml = model.works.length
     ? `<div class="dash-table-wrap"><table class="dash-table">
-        <thead><tr><th>業者</th><th>職種</th><th>予定/実績</th><th>作業時間</th><th>作業内容</th><th>職長</th><th>使用機械</th></tr></thead>
+        <thead><tr><th>業者</th><th>工種</th><th>予定/実績</th><th>作業時間</th><th>作業内容</th><th>職長</th><th>使用機械</th></tr></thead>
         <tbody>${model.works
           .map((w) => `<tr><td>${escapeHtml(w.vendor)}</td><td>${escapeHtml(w.occupation)}</td><td class="num">${w.planned ?? "-"} / ${w.actual ?? "-"}</td><td>${escapeHtml(w.hours)}${w.hoursDuration ? `<br><small class="dash-sub">${escapeHtml(w.hoursDuration)}</small>` : ""}</td><td>${escapeHtml(w.content)}</td><td>${escapeHtml(w.foreman)}</td><td>${escapeHtml(w.machinery)}</td></tr>`)
           .join("")}</tbody></table></div>`
     : empty("本日の作業（日誌の業者欄）はまだありません。");
+
+  // 現場掲示の欄（欄名・並びは boardContent.js の BOARD_SECTIONS。A3の印刷も同じ定義を使う）
+  const BOARD_ICONS = { works: "👷", flow: "", deliveries: "🚚", focus: "🎯", ky: "📝", safety: "⚠️", staff: "👷", coordination: "🤝", notice: "📢", tomorrow: "📅" };
+  const tomorrowHtml = textCard(model.diary?.tomorrowPlan, "日誌の「明日の予定」に入力すると、ここに表示されます。");
+  const boardBody = {
+    works: model.isWork ? vendorHtml + `<h4 class="dash-subhead">作業内容・職長・使用機械</h4>` + worksHtml : "",
+    flow: flowHtml,
+    deliveries: deliveryHtml,
+    focus: focusHtml,
+    ky: kyBoardHtml,
+    safety: safetyHtml,
+    staff: staffHtml,
+    coordination: coordHtml,
+    notice: noticeHtml,
+    tomorrow: tomorrowHtml
+  };
+  const boardHtml = BOARD_SECTIONS.filter((sec) => boardBody[sec.key])
+    .map((sec) => `<section class="dash-card${sec.key === "works" ? " dash-card-wide" : ""}${sec.key === "flow" ? " dash-card-flow" : ""}${sec.key === "ky" ? " dash-ky-board" : ""}" data-board-section="${sec.key}"><h3>${BOARD_ICONS[sec.key] ? BOARD_ICONS[sec.key] + " " : ""}${escapeHtml(sec.title)}${sec.key === "deliveries" && model.deliveries.length ? `<span class="dash-dlv-count">搬入${inCount}件・搬出${outCount}件</span>` : ""}</h3>${boardBody[sec.key]}</section>`)
+    .join("");
 
   parkCalendar();
   root.innerHTML = `
@@ -282,16 +300,8 @@ function render(model) {
     </div>
     <div class="dash-grid dash-panel" data-panel="board"${currentTab === "board" ? "" : " hidden"}>
       ${boardStateHtml ? `<section class="dash-card dash-card-wide">${boardStateHtml}</section>` : ""}
-      ${model.isWork ? `<section class="dash-card dash-card-wide"><h3>👷 今日の業者別 稼働状況</h3>${vendorHtml}</section>` : ""}
-      ${model.isWork ? `<section class="dash-card dash-card-wide"><h3>本日の作業</h3>${worksHtml}</section>` : ""}
-      <section class="dash-card dash-card-flow"><h3>本日の現場の流れ</h3>${flowHtml}</section>
-      <section class="dash-card"><h3>🚚 本日の搬入・搬出${model.deliveries.length ? `<span class="dash-dlv-count">搬入${inCount}件・搬出${outCount}件</span>` : ""}</h3>${deliveryHtml}</section>
-      <section class="dash-card"><h3>🎯 本日の重点指示</h3>${focusHtml}</section>
-      <section class="dash-card"><h3>⚠️ 本日の安全注意事項（業者別）</h3>${safetyHtml}</section>
-      <section class="dash-card"><h3>🤝 作業間の連絡・調整</h3>${coordHtml}</section>
-      <section class="dash-card"><h3>📢 連絡事項</h3>${noticeHtml}</section>
-      <section class="dash-card"><h3>👷 本日の人員</h3>${staffHtml}</section>
-      <section class="dash-card dash-ky-board"><h3>📝 本日の危険予知活動表</h3>${kyBoardHtml}</section>
+      ${boardHtml}
+      <p class="dash-sub dash-board-ver">現場掲示レイアウト ${escapeHtml(BOARD_LAYOUT_VERSION)}版（「🖨 現場掲示をA3印刷」も同じ内容・同じ版で印刷します）</p>
     </div>
     <div class="dash-grid dash-panel" data-panel="manage"${currentTab === "manage" ? "" : " hidden"}>
       <section class="dash-card dash-card-wide dash-today"><h3>✅ 今日の確認事項</h3>${stateHtml}${checksHtml}</section>
@@ -305,7 +315,7 @@ function render(model) {
     </div>
     <div class="dash-actions">
       ${canEdit ? `<button type="button" data-action="diary">＋日誌</button><button type="button" data-action="deliveries" class="secondary-btn">🚚搬入・搬出</button><button type="button" data-action="companies" class="secondary-btn">👷業者</button>` : ""}
-      <button type="button" data-action="print" class="secondary-btn">🖨A3印刷</button>
+      <button type="button" data-action="print" class="secondary-btn">🖨 現場掲示をA3印刷</button>
     </div>`;
   root.hidden = false;
   // 日報カレンダーを監督管理タブの中へ移す（要素そのものを移すので、描画・クリックの処理はそのまま動く）
@@ -376,7 +386,7 @@ root?.addEventListener("click", async (e) => {
     openReportPrintDialog({
       html,
       mode: "print",
-      title: `今日の現場シート（${current.model.header.date}）A3横`,
+      title: `現場掲示 今日の現場シート（${current.model.header.date}）A3横`,
       note: "A3・横向きで印刷してください（iPadは共有→プリント、Windowsは印刷画面で用紙A3・横を選択）。03-2の日報とは別の帳票で、日報の印刷記録には残りません。"
     });
   }
