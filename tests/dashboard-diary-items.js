@@ -124,6 +124,8 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
   await page.click("#reportSaveBtn"); await page.waitForSelector("#view-site-detail:not([hidden])");
   const saved = await page.evaluate(async (id) => (await (await import("/js/db.js")).dbGet("reports", id)), oldId);
   check("以前の日報を何も変えずに保存しても、自由入力の作業時間・以前の種別・連絡事項は消えない", saved.companies[0].workHours === "朝から夕方" && saved.companies[1].workHours === "08:00～17:00" && saved.timeline[0].kind === "meeting" && saved.remarks === "以前の備考", `${saved.companies.map((c) => c.workHours).join(" / ")}`);
+  // 保存後のダッシュボードは保存した日報（前日）の日付を表示するので、いったん「今日」に戻してから前の日へ
+  await page.click("#siteDashboard .dash-nav[data-today]"); await page.waitForTimeout(500);
   const dateBefore = await page.inputValue("#siteDashboard .dash-date-input");
   await page.click("#siteDashboard .dash-nav[data-shift='-1']");
   // 「旧工業」は前の作業日の業者として危険予知活動表の候補にも出るので、日付が変わるのを待つ

@@ -707,8 +707,11 @@ function setupFormMode(params) {
 }
 
 /** 保存・キャンセル後に戻る（カレンダー・今日の確認事項から開いたときは、現場詳細の監督管理タブのカレンダーのその日へ） */
-function returnAfterForm(date) {
+function returnAfterForm(date, saved = false) {
   if (formMode.from && currentSiteId) window.__returnToCalendar = { siteId: currentSiteId, date, scroll: formMode.from === "calendar" };
+  // 現場ダッシュボード（現場掲示・A3印刷の元）を、保存した日報（カレンダー等から開いた日報）の日付で表示する。
+  // 以前は今日の日付のままで、今日以外の日の日報を保存しても、その日の流れなどがダッシュボード・A3に出なかった
+  if (currentSiteId && /^\d{4}-\d{2}-\d{2}$/.test(date || "") && (saved || formMode.from)) window.__dashboardDate = { siteId: currentSiteId, date };
   navigate(currentSiteId ? `/sites/${currentSiteId}` : "/sites");
 }
 
@@ -1057,7 +1060,7 @@ form.addEventListener("submit", async (e) => {
   const left = formMissingDetails();
   const stateNote = formMode.from ? `。カレンダーの表示: ${dayStatusSelect.value !== "work" ? labelOfDayStatus() : left.length ? `一部未記入（残り: ${left.map((d) => d.label).join("・")}）` : "日報あり"}` : "";
   showMessage(`保存しました（${report.date}）${progress.value == null ? "。進捗率が未入力です（日誌を開いて入力できます）" : ""}${stateNote}`);
-  returnAfterForm(report.date);
+  returnAfterForm(report.date, true);
 });
 
 cancelBtn.addEventListener("click", async () => {

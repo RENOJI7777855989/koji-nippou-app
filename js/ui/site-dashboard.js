@@ -448,7 +448,10 @@ root?.addEventListener("change", async (e) => {
  */
 export async function renderSiteDashboard(site, { onFilter, onOpenDay } = {}) {
   if (!root) return;
-  const keepDate = current.site?.id === site.id && current.date ? current.date : todayIso();
+  // 日報を保存して戻ってきたときは、その日報の日付を表示する（report-form-view.js の returnAfterForm）
+  const asked = window.__dashboardDate;
+  window.__dashboardDate = null;
+  const keepDate = asked?.siteId === site.id ? asked.date : current.site?.id === site.id && current.date ? current.date : todayIso();
   current = { site, date: keepDate, onFilter, onOpenDay, model: null };
   await refresh();
 }

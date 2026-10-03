@@ -66,6 +66,8 @@ const day = (n) => { const d = new Date(Date.now() + n * 86400000); return `${d.
   const r45 = await writeDiary(day(-1), 45, "サンプル工業");
   check("6 別の日の日誌に45%を保存", r45?.progressPercent === 45);
   await page.goto(`${BASE}#/sites/${siteId}`); await page.waitForSelector("#siteDashboard:not([hidden])");
+  // 保存後のダッシュボードは保存した日報の日付を表示するので、いったん「今日」に戻してから前の日へ
+  await page.click("#siteDashboard .dash-nav[data-today]"); await page.waitForTimeout(500);
   await page.click("#siteDashboard .dash-nav[data-shift='-1']"); await page.waitForTimeout(500);
   const dash45 = (await page.textContent("#siteDashboard")).replace(/\s+/g, " ");
   check("7 ダッシュボード（45%の日）は「進捗 45%」・進捗の推移 40%→45%", dash45.includes("進捗 45%") && /進捗の推移: .*40% → .*45%/.test(dash45), (dash45.match(/進捗[^工]{0,40}/g) || []).join(" | "));
