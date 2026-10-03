@@ -76,15 +76,16 @@ export function buildTodaySheetHtml(model) {
 
   // 日誌の内容のあとに手書き用の罫線。内容が多い日は、その行数だけ罫線を減らす（欄からあふれないように）
   const notesBox = (text, lines) => `${text ? `<div class="filled">${br(text)}</div>` : ""}${ruled(Math.max(0, lines - (text ? String(text).split("\n").length : 0)))}`;
-  const meta = [h.startDate || h.endDate ? `工期 ${esc(h.startDate || "未定")}〜${esc(h.endDate || "未定")}` : "", esc(h.progressText), esc(h.elapsedText), h.remainingDays != null ? `残り ${h.remainingDays}日` : "", h.dayNumber != null ? `${h.dayNumber}日目` : ""].filter(Boolean).join("　｜　");
+  // 上部の情報帯（工期・本日・工事○日目・工期経過・残り・進捗・天気）。画面の現場掲示と同じ buildInfoBand から作る
+  const band = `<div class="band">${b.band.map((it) => `<div class="bi bi-${it.key}${it.missing ? " missing" : ""}"><span class="bl">${esc(it.label)}</span><span class="bv">${esc(it.value)}</span></div>`).join("")}</div>`;
 
   const body = `
   <div class="sheet">
     <header class="top">
       <div class="title">現場掲示　今日の現場シート</div>
-      <div class="site">${esc(h.siteName)}${h.constructionNumber ? `<span class="no">工事番号 ${esc(h.constructionNumber)}</span>` : ""}</div>
-      <div class="date">${esc(dateText)}${h.weather || h.temperature ? `<span class="wx">${esc(h.weather)}${h.temperature ? `　${esc(h.temperature)}` : ""}</span>` : ""}</div>
-      <div class="meta">${meta}${b.dayStateLabel ? `　<b class="daystate">${esc(b.dayStateLabel)}</b>` : ""}<span class="ver">現場掲示レイアウト ${esc(b.version)}版</span></div>
+      <div class="site">${esc(h.siteName)}${h.constructionNumber ? `<span class="no">工事番号 ${esc(h.constructionNumber)}</span>` : ""}<span class="ver">現場掲示レイアウト ${esc(b.version)}版</span></div>
+      <div class="date">${esc(dateText)}${b.dayStateLabel ? `<b class="daystate">${esc(b.dayStateLabel)}</b>` : ""}</div>
+      ${band}
     </header>
     ${box("works", works, "worksbox")}
     <main class="mid">
@@ -137,9 +138,13 @@ export function buildTodaySheetHtml(model) {
   .site { font-size: 18pt; font-weight: bold; }
   .site .no { font-size: 11pt; font-weight: normal; margin-left: 6mm; color: #444; }
   .date { font-size: 15pt; font-weight: bold; text-align: right; }
-  .date .wx { font-size: 12pt; font-weight: normal; margin-left: 5mm; }
-  .meta { grid-column: 1 / -1; font-size: 10.5pt; color: #333; }
-  .meta .daystate { color: #553c9a; }
+  .date .daystate { font-size: 12pt; color: #553c9a; margin-left: 4mm; }
+  .band { grid-column: 1 / -1; display: grid; grid-template-columns: 2.4fr 1.3fr 1fr 1fr 1fr 1.3fr 1.2fr; gap: 1.5mm; margin-top: 1mm; }
+  .bi { border: 0.3mm solid #9fb3d1; border-radius: 1mm; padding: 0.4mm 2mm; display: flex; align-items: baseline; gap: 2mm; min-width: 0; white-space: nowrap; overflow: hidden; }
+  .bi .bl { font-size: 8.5pt; color: #4a5568; }
+  .bi .bv { font-size: 11pt; font-weight: bold; overflow: hidden; text-overflow: ellipsis; }
+  .bi.missing .bv { color: #8a1c12; font-weight: normal; }
+  .site .ver { font-size: 7pt; font-weight: normal; color: #999; margin-left: 5mm; }
   .box { border: 0.4mm solid #555; border-radius: 1.5mm; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
   .box h2 { margin: 0; font-size: 11pt; background: #e8eef7; border-bottom: 0.3mm solid #555; padding: 0.8mm 3mm; }
   .box .content { flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 1.5mm 3mm; font-size: 10.5pt; line-height: 1.3; }
@@ -196,7 +201,6 @@ export function buildTodaySheetHtml(model) {
   .filled { margin-bottom: 1mm; }
   .ruled div { border-bottom: 0.2mm solid #bbb; height: 7mm; }
   .empty { color: #777; margin: 0 0 2mm; }
-  .meta .ver { float: right; font-size: 7.5pt; color: #999; }
   @media screen { body { background: #eee; padding: 8mm 0; } .sheet { background: #fff; box-shadow: 0 0 4mm rgba(0,0,0,.2); padding: 0; } }
 </style></head>
 <body>${body}${fitScript}</body></html>`;

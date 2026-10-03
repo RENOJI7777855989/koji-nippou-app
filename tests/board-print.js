@@ -87,11 +87,11 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
     return { ...r, pages: (pdf.match(/\/Type\s*\/Page[^s]/g) || []).length, a3Landscape: /\/MediaBox\s*\[\s*0\s+0\s+1191/.test(pdf) };
   })();
 
-  check("4 印刷画面に渡るのは新しい現場掲示のA3（見出し「現場掲示　今日の現場シート」・画面と同じレイアウトの版）", html.includes("現場掲示　今日の現場シート") && board.ver.includes("2026-10-03-2") && html.includes("現場掲示レイアウト 2026-10-03-2版") && !html.includes("日誌状況"), board.ver);
+  check("4 印刷画面に渡るのは新しい現場掲示のA3（見出し「現場掲示　今日の現場シート」・画面と同じレイアウトの版）", html.includes("現場掲示　今日の現場シート") && board.ver.includes("2026-10-03-3") && html.includes("現場掲示レイアウト 2026-10-03-3版") && !html.includes("日誌状況"), board.ver);
   const missingInA3 = board.keys.filter((k) => k !== "safety" && !a3.keys.includes(k));
   const titleMismatch = board.keys.filter((k) => a3.titles[k] && !board.titles[board.keys.indexOf(k)].endsWith(" " + a3.titles[k]) && board.titles[board.keys.indexOf(k)] !== a3.titles[k]);
   check("5 画面の現場掲示の欄がすべてA3にあり、欄名が同じ（安全注意事項はA3では作業の表の列）", missingInA3.length === 0 && titleMismatch.length === 0 && html.includes("安全注意事項・使用機械"), `画面 ${board.keys.join(",")} / A3 ${a3.keys.join(",")} / 不一致 ${titleMismatch.join(",")}`);
-  const items = ["掲示塗装", "塗装工事", "掲示設備", "配管工", "08:00～17:00", "08:30～16:30", "外壁中塗り 2階東面", "給水管 3階", "職長甲", "足場上の墜落防止", "全体朝礼", "設備打合せ", "昼礼", "3階巡回", "塗料缶", "12缶", "掲示商事", "誘導員配置", "廃材", "開口部の養生を徹底", "午後は塗装と配管が同じ区画", "明朝は消防検査", "外壁上塗り 3階", "KJ-77", "進捗 30%", "晴れ"];
+  const items = ["掲示塗装", "塗装工事", "掲示設備", "配管工", "08:00～17:00", "08:30～16:30", "外壁中塗り 2階東面", "給水管 3階", "職長甲", "足場上の墜落防止", "全体朝礼", "設備打合せ", "昼礼", "3階巡回", "塗料缶", "12缶", "掲示商事", "誘導員配置", "廃材", "開口部の養生を徹底", "午後は塗装と配管が同じ区画", "明朝は消防検査", "外壁上塗り 3階", "KJ-77", "30%", "晴れ"];
   const notOnScreen = items.filter((t) => !board.text.includes(t)), notInA3 = items.filter((t) => !a3.text.includes(t));
   check("5・16 同じ内容が画面とA3の両方に出る（業者・工種・作業時間・作業内容・職長・安全注意事項・流れ（朝礼・打合せ・昼礼・巡回）・搬入搬出・重点指示・連絡調整・連絡事項・明日の予定・工事番号・進捗・天候）", notOnScreen.length === 0 && notInA3.length === 0, `画面に無い ${notOnScreen.join(",")} / A3に無い ${notInA3.join(",")}`);
   check("16 稼働人数・人工（1人＝1人工）: 塗装 予定4/実績3・人工3、設備 実績2・人工2、合計5人・人工5", html.includes("4 / <b>3</b></td><td class=\"c\">3</td>") && html.includes(" / <b>2</b></td><td class=\"c\">2</td>") && html.includes("<b>5</b>人</td><td class=\"c\">5</td>"));

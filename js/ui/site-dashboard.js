@@ -16,7 +16,7 @@ import { escapeHtml } from "../utils.js";
 import { navigate } from "../router.js";
 import { buildDashboardModel } from "../dashboard/siteDashboardModel.js";
 import { buildTodaySheetHtml } from "../dashboard/todaySheetHtml.js";
-import { BOARD_SECTIONS, BOARD_LAYOUT_VERSION, KY_BOARD_LABELS } from "../dashboard/boardContent.js";
+import { BOARD_SECTIONS, BOARD_LAYOUT_VERSION, KY_BOARD_LABELS, buildInfoBand } from "../dashboard/boardContent.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
 import { listKySubmissions, addKyVendor, setKyState } from "../ky/kySubmissions.js";
 import { showMessage } from "./common.js";
@@ -51,18 +51,11 @@ async function loadModel(site, date) {
   return buildDashboardModel({ site, reports, signatures, date, kySubmissions });
 }
 
-/** 進捗率: 一番新しい日誌の値。その日誌が未入力なら「未入力」（過去の値を現在値として出さない）。工期経過率は別に出す */
-function progressHtml(h) {
-  const md = (iso) => { const [, m, d] = iso.split("-").map(Number); return `${m}/${d}`; };
-  const chips = [];
-  if (h.progressPercent != null) chips.push(`<span class="dash-chip">進捗 <b>${h.progressPercent}%</b>（${md(h.progressDate)}の日誌）</span>`);
-  else if (h.progressDate) chips.push(`<span class="dash-chip is-missing">進捗 <b>未入力</b>（${md(h.progressDate)}の日誌）</span>`);
-  else chips.push(`<span class="dash-chip is-missing">進捗 <b>未入力</b>（日誌がありません）</span>`);
-  if (h.elapsedPct != null) chips.push(`<span class="dash-chip dash-chip-sub">工期経過 ${h.elapsedPct}%</span>`);
-  return chips.join("");
+/** 上部の情報帯（工期・本日・工事○日目・工期経過・残り・進捗・天気）。A3の印刷と同じ buildInfoBand から作る */
+function infoBandHtml(model) {
+  return buildInfoBand(model).map((it) => `<span class="dash-chip dash-band-${it.key}${it.missing ? " is-missing" : ""}">${escapeHtml(it.label)} <b>${escapeHtml(it.value)}</b></span>`).join("");
 }
 
-/** 進捗の推移（日誌に記録した値。直近5件） */
 function progressHistoryHtml(h) {
   if (!h.progressHistory?.length) return "";
   const md = (iso) => { const [, m, d] = iso.split("-").map(Number); return `${m}/${d}`; };
@@ -289,11 +282,7 @@ function render(model) {
       <p class="dash-site">${escapeHtml(h.siteName)}　<span class="dash-sub">${escapeHtml(fmtDate(h.date, h.weekday))}</span></p>
       <div class="dash-chips">
         ${h.constructionNumber ? `<span class="dash-chip">工事番号 ${escapeHtml(h.constructionNumber)}</span>` : ""}
-        ${model.diary?.weather || model.diary?.temperature ? `<span class="dash-chip">${escapeHtml(model.diary.weather || "")}${model.diary.temperature ? `　${escapeHtml(model.diary.temperature)}${/\d$/.test(model.diary.temperature) ? "℃" : ""}` : ""}</span>` : ""}
-        ${progressHtml(h)}
-        ${h.remainingDays != null ? `<span class="dash-chip">残り <b>${h.remainingDays}</b>日</span>` : ""}
-        ${h.dayNumber != null ? `<span class="dash-chip dash-chip-sub">${h.dayNumber}日目</span>` : ""}
-        ${h.startDate || h.endDate ? `<span class="dash-chip dash-chip-sub">工期 ${escapeHtml(h.startDate || "未定")}〜${escapeHtml(h.endDate || "未定")}</span>` : ""}
+        ${infoBandHtml(model)}
       </div>
       ${progressHistoryHtml(h)}
       ${model.sameDayCount > 1 ? `<p class="dash-sub">この日の日誌が${model.sameDayCount}件あります（最後に更新したものを表示）。</p>` : ""}

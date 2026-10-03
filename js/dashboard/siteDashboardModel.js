@@ -122,6 +122,23 @@ export function buildKyModel({ records = [], reports = [], date }) {
   };
 }
 
+/**
+ * 工期の日数（現場の工事開始日・終了日と表示する日から。純粋関数）。既存の決まりのまま:
+ *   工事○日目 = 開始日を1日目とした暦日（休工日・作業なし・事務作業日も数える）。工期経過（日）= 工事○日目と同じ日数
+ *   残り = 表示日から終了日までの日数（表示日を含めない。終了日当日は0日）。全工期 = 開始日〜終了日の日数（両端を含む）
+ * phase: unset（開始日なし）/ before（開始前）/ during（工期中。終了日なしを含む）/ after（終了日の翌日以降）
+ */
+export function buildPeriodInfo(startDate, endDate, date) {
+  const start = startDate && toUtc(startDate) != null ? startDate : "";
+  const end = endDate && toUtc(endDate) != null && (!start || toUtc(endDate) >= toUtc(start)) ? endDate : "";
+  if (!start) return { phase: "unset", startDate: "", endDate: end, totalDays: null, dayNumber: null, elapsedDays: null, remainingDays: null };
+  const dayNumber = daysBetween(start, date) + 1;
+  const totalDays = end ? daysBetween(start, end) + 1 : null;
+  if (dayNumber < 1) return { phase: "before", startDate: start, endDate: end, totalDays, dayNumber: null, elapsedDays: null, remainingDays: null };
+  if (end && daysBetween(date, end) < 0) return { phase: "after", startDate: start, endDate: end, totalDays, dayNumber, elapsedDays: dayNumber, remainingDays: null };
+  return { phase: "during", startDate: start, endDate: end, totalDays, dayNumber, elapsedDays: dayNumber, remainingDays: end ? daysBetween(date, end) : null };
+}
+
 export function buildDashboardModel({ site, reports = [], signatures = [], date, kySubmissions = [] }) {
   const live = reports.filter((r) => !r.isDeleted);
   const { report, count: sameDayCount } = reportOfDate(live, date);
@@ -159,6 +176,7 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
     progressHistory,
     elapsedPct,
     remainingDays,
+    period: buildPeriodInfo(start, end, date), // 工期の日数（現場掲示・A3の情報帯で使う）
     dayNumber: dayNumber != null && dayNumber >= 1 ? dayNumber : null,
     date,
     weekday: weekdayOf(date)

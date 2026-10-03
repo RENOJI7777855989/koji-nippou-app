@@ -38,7 +38,7 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
   check("1 現場詳細に工事番号が表示される", (await page.textContent("#siteDetailConstructionNumber")) === "2026-015");
   await page.waitForSelector("#siteDashboard:not([hidden])");
   const emptyDash = await page.textContent("#siteDashboard");
-  check("2 日誌が無い日のダッシュボード: 「この日の日誌はまだありません」・進捗は未入力（日誌がありません）・工事番号", emptyDash.includes("この日の日誌はまだありません") && emptyDash.includes("進捗 未入力（日誌がありません）") && emptyDash.includes("工事番号 2026-015"), emptyDash.replace(/\s+/g, " ").slice(0, 120));
+  check("2 日誌が無い日のダッシュボード: 「この日の日誌はまだありません」・進捗は未入力・天気は未入力・工事番号", emptyDash.includes("この日の日誌はまだありません") && /進捗\s*未入力/.test(emptyDash) && /天気\s*未入力/.test(emptyDash) && emptyDash.includes("工事番号 2026-015"), emptyDash.replace(/\s+/g, " ").slice(0, 120));
 
   // ===== 日誌に入力（ダッシュボードの「＋日誌」から開く）=====
   await page.click("#siteDashboard [data-action=diary]"); await page.waitForSelector("#view-report-form:not([hidden])");

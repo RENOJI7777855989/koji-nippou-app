@@ -9,7 +9,7 @@
    ========================================================== */
 
 /** 現場掲示のレイアウトの版。画面の現場掲示タブとA3の印刷の両方に小さく表示し、古い版が出ていないか見分けられるようにする */
-export const BOARD_LAYOUT_VERSION = "2026-10-03-2";
+export const BOARD_LAYOUT_VERSION = "2026-10-03-3";
 
 /**
  * 現場掲示の欄（この順に並べる）。a3: A3での置き場所
@@ -34,6 +34,35 @@ export const sectionTitle = (key) => BOARD_SECTIONS.find((s) => s.key === key)?.
 /** 危険予知活動表の状態の表示（紙のKY活動表が提出されたか） */
 export const KY_BOARD_LABELS = { submitted: "✓ 提出済み", not_submitted: "未提出", excluded: "対象外" };
 
+const slashDate = (iso) => (iso ? iso.replace(/-/g, "/") : "");
+
+/**
+ * 現場掲示の上部の情報帯（工期・本日・工事○日目・工期経過・残り・進捗・天気。画面とA3で同じもの）
+ * 進捗率は日報に入力された値だけ（工期経過から計算しない）、天気はその日の日報の値だけ（推測しない）
+ */
+export function buildInfoBand(model) {
+  const h = model.header;
+  const p = h.period || { phase: "unset" };
+  const md = (iso) => { const [, m, d] = iso.split("-").map(Number); return `${m}/${d}`; };
+  const range = p.phase === "unset" ? "未設定" : `${slashDate(p.startDate)} ～ ${p.endDate ? slashDate(p.endDate) : "未定"}${p.totalDays ? `（${p.totalDays}日）` : ""}`;
+  const day = { unset: "工期未設定", before: "工事開始前", during: `${p.dayNumber}日目`, after: `${p.dayNumber}日目` }[p.phase];
+  const elapsed = { unset: "工期未設定", before: "工事開始前", during: `${p.elapsedDays}日`, after: `${p.elapsedDays}日` }[p.phase];
+  const remaining = p.phase === "unset" ? "工期未設定" : p.phase === "before" ? "工事開始前" : p.phase === "after" ? "工期終了" : p.endDate ? `${p.remainingDays}日` : "終了日未設定";
+  // 進捗率: 表示日までで一番新しい日報の値（その日報が未入力なら「未入力」。それより前の日報の値には戻さない）
+  const progress = h.progressPercent != null ? `${h.progressPercent}%${h.progressDate && h.progressDate !== h.date ? `（${md(h.progressDate)}の日報）` : ""}` : "未入力";
+  const d = model.diary;
+  const weather = d?.weather ? `${d.weather}${d.temperature ? `　${d.temperature}${/\d$/.test(String(d.temperature)) ? "℃" : ""}` : ""}` : "未入力";
+  return [
+    { key: "period", label: "工期", value: range, missing: p.phase === "unset" },
+    { key: "today", label: "本日", value: `${slashDate(h.date)}（${h.weekday}）` },
+    { key: "day", label: "工事", value: day, missing: p.phase === "unset" },
+    { key: "elapsed", label: "工期経過", value: elapsed, missing: p.phase === "unset" },
+    { key: "remaining", label: "残り", value: remaining, missing: p.phase === "unset" || (p.phase === "during" && !p.endDate) },
+    { key: "progress", label: "進捗", value: progress, missing: h.progressPercent == null },
+    { key: "weather", label: "天気", value: weather, missing: !d?.weather }
+  ];
+}
+
 /** 現場掲示の中身（画面・A3共通） */
 export function buildBoardContent(model) {
   const h = model.header;
@@ -57,6 +86,7 @@ export function buildBoardContent(model) {
   const ky = model.ky || { rows: [], targetCount: 0, submittedCount: 0, notSubmittedCount: 0, excludedCount: 0 };
   return {
     version: BOARD_LAYOUT_VERSION,
+    band: buildInfoBand(model),
     header: {
       siteName: h.siteName,
       constructionNumber: h.constructionNumber,
