@@ -1987,3 +1987,11 @@ dialog h3 {
 .cal-cell .cal-dlv { display: block; font-size: 10px; line-height: 1.25; color: #8a94a3; white-space: nowrap; }
 .cal-cell .cal-dlv.has-in { color: #975a16; font-weight: bold; }
 .cal-cell .cal-dlv.has-out { color: #2c7a7b; font-weight: bold; }
+/* 前の日報から作成（新規の日報だけ） */
+.copy-prev-area { margin: 0 0 12px; padding: 8px 12px; border: 1px dashed #90cdf4; border-radius: 8px; background: #f5f9ff; }
+.copy-prev-area #copyPrevBtn { min-height: 48px; margin: 0 8px 0 0; font-size: 16px; }
+.copy-prev-info { font-size: 14px; color: #4a5568; }
+.copy-prev-choices { display: grid; gap: 6px; margin-top: 8px; }
+.copy-prev-choices button { min-height: 48px; margin: 0; text-align: left; }
+.copy-prev-notice { margin: 8px 0 0; font-size: 14px; color: #276749; font-weight: bold; }
+.company-row.is-copied h3::after { content: "（前の日報から）"; font-size: 12px; font-weight: normal; color: #2b6cb0; margin-left: 6px; }

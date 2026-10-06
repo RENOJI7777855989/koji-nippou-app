@@ -778,7 +778,102 @@ export async function initReportFormViewNew(params) {
   await renderPhotoGrid(draftReportId);
   applyReadOnlyMode(false); // このルートには編集権限があるユーザーしか到達しない
   setupFormMode({ from: params.from });
+  await setupCopyFromPrevious();
   focusRequestedSection();
+}
+
+/* ---------- 前の日報から作成（新規の日報だけ。2026-10-06）----------
+   この日付より前で一番新しい日報（前日に日報が無ければ、その前の日報。日付を画面に出す）の「継続する情報」だけを、
+   新しい日報の入力欄に入れる（保存はいつもの保存ボタン。元の日報は読むだけで変えない）。
+   コピーする: 業者名・工種・作業内容・安全注意事項・使用機械（業者の行ごと。行は新しいidで作るので署名は結び付かない）、
+     連絡事項、本日の現場の流れ（時刻・種別・内容だけ。状態は「予定」に戻し、メモは入れない。前の日報に流れが無ければ初期値のまま）。
+   コピーしない（その日の実績・その日固有）: 日付・日の状態・予定/実績人数・作業時間・請求人工・職長名・署名・写真・天気・気温・
+     進捗率・巡回点検・搬入搬出・監督/職員・雨天の記録・明日の予定・重点指示・作業間の連絡調整・KY。
+   同じ日に日報が複数あるときは、どれをコピーするかを選んでもらう（自動で選ばない・まとめない）。 */
+const copyPrevArea = document.getElementById("copyPrevArea");
+const copyPrevBtn = document.getElementById("copyPrevBtn");
+const copyPrevInfo = document.getElementById("copyPrevInfo");
+const copyPrevChoices = document.getElementById("copyPrevChoices");
+const copyPrevNotice = document.getElementById("copyPrevNotice");
+let copySource = null; // { date, keys: Set<"業者\u0000工種">, contents: Set<作業内容> } 保存のメッセージで前の日報との違いを出す
+
+async function previousReportsFor(date) {
+  const all = (await listReportsBySite(currentSiteId)).filter((r) => r.date && date && r.date < date);
+  if (!all.length) return { date: "", reports: [] };
+  const latest = all.map((r) => r.date).sort().pop();
+  return { date: latest, reports: all.filter((r) => r.date === latest).sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || ""))) };
+}
+
+async function setupCopyFromPrevious() {
+  copySource = null;
+  copyPrevChoices.hidden = true;
+  copyPrevChoices.innerHTML = "";
+  copyPrevNotice.hidden = true;
+  copyPrevArea.hidden = !!editingReportId;
+  if (editingReportId) return;
+  const prev = await previousReportsFor(dateInput.value);
+  copyPrevBtn.disabled = !prev.reports.length;
+  copyPrevInfo.textContent = prev.reports.length
+    ? `${prev.date.replace(/-/g, "/")} の日報${prev.reports.length > 1 ? `（${prev.reports.length}件。押すと選べます）` : ""}の業者・工種・作業内容・安全注意事項・連絡事項・流れを入れます（人数・作業時間・天気・進捗率・巡回点検・搬入搬出・署名・請求人工は入れません）`
+    : "この日付より前の日報がありません。";
+}
+dateInput.addEventListener("change", () => { if (!editingReportId) setupCopyFromPrevious(); });
+
+function applyCopyFrom(src) {
+  // 業者の行（新しい行・新しいid。値は文字列として写すので元の日報とは何も共有しない）
+  for (const row of companiesContainer.querySelectorAll(".company-row")) row._signaturePad?.destroy?.();
+  companiesContainer.innerHTML = "";
+  const cs = (src.companies || []).filter((c) => (c.companyName || "").trim() || (c.occupation || "").trim());
+  for (const c of cs) {
+    const row = addCompanyRow({ companyName: String(c.companyName || ""), occupation: String(c.occupation || ""), workContent: String(c.workContent || ""), safetyNotes: String(c.safetyNotes || ""), machinery: String(c.machinery || "") });
+    row.classList.add("is-copied");
+  }
+  if (!cs.length) addCompanyRow();
+  recalcWorkerCountTotal();
+  remarksInput.value = String(src.remarks || "");
+  // 流れ: 前の日報に流れがあれば、時刻・種別・内容だけを「予定」として入れ直す（無ければ今の初期値のまま）
+  const flows = (src.timeline || []).filter((f) => f && (f.time || f.title));
+  if (flows.length && dayStatusSelect.value === "work") {
+    timelineContainer.innerHTML = "";
+    stashedDefaultRows = [];
+    for (const f of flows) addTimelineRow({ time: String(f.time || ""), kind: String(f.kind || "work"), title: String(f.title || ""), status: "plan" });
+  }
+  copySource = { date: src.date, keys: new Set(cs.map((c) => `${String(c.companyName || "").trim()}\u0000${String(c.occupation || "").trim()}`)) };
+  copyPrevChoices.hidden = true;
+  copyPrevNotice.textContent = `${src.date.replace(/-/g, "/")} の日報からコピーしました（業者${cs.length}行・連絡事項${flows.length ? `・流れ${flows.length}件` : ""}）。人数・作業時間・天気・進捗率・巡回点検・搬入搬出・署名・請求人工は今日の分を入力してください。業者の行は追加・削除・編集できます。`;
+  copyPrevNotice.hidden = false;
+  renderMissingGuide();
+}
+
+copyPrevBtn.addEventListener("click", async () => {
+  const prev = await previousReportsFor(dateInput.value);
+  if (!prev.reports.length) return;
+  const hasInput = [...companiesContainer.querySelectorAll(".company-row")].some((row) => [".companyName", ".occupation", ".workContent"].some((sel) => row.querySelector(sel).value.trim()) || (row._signaturePad && !row._signaturePad.isEmpty())) || remarksInput.value.trim();
+  if (hasInput && !confirm("入力中の業者・連絡事項・流れを、前の日報の内容に置き換えます（入力中の署名も消えます）。よろしいですか？")) return;
+  if (prev.reports.length === 1) { applyCopyFrom(prev.reports[0]); return; }
+  // 同じ日に複数の日報: どれをコピーするか選ぶ
+  const when = (iso) => (iso ? new Date(iso).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "不明");
+  copyPrevChoices.innerHTML = `<p class="copy-prev-info">${prev.date.replace(/-/g, "/")} の日報が${prev.reports.length}件あります。コピーする日報を選んでください。</p>` + prev.reports.map((r, i) => {
+    const names = [...new Set((r.companies || []).map((c) => (c.companyName || "").trim()).filter(Boolean))];
+    return `<button type="button" class="secondary-btn" data-copy-from="${escapeHtml(r.id)}">${i + 1}. 業者 ${escapeHtml(names.join("・") || "なし")}／作成 ${escapeHtml(when(r.createdAt))}</button>`;
+  }).join("");
+  copyPrevChoices.hidden = false;
+});
+copyPrevChoices.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-copy-from]");
+  if (!b) return;
+  const src = await getReport(b.dataset.copyFrom);
+  if (src && !src.isDeleted) applyCopyFrom(src);
+});
+
+/** 保存のメッセージ用: 前の日報との違い（業者×工種の 継続・追加・削除） */
+function copyDiffNote(companies) {
+  if (!copySource) return "";
+  const now = new Set(companies.filter((c) => c.companyName || c.occupation).map((c) => `${c.companyName}\u0000${c.occupation}`));
+  const kept = [...now].filter((k) => copySource.keys.has(k)).length;
+  const added = [...now].filter((k) => !copySource.keys.has(k)).length;
+  const removed = [...copySource.keys].filter((k) => !now.has(k)).length;
+  return `。前の日報（${copySource.date.replace(/-/g, "/")}）から: 業者の行 継続${kept}・追加${added}・削除${removed}`;
 }
 
 export async function initReportFormViewEdit(params) {
@@ -854,6 +949,8 @@ export async function initReportFormViewEdit(params) {
   await renderPhotoGrid(report.id);
   applyReadOnlyMode(!hasPermission("editReports") || !!report.finalizedAt);
   deleteArea.hidden = !hasPermission("editReports") || !!report.finalizedAt || !!site.completedAt;
+  copyPrevArea.hidden = true; // 前の日報からの作成は新規の日報だけ
+  copySource = null;
   renderOutputPanel(report);
   setupFormMode(params);
   focusRequestedSection();
@@ -1089,7 +1186,7 @@ form.addEventListener("submit", async (e) => {
 
   const left = formMissingDetails();
   const stateNote = formMode.from ? `。カレンダーの表示: ${dayStatusSelect.value !== "work" ? labelOfDayStatus() : left.length ? `一部未記入（残り: ${left.map((d) => d.label).join("・")}）` : "日報あり"}` : "";
-  showMessage(`保存しました（${report.date}）${progress.value == null ? "。進捗率が未入力です（日誌を開いて入力できます）" : ""}${stateNote}`);
+  showMessage(`保存しました（${report.date}）${progress.value == null ? "。進捗率が未入力です（日誌を開いて入力できます）" : ""}${editingReportId ? "" : copyDiffNote(fields.companies)}${stateNote}`);
   returnAfterForm(report.date, true);
 });
 
