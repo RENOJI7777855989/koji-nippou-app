@@ -5,8 +5,10 @@
    会社指定の03-2とは別の帳票で、03-2の仕組み・様式には一切触れない。
 
    ・並び: 上段＝本日の作業・業者別 稼働状況（業者・工種・稼働人数・人工・作業時間・作業内容・職長・安全注意事項）、
-     中段＝本日の現場の流れ｜本日の搬入・搬出／本日の巡回点検｜（本日の重点指示・本日の危険予知活動表・本日の人員）、
-     下段＝作業間の連絡・調整｜連絡事項｜明日の予定｜現場メモ（日誌の内容のあとは手書き用の罫線）
+     中段＝（本日の現場の流れ／監督予定・社内連絡）｜本日の搬入・搬出／本日の巡回点検｜（本日の重点指示・本日の危険予知活動表・本日の人員）、
+     下段＝作業間の連絡・調整｜連絡事項｜明日の予定（日誌の内容のあとは手書き用の罫線）。現場メモ（手書き用の空欄）は 2026-10-06 に外した
+   ・監督予定・社内連絡は件数の上限なし。流れ｜監督予定の高さの配分は両方が収まるものを選ぶ（既定 1.5:1。監督予定が無い日は「なし」の1行）。
+     どの配分でも6ptで収まらない極端に多い日だけ、この2欄に限り4.5pt（さらに3.5pt）まで小さくする（件数で切らない）
    ・用紙はA3横（@page）。1枚に収まるよう、各欄の文字が溢れる場合だけ表示時・印刷前に文字を小さくする
      （最小6pt。情報が少ない日は小さくしない）。本日の作業が収まらない日はその欄の高さを広げて詰め直す
    ・載せないもの: 今日の確認事項・日誌状況など監督向けの情報、請求人工、見積の情報、操作ボタン
@@ -46,6 +48,13 @@ export function buildTodaySheetHtml(model) {
       ? `<div class="flow-cols">${flowTable(b.flow.slice(0, Math.ceil(b.flow.length / 2)))}${flowTable(b.flow.slice(Math.ceil(b.flow.length / 2)))}</div>`
       : flowTable(b.flow);
   const flowFill = b.flow.length < 6 ? ruled(6 - b.flow.length) : "";
+
+  // 監督予定・社内連絡（日報の supervisorSchedule。件数の上限なし・全件。本日の現場の流れとは別の欄）
+  const schedule = b.schedule.length
+    ? `<table class="sch"><colgroup><col class="c-time"><col class="c-title"><col class="c-place"><col></colgroup><thead><tr><th>時間</th><th>内容</th><th>場所・所在</th><th>連絡事項</th></tr></thead><tbody>${b.schedule
+        .map((r) => `<tr><td class="t">${esc(r.start)}${r.start || r.end ? "～<wbr>" : ""}${esc(r.end)}</td><td>${esc(r.title)}</td><td>${esc(r.place)}</td><td>${br(r.note)}</td></tr>`)
+        .join("")}</tbody></table>`
+    : `<p class="empty">（本日の監督予定・社内連絡なし）</p>`;
 
   // 本日の搬入・搬出（時刻順。区分は ◆搬入／◇搬出）
   const deliveries = b.deliveries.length
@@ -91,7 +100,10 @@ export function buildTodaySheetHtml(model) {
     </header>
     ${box("works", works, "worksbox")}
     <main class="mid">
-      ${box("flow", `${flow}${flowFill}`, "flowbox")}
+      <div class="flowcol${b.schedule.length ? "" : " sch-empty"}">
+        ${box("flow", `${flow}${flowFill}`, "flowbox")}
+        ${box("schedule", schedule, "schedulebox")}
+      </div>
       <div class="midcol">
         ${box("deliveries", deliveries)}
         ${box("patrol", patrolHtml, "patrolbox")}
@@ -106,7 +118,6 @@ export function buildTodaySheetHtml(model) {
       ${box("coordination", notesBox(b.coordination, 4))}
       ${box("notice", notesBox(b.notice, 4))}
       ${box("tomorrow", notesBox(b.tomorrow, 4))}
-      <section class="box" data-section="memo"><h2>現場メモ</h2><div class="content">${ruled(5)}</div></section>
     </footer>
   </div>`;
 
@@ -114,16 +125,55 @@ export function buildTodaySheetHtml(model) {
   // 本日の作業（業者の表）が最小の文字でも収まらない日は、その欄の高さを少しずつ広げて中段を詰め直す
   const fitScript = `<script>(function(){
     function over(c){return c.scrollHeight>c.clientHeight+1||c.scrollWidth>c.clientWidth+1;}
-    function fitBox(c){var size=10.5;c.style.fontSize=size+"pt";while(over(c)&&size>6){size-=0.5;c.style.fontSize=size+"pt";}return !over(c);}
-    function fitAll(){document.querySelectorAll(".box .content").forEach(fitBox);}
+    function fitBox(c,min){var size=10.5;min=min||6;c.style.fontSize=size+"pt";while(over(c)&&size>min){size-=0.5;c.style.fontSize=size+"pt";}return !over(c);}
+    function fitAll(){document.querySelectorAll(".box .content").forEach(function(c){fitBox(c);});}
     function fit(){
       var works=document.querySelector(".worksbox");
       var heights=[80,95,110,125];
+      var col=document.querySelector(".flowcol");
+      // 流れ｜監督予定・社内連絡の高さの配分（既定 1.5:1）。どちらかが最小の文字でも収まらない日は、両方が収まる配分を順に探す
+      // （件数で切らない）。どの配分でも収まらない日は、はみ出しの合計が一番小さい配分にする
+      var ratios=[[3,2],[2,1],[3,1],[5,1],[9,1],[1,1],[2,3],[2,5],[1,4]];
+      function setRatio(r){if(col)col.style.gridTemplateRows=r?"minmax(0,"+r[0]+"fr) minmax(0,"+r[1]+"fr)":"";}
       if(works){works.style.maxHeight="";works.style.flex="";}
+      setRatio(null);
       fitAll();
       for(var i=0;works&&over(works.querySelector(".content"))&&i<heights.length;i++){
         works.style.maxHeight="none";works.style.flex="0 0 "+heights[i]+"mm";
         fitAll();
+      }
+      var sch=document.querySelector(".schedulebox .content"),fl=document.querySelector(".flowbox .content");
+      function excess(c){return Math.max(0,c.scrollHeight-c.clientHeight)+Math.max(0,c.scrollWidth-c.clientWidth);}
+      if(col&&fl&&col.classList.contains("sch-empty")&&over(fl)){fitBox(fl,4.5)||fitBox(fl,3.5);}
+      if(col&&sch&&fl&&!col.classList.contains("sch-empty")&&(over(sch)||over(fl))){
+        var best=null,bestEx=Infinity,ok=false;
+        for(var j=0;j<ratios.length&&!ok;j++){
+          setRatio(ratios[j]);fitBox(fl);fitBox(sch);
+          var ex=excess(fl)+excess(sch);
+          if(ex===0||(!over(fl)&&!over(sch))){ok=true;break;}
+          if(ex<bestEx){bestEx=ex;best=ratios[j];}
+        }
+        // どの配分でも6ptで収まらない極端に多い日だけ、この2欄に限り4.5pt（さらに3.5pt）まで小さくする（データを切らないことを優先）
+        if(!ok){
+          setRatio(best);
+          var f45=fitBox(fl,4.5),s45=fitBox(sch,4.5);
+          if(!f45||!s45){
+            // 4.5ptでも収まらない日は、配分を選び直して3.5ptまで（それでも収まらなければ __a3Overflow に残る）
+            var best2=null,bestEx2=Infinity,ok2=false;
+            for(var k=0;k<ratios.length&&!ok2;k++){setRatio(ratios[k]);fitBox(fl,3.5);fitBox(sch,3.5);var ex2=excess(fl)+excess(sch);if(ex2===0){ok2=true;break;}if(ex2<bestEx2){bestEx2=ex2;best2=ratios[k];}}
+            if(!ok2){setRatio(best2);fitBox(fl,3.5);fitBox(sch,3.5);}
+          }
+        }
+      }
+      // 収まらなかった欄の数（検証用）
+      window.__a3Overflow=[].slice.call(document.querySelectorAll(".box .content")).filter(over).map(function(c){return c.parentNode.getAttribute("data-section");});
+      // それでも収まらない欄がある日は、紙面にその旨を出す（切れたことに気づかないまま掲示しないように）
+      var warn=document.querySelector(".a3-overflow-warn");
+      if(warn)warn.remove();
+      if(window.__a3Overflow.length){
+        warn=document.createElement("div");warn.className="a3-overflow-warn";
+        warn.textContent="※情報が多く、一部の欄（"+[].slice.call(document.querySelectorAll(".box .content")).filter(over).map(function(c){return c.parentNode.querySelector("h2").textContent;}).join("・")+"）が1枚に収まりません。内容は画面・日報で確認してください。";
+        document.querySelector(".sheet").appendChild(warn);
       }
     }
     fit();window.addEventListener("load",fit);window.addEventListener("beforeprint",fit);})();</script>`;
@@ -158,6 +208,18 @@ export function buildTodaySheetHtml(model) {
   .works tfoot th, .works tfoot td { background: #f7f7f7; }
   .works .c { text-align: center; white-space: nowrap; }
   .mid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 30% 1fr 26%; gap: 3mm; }
+  .a3-overflow-warn { position: absolute; right: 2mm; bottom: 1mm; background: #fff4f4; border: 0.4mm solid #b42318; color: #b42318; font-size: 9pt; font-weight: bold; padding: 0.5mm 2mm; }
+  .flowcol { display: grid; grid-template-rows: minmax(0, 1.5fr) minmax(0, 1fr); gap: 3mm; min-height: 0; }
+  .flowcol.sch-empty { grid-template-rows: minmax(0, 1fr) auto; } /* 監督予定が無い日は見出しと「なし」の1行だけにして、流れの欄を広く使う */
+  .sch-empty .schedulebox { flex-direction: row; align-items: center; }
+  .sch-empty .schedulebox h2 { border-bottom: none; border-right: 0.3mm solid #555; white-space: nowrap; }
+  .sch-empty .schedulebox .content { padding: 0.8mm 3mm; }
+  .sch-empty .schedulebox .empty { margin: 0; }
+  table.sch { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 0.9em; }
+  table.sch th, table.sch td { border: 0.2mm solid #999; padding: 0.2em 0.3em; vertical-align: top; overflow-wrap: anywhere; }
+  table.sch th { background: #f2f2f2; font-weight: normal; white-space: nowrap; }
+  table.sch .c-time { width: 8.6em; } table.sch .c-title { width: 30%; } table.sch .c-place { width: 20%; }
+  table.sch td.t { font-weight: bold; overflow-wrap: normal; word-break: keep-all; } /* 時刻の途中では折り返さない（入りきらないときだけ「～」のあとで改行） */
   .midcol { display: grid; grid-template-rows: minmax(0, 1.5fr) minmax(0, 1fr); gap: 3mm; min-height: 0; }
   .pt-state { font-size: 1.05em; margin-bottom: 1mm; }
   .pt-attention b { color: #b45309; }
@@ -199,7 +261,7 @@ export function buildTodaySheetHtml(model) {
   .ky .ky-not_submitted { color: #b42318; font-weight: bold; }
   .ky .ky-excluded { color: #888; }
   .ky-sum { margin-top: 1mm; font-size: 0.9em; color: #444; }
-  .bottom { flex: 0 0 46mm; display: grid; grid-template-columns: 1.3fr 1.3fr 1.3fr 1fr; gap: 3mm; }
+  .bottom { flex: 0 0 46mm; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3mm; }
   .filled { margin-bottom: 1mm; }
   .ruled div { border-bottom: 0.2mm solid #bbb; height: 7mm; }
   .empty { color: #777; margin: 0 0 2mm; }

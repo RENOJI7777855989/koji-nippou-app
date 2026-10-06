@@ -19,7 +19,7 @@ import { PATROL_CHECKLIST_ITEMS, PATROL_STATUS_OPTIONS } from "../patrolChecklis
 import { hasPermission, canAccessSite } from "../auth.js";
 import { showView, showMessage } from "./common.js";
 import { navigate } from "../router.js";
-import { FLOW_KINDS, FLOW_STATUSES, DELIVERY_DIRECTIONS, DELIVERY_STATUSES, WORK_TIME_OPTIONS, directionOf, normalizeFlowRow, normalizeDeliveryRow, parseWorkHours, formatWorkHours, workMinutes, durationLabel, defaultWorkdayTimeline, isUntouchedDefaultFlowRow } from "../dashboard/dailyFlow.js";
+import { FLOW_KINDS, FLOW_STATUSES, DELIVERY_DIRECTIONS, DELIVERY_STATUSES, WORK_TIME_OPTIONS, directionOf, normalizeFlowRow, normalizeDeliveryRow, parseWorkHours, formatWorkHours, workMinutes, durationLabel, defaultWorkdayTimeline, isUntouchedDefaultFlowRow, normalizeScheduleRow, sortSchedule } from "../dashboard/dailyFlow.js";
 import { reportMissingDetails } from "../dashboard/siteDashboardModel.js";
 import { attachProgressSlider } from "./progress-slider.js";
 
@@ -74,6 +74,8 @@ const addCompanyBtn = document.getElementById("addCompanyBtn");
 const timelineContainer = document.getElementById("timelineContainer");
 const addTimelineBtn = document.getElementById("addTimelineBtn");
 const deliveriesContainer = document.getElementById("deliveriesContainer");
+const scheduleContainer = document.getElementById("scheduleContainer");
+const addScheduleBtn = document.getElementById("addScheduleBtn");
 const addDeliveryBtn = document.getElementById("addDeliveryBtn");
 const addCarryOutBtn = document.getElementById("addCarryOutBtn");
 const tomorrowPlanInput = document.getElementById("tomorrowPlan");
@@ -457,6 +459,40 @@ function toggleDefaultTimelineForDayStatus() {
   }
 }
 
+// 監督予定・社内連絡（日報の supervisorSchedule。本日の現場の流れとは別。件数の上限なし。前の日報からのコピーはしない）
+function addScheduleRow(data = {}) {
+  const row = document.createElement("div");
+  row.className = "schedule-row";
+  row.dataset.rowId = data.id || createId();
+  row.innerHTML = `
+    <label>開始<input type="time" class="schStart" step="300"></label>
+    <label>終了<input type="time" class="schEnd" step="300"></label>
+    <label class="full-row">内容<input type="text" class="schTitle" placeholder="例）発注者打合せ"></label>
+    <label class="full-row">場所・所在<input type="text" class="schPlace" placeholder="例）○○市役所／本社"></label>
+    <label class="full-row">連絡事項<textarea class="schNote" rows="2" placeholder="例）不在中は○○さんへ連絡"></textarea></label>
+    <button type="button" class="removeRowBtn secondary-btn">この予定を削除</button>`;
+  row.querySelector(".schStart").value = data.start || "";
+  row.querySelector(".schEnd").value = data.end || "";
+  row.querySelector(".schTitle").value = data.title || "";
+  row.querySelector(".schPlace").value = data.place || "";
+  row.querySelector(".schNote").value = data.note || "";
+  scheduleContainer.appendChild(row);
+  return row;
+}
+
+function collectSchedule() {
+  return sortSchedule([...scheduleContainer.querySelectorAll(".schedule-row")]
+    .map((row) => normalizeScheduleRow({
+      id: row.dataset.rowId,
+      start: row.querySelector(".schStart").value,
+      end: row.querySelector(".schEnd").value,
+      title: row.querySelector(".schTitle").value,
+      place: row.querySelector(".schPlace").value,
+      note: row.querySelector(".schNote").value
+    }))
+    .filter(Boolean));
+}
+
 function collectDeliveries() {
   return [...deliveriesContainer.querySelectorAll(".delivery-row")]
     .map((row) => normalizeDeliveryRow({
@@ -480,18 +516,21 @@ function loadFlowAndDeliveries(report = {}) {
   timelineDefaultNote.hidden = true;
   timelineContainer.innerHTML = "";
   deliveriesContainer.innerHTML = "";
+  scheduleContainer.innerHTML = "";
   (report.timeline || []).forEach((r) => addTimelineRow(r));
+  (report.supervisorSchedule || []).forEach((r) => addScheduleRow(r));
   (report.deliveries || []).forEach((r) => addDeliveryRow(r));
 }
 
 addTimelineBtn.addEventListener("click", () => addTimelineRow());
+addScheduleBtn.addEventListener("click", () => addScheduleRow().querySelector(".schStart").focus());
 addDeliveryBtn.addEventListener("click", () => addDeliveryRow({ direction: "in" }));
 addCarryOutBtn.addEventListener("click", () => addDeliveryRow({ direction: "out" }));
-for (const container of [timelineContainer, deliveriesContainer]) {
+for (const container of [timelineContainer, deliveriesContainer, scheduleContainer]) {
   container.addEventListener("click", (e) => {
     const btn = e.target.closest(".removeRowBtn");
     if (!btn) return;
-    const row = btn.closest(".timeline-row, .delivery-row");
+    const row = btn.closest(".timeline-row, .delivery-row, .schedule-row");
     const hasInput = [...row.querySelectorAll("input, textarea")].some((el) => el.value.trim() !== "");
     if (hasInput && !confirm("入力内容が削除されます。この行を削除しますか？")) return;
     row.remove();
@@ -1223,6 +1262,7 @@ form.addEventListener("submit", async (e) => {
     patrolChecklist: collectPatrolChecklist(),
     patrolComment: patrolCommentInput.value.trim(),
     timeline: collectTimeline(),
+    supervisorSchedule: collectSchedule(),
     deliveries: collectDeliveries()
   };
 

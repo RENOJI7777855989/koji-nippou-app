@@ -92,7 +92,7 @@ const days = (a, b) => Math.round((Date.UTC(...b.split("-").map((v, i) => Number
   const pBand = await page.evaluate((html) => [...new DOMParser().parseFromString(html, "text/html").querySelectorAll(".band .bi")].map((b) => `${b.querySelector(".bl").textContent} ${b.querySelector(".bv").textContent}`), printed);
   const expected = ["工期 2026/04/01 ～ 2026/12/31（275日）", "本日 2026/04/10（金）", "工期経過 10日", "着工 未設定", "残り 265日", "進捗 12%", "天気 雨　18℃"];
   check("14 画面の情報帯と印刷ボタンで渡るA3の情報帯が同じ（表示している日 4/10 が基準。ブラウザの今日ではない）", expected.every((t) => screen.includes(t.replace("　", " "))) && JSON.stringify(pBand) === JSON.stringify(expected), `画面 ${screen.join(" | ")}`);
-  check("14 A3は新しいレイアウトの版（2026-10-03-4）", printed.includes("現場掲示レイアウト 2026-10-03-4版"));
+  check("14 A3は新しいレイアウトの版（2026-10-06-1）", printed.includes("現場掲示レイアウト 2026-10-06-1版"));
 
   // 12・13 A3横1ページ・既存の欄が崩れない（休工日・通常日）
   for (const date of ["2026-04-10", "2026-06-01"]) {

@@ -17,7 +17,7 @@
        未印刷   … 印刷状態が未印刷の日報
    ========================================================== */
 
-import { staffHeadcountInfo, staffHeadcountForDay } from "./dailyFlow.js";
+import { staffHeadcountInfo, staffHeadcountForDay, normalizeScheduleRow, sortSchedule } from "./dailyFlow.js";
 import { labelOf, dayStatusOf, isWorkDay, DAY_STATUSES, directionOf, DELIVERY_DIRECTIONS, DELIVERY_STATUSES, FLOW_STATUSES, FLOW_KINDS, parseWorkHours, formatWorkHours, workMinutes, durationLabel } from "./dailyFlow.js";
 import { PATROL_CHECKLIST_ITEMS, patrolStatusOf, hasPatrolRecord } from "../patrolChecklist.js";
 import { normalizeTrade } from "../report-output/tradeAttendance.js";
@@ -259,6 +259,9 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
     });
   }
   flow.sort((a, b) => (a.time ? 0 : 1) - (b.time ? 0 : 1) || a.time.localeCompare(b.time));
+
+  // ---- 監督予定・社内連絡（日報の supervisorSchedule。流れとは別。日の状態に関係なく、入っていれば全件を開始時刻の順）----
+  const schedule = sortSchedule((report?.supervisorSchedule || []).map(normalizeScheduleRow).filter(Boolean));
   deliveries.sort((a, b) => (a.time ? 0 : 1) - (b.time ? 0 : 1) || (a.time || "").localeCompare(b.time || ""));
 
   // ---- 本日の作業（業者行）----
@@ -501,5 +504,5 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
     attentionCount: attention.length
   };
 
-  return { header, reportId: report?.id || null, dayStatus, isWork, sameDayCount, flow, deliveries, works, safety, patrol, patrolStatus, staff, status, diary, checks, attention, compare, overview, ky };
+  return { header, reportId: report?.id || null, dayStatus, isWork, sameDayCount, flow, schedule, deliveries, works, safety, patrol, patrolStatus, staff, status, diary, checks, attention, compare, overview, ky };
 }

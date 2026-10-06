@@ -2005,3 +2005,17 @@ dialog h3 {
 .copy-pick-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .copy-pick-date { margin: 0 0 4px; font-weight: bold; }
 .copy-pick-list button { display: block; width: 100%; min-height: 48px; margin: 0 0 4px; text-align: left; }
+/* 監督予定・社内連絡（現場掲示の画面） */
+.dash-schedule td.t { white-space: nowrap; font-weight: bold; }
+/* 日誌: 監督予定・社内連絡（流れの行と同じ見た目） */
+.schedule-row { border: 1px solid #c3d3ea; border-radius: 6px; padding: 12px; margin-bottom: 12px; background: #f4f8fe; }
+.schedule-row .removeRowBtn { width: 100%; }
+.schedule-row input { min-height: 44px; }
+#addScheduleBtn { width: 100%; margin-bottom: 20px; }
+.read-only-form #addScheduleBtn, .read-only-form .schedule-row .removeRowBtn { display: none; }
+@media (min-width: 600px) {
+  .schedule-row { display: grid; grid-template-columns: 7.5em 7.5em 1fr 1fr; gap: 4px 10px; padding: 8px 10px; margin-bottom: 8px; align-items: end; }
+  .schedule-row label { margin: 0; }
+  .schedule-row label.full-row:has(.schNote) { grid-column: 1 / 4; }
+  .schedule-row .removeRowBtn { grid-column: 4; min-height: 40px; margin: 0; padding: 6px; font-size: 14px; }
+}

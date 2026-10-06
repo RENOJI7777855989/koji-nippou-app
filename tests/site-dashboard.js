@@ -143,7 +143,7 @@ const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
   await page.click("#siteDashboard [data-action=print]"); await page.waitForSelector("#reportPrintDialog[open]");
   const html = await page.evaluate(() => document.getElementById("reportPrintFrame").srcdoc);
   fs.writeFileSync(path.join(OUT, "today-sheet.html"), html);
-  check("13 A3印刷: 今日の現場シート（A3横）の印刷データが作られる", html.includes("今日の現場シート") && /@page \{ size: A3 landscape/.test(html) && html.includes("鉄筋") && html.includes("北側ゲート") && html.includes("連絡事項") && html.includes("現場メモ"));
+  check("13 A3印刷: 今日の現場シート（A3横）の印刷データが作られる", html.includes("今日の現場シート") && /@page \{ size: A3 landscape/.test(html) && html.includes("鉄筋") && html.includes("北側ゲート") && html.includes("連絡事項") && html.includes("監督予定・社内連絡") && !html.includes("現場メモ"));
   const a3 = await page.evaluate((h) => { const d = new DOMParser().parseFromString(h, "text/html"); const t = d.querySelector("table.dlv"); return { title: [...d.querySelectorAll(".box h2")].map((e) => e.textContent).includes("本日の搬入・搬出"), head: t ? [...t.querySelectorAll("th")].map((e) => e.textContent).join("｜") : "", rows: t ? [...t.querySelectorAll("tbody tr")].map((r) => [...r.cells].slice(0, 3).map((c) => c.textContent).join(" ")) : [], flowOut: [...d.querySelectorAll(".flow tr.dlv.out")].length }; }, html);
   check("B8 A3: 「本日の搬入・搬出」の表（時刻｜区分｜品名｜数量｜業者｜元｜先｜車両｜状況｜備考）が時刻順", a3.title && a3.head === "時刻｜区分｜品名｜数量｜業者｜元｜先｜車両｜状況｜備考" && a3.rows.join(",") === "10:00 ◆搬入 鉄筋,13:00 ◇搬出 残土,15:00 ◆搬入 仮設材,16:00 ◇搬出 型枠材" && a3.flowOut === 2, JSON.stringify(a3));
   await page.click("#reportPrintCloseBtn");

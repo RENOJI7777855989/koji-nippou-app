@@ -44,6 +44,8 @@ export async function createReport(fields) {
     //   deliveries … 搬入・搬出 [{ id, direction("in"=搬入/"out"=搬出。無い行は搬入), time, item, quantity, vendor, origin, destination, vehicle, status, note }]
     timeline: fields.timeline || [],
     deliveries: fields.deliveries || [],
+    // 監督予定・社内連絡 [{ id, start:"HH:MM", end:"HH:MM", title, place, note }]（2026-10-06。本日の現場の流れとは別。現場掲示・A3に表示。03-2には書かない）
+    supervisorSchedule: fields.supervisorSchedule || [],
     // 進捗率（％、0〜100の整数。未入力は null）。その日の日誌に記録した値で、現場の現在値を上書きする項目ではない
     progressPercent: fields.progressPercent ?? null,
     // 本日の重点指示・作業間の連絡・調整（03-2の同名の欄へ出力。連絡事項 remarks とは別の項目）

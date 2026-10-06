@@ -191,3 +191,20 @@ export function normalizeDeliveryRow(row) {
   r.status = DELIVERY_STATUSES.some((s) => s.value === row.status) ? row.status : "plan";
   return r.time || DELIVERY_TEXT_FIELDS.some((f) => r[f]) ? r : null;
 }
+
+/* ---------- 監督予定・社内連絡（2026-10-06）----------
+   日報の任意の項目 supervisorSchedule: [{ id, start, end, title, place, note }]（開始・終了・内容・場所・所在・連絡事項）。
+   監督の予定・所在（発注者打合せ・社内会議・現場外打合せ・立会いなど）を、現場の作業員・業者に知らせるためのもので、
+   「本日の現場の流れ」（timeline。現場全体の一日の流れ）とは別の項目。件数の上限は無い。日報の日付にひも付く。
+   現場掲示（画面）・A3印刷・PDFは同じ日報のこの項目をそのまま表示する。請求人工とは関係しない。 */
+
+/** 1行を整える（すべて空の行は null。時刻は "08:00" の形にそろえる。読めない時刻は空） */
+export function normalizeScheduleRow(row) {
+  const r = { id: row?.id || "", start: normalizeTime(row?.start), end: normalizeTime(row?.end), title: String(row?.title || "").trim(), place: String(row?.place || "").trim(), note: String(row?.note || "").trim() };
+  return r.start || r.end || r.title || r.place || r.note ? r : null;
+}
+
+/** 開始時刻の順（開始の無い行は最後。同じなら元の順） */
+export function sortSchedule(rows) {
+  return (rows || []).map((r, i) => ({ r, i })).sort((a, b) => (a.r.start ? 0 : 1) - (b.r.start ? 0 : 1) || String(a.r.start || "").localeCompare(String(b.r.start || "")) || a.i - b.i).map(({ r }) => r);
+}

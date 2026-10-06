@@ -273,11 +273,18 @@ function render(model) {
     : empty("本日の作業（日誌の業者欄）はまだありません。");
 
   // 現場掲示の欄（欄名・並びは boardContent.js の BOARD_SECTIONS。A3の印刷も同じ定義を使う）
-  const BOARD_ICONS = { works: "👷", flow: "", deliveries: "🚚", focus: "🎯", ky: "📝", patrol: "🔍", safety: "⚠️", staff: "👷", coordination: "🤝", notice: "📢", tomorrow: "📅" };
+  // 監督予定・社内連絡（日報の supervisorSchedule。全件・開始時刻の順。A3も同じデータ）
+  const scheduleHtml = (model.schedule || []).length
+    ? `<div class="dash-table-wrap"><table class="dash-table dash-schedule"><thead><tr><th>時間</th><th>内容</th><th>場所・所在</th><th>連絡事項</th></tr></thead><tbody>${model.schedule
+        .map((r) => `<tr><td class="t">${escapeHtml(r.start)}${r.start || r.end ? "～" : ""}${escapeHtml(r.end)}</td><td>${escapeHtml(r.title)}</td><td>${escapeHtml(r.place)}</td><td>${escapeHtml(r.note)}</td></tr>`)
+        .join("")}</tbody></table></div>`
+    : empty(model.reportId ? "日誌の「監督予定・社内連絡」に入力すると、ここに表示されます。" : "この日の日誌はまだありません。");
+  const BOARD_ICONS = { schedule: "📢", works: "👷", flow: "", deliveries: "🚚", focus: "🎯", ky: "📝", patrol: "🔍", safety: "⚠️", staff: "👷", coordination: "🤝", notice: "📢", tomorrow: "📅" };
   const tomorrowHtml = textCard(model.diary?.tomorrowPlan, "日誌の「明日の予定」に入力すると、ここに表示されます。");
   const boardBody = {
     works: model.isWork ? vendorHtml + `<h4 class="dash-subhead">作業内容・職長・使用機械</h4>` + worksHtml : "",
     flow: flowHtml,
+    schedule: scheduleHtml,
     deliveries: deliveryHtml,
     focus: focusHtml,
     ky: kyBoardHtml,

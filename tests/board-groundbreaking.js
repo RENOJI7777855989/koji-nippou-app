@@ -101,7 +101,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   const printed = await page.$eval("#reportPrintFrame", (f) => f.srcdoc); await page.click("#reportPrintCloseBtn");
   const pBand = await page.evaluate((html) => [...new DOMParser().parseFromString(html, "text/html").querySelectorAll(".band .bi")].map((b) => `${b.querySelector(".bl").textContent} ${b.querySelector(".bv").textContent}`), printed);
   const expected = ["工期 2026/10/01 ～ 2027/03/31（182日）", "本日 2026/10/05（月）", "工期経過 5日", "着工 1日目", "残り 177日", "進捗 3%", "天気 晴れ　22℃"];
-  check("画面の表示と印刷画面に渡るA3が同じ（工期・本日・工期経過・着工・残り・進捗・天気）・レイアウトの版 2026-10-03-4", JSON.stringify(pBand) === JSON.stringify(expected) && expected.every((t) => chips.includes(t.replace("　", " "))) && printed.includes("現場掲示レイアウト 2026-10-03-4版"), pBand.join(" | "));
+  check("画面の表示と印刷画面に渡るA3が同じ（工期・本日・工期経過・着工・残り・進捗・天気）・レイアウトの版 2026-10-06-1", JSON.stringify(pBand) === JSON.stringify(expected) && expected.every((t) => chips.includes(t.replace("　", " "))) && printed.includes("現場掲示レイアウト 2026-10-06-1版"), pBand.join(" | "));
 
   // 18〜20 A3横1ページ・既存の欄・請求人工なし
   const p = await ctx.newPage(); await p.setContent(printed); await p.emulateMedia({ media: "print" }); await p.waitForTimeout(300);
@@ -116,7 +116,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   });
   const pdf = Buffer.from(await p.pdf({ preferCSSPageSize: true })).toString("latin1"); await p.close();
   check("18 A3横・1ページ（欄・情報帯の文字があふれない）", (pdf.match(/\/Type\s*\/Page[^s]/g) || []).length === 1 && /\/MediaBox\s*\[\s*0\s+0\s+1191/.test(pdf) && r.overflow.length === 0 && r.cut.length === 0, JSON.stringify(r.overflow.concat(r.cut)));
-  check("19 既存の現場掲示の欄（作業・流れ・搬入搬出・巡回点検・重点指示・KY・人員・連絡調整・連絡事項・明日の予定・現場メモ）が残っている", ["works", "flow", "deliveries", "patrol", "focus", "ky", "staff", "coordination", "notice", "tomorrow", "memo"].every((k) => r.sections.includes(k)), r.sections.join(","));
+  check("19 既存の現場掲示の欄（作業・流れ・搬入搬出・巡回点検・重点指示・KY・人員・連絡調整・連絡事項・明日の予定）が残っている（現場メモは 2026-10-06 に外し、監督予定・社内連絡を追加）", ["works", "flow", "schedule", "deliveries", "patrol", "focus", "ky", "staff", "coordination", "notice", "tomorrow"].every((k) => r.sections.includes(k)), r.sections.join(","));
   check("20 請求人工は出ない（「請求」の文字・2.5 が無い）", !r.text.includes("請求") && !r.text.includes("2.5") && !chips.join().includes("請求"));
 
   check("既存の日報は変わらない", (await page.evaluate(async () => JSON.stringify((await (await import("/js/db.js")).dbGetAll("reports")).sort((x, y) => x.id.localeCompare(y.id))))) === reportsBefore);

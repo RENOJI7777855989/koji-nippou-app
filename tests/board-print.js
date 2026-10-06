@@ -87,7 +87,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
     return { ...r, pages: (pdf.match(/\/Type\s*\/Page[^s]/g) || []).length, a3Landscape: /\/MediaBox\s*\[\s*0\s+0\s+1191/.test(pdf) };
   })();
 
-  check("4 印刷画面に渡るのは新しい現場掲示のA3（見出し「現場掲示　今日の現場シート」・画面と同じレイアウトの版）", html.includes("現場掲示　今日の現場シート") && board.ver.includes("2026-10-03-4") && html.includes("現場掲示レイアウト 2026-10-03-4版") && !html.includes("日誌状況"), board.ver);
+  check("4 印刷画面に渡るのは新しい現場掲示のA3（見出し「現場掲示　今日の現場シート」・画面と同じレイアウトの版）", html.includes("現場掲示　今日の現場シート") && board.ver.includes("2026-10-06-1") && html.includes("現場掲示レイアウト 2026-10-06-1版") && !html.includes("日誌状況"), board.ver);
   const missingInA3 = board.keys.filter((k) => k !== "safety" && !a3.keys.includes(k));
   const titleMismatch = board.keys.filter((k) => a3.titles[k] && !board.titles[board.keys.indexOf(k)].endsWith(" " + a3.titles[k]) && board.titles[board.keys.indexOf(k)] !== a3.titles[k]);
   check("5 画面の現場掲示の欄がすべてA3にあり、欄名が同じ（安全注意事項はA3では作業の表の列）", missingInA3.length === 0 && titleMismatch.length === 0 && html.includes("安全注意事項・使用機械"), `画面 ${board.keys.join(",")} / A3 ${a3.keys.join(",")} / 不一致 ${titleMismatch.join(",")}`);
