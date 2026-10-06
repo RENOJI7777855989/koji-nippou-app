@@ -315,6 +315,7 @@ function render(model) {
     <div class="dash-tabs" role="tablist">
       <button type="button" role="tab" class="dash-tab${currentTab === "board" ? " is-active" : ""}" data-tab="board" aria-selected="${currentTab === "board"}">📋 現場掲示</button>
       <button type="button" role="tab" class="dash-tab${currentTab === "manage" ? " is-active" : ""}" data-tab="manage" aria-selected="${currentTab === "manage"}">🛠 監督管理</button>
+      <button type="button" class="dash-cal-jump" data-action="calendar">📅 日報カレンダー</button>
     </div>
     <div class="dash-grid dash-panel" data-panel="board"${currentTab === "board" ? "" : " hidden"}>
       ${boardStateHtml ? `<section class="dash-card dash-card-wide">${boardStateHtml}</section>` : ""}
@@ -426,6 +427,12 @@ root?.addEventListener("click", async (e) => {
     return;
   }
   const action = e.target.closest("[data-action]")?.dataset.action;
+  // 日報カレンダーへの入口（どちらのタブからでも）: 既存の［🛠 監督管理］タブに切り替えて、その中のカレンダーへ移動するだけ（2026-10-06）
+  if (action === "calendar") {
+    root.querySelector('.dash-tab[data-tab="manage"]')?.click();
+    document.getElementById("reportCalendar")?.scrollIntoView({ block: "start" });
+    return;
+  }
   if (action === "diary") openDiary(null);
   if (action === "deliveries") openDiary("deliveries");
   if (action === "companies") openDiary("companies");

@@ -795,6 +795,8 @@ const copyPrevBtn = document.getElementById("copyPrevBtn");
 const copyPrevInfo = document.getElementById("copyPrevInfo");
 const copyPrevChoices = document.getElementById("copyPrevChoices");
 const copyPrevNotice = document.getElementById("copyPrevNotice");
+const copyPickBtn = document.getElementById("copyPickBtn");
+const copyPickPanel = document.getElementById("copyPickPanel");
 let copySource = null; // { date, keys: Set<"業者\u0000工種">, contents: Set<作業内容> } 保存のメッセージで前の日報との違いを出す
 
 async function previousReportsFor(date) {
@@ -809,10 +811,13 @@ async function setupCopyFromPrevious() {
   copyPrevChoices.hidden = true;
   copyPrevChoices.innerHTML = "";
   copyPrevNotice.hidden = true;
+  copyPickPanel.hidden = true;
+  copyPickPanel.innerHTML = "";
   copyPrevArea.hidden = !!editingReportId;
   if (editingReportId) return;
   const prev = await previousReportsFor(dateInput.value);
   copyPrevBtn.disabled = !prev.reports.length;
+  copyPickBtn.disabled = !prev.reports.length;
   copyPrevInfo.textContent = prev.reports.length
     ? `${prev.date.replace(/-/g, "/")} の日報${prev.reports.length > 1 ? `（${prev.reports.length}件。押すと選べます）` : ""}の業者・工種・作業内容・安全注意事項・連絡事項・流れを入れます（人数・作業時間・天気・進捗率・巡回点検・搬入搬出・署名・請求人工は入れません）`
     : "この日付より前の日報がありません。";
@@ -838,6 +843,7 @@ function applyCopyFrom(src) {
     stashedDefaultRows = [];
     for (const f of flows) addTimelineRow({ time: String(f.time || ""), kind: String(f.kind || "work"), title: String(f.title || ""), status: "plan" });
   }
+  copyPickPanel.hidden = true;
   copySource = { date: src.date, keys: new Set(cs.map((c) => `${String(c.companyName || "").trim()}\u0000${String(c.occupation || "").trim()}`)) };
   copyPrevChoices.hidden = true;
   copyPrevNotice.textContent = `${src.date.replace(/-/g, "/")} の日報からコピーしました（業者${cs.length}行・連絡事項${flows.length ? `・流れ${flows.length}件` : ""}）。人数・作業時間・天気・進捗率・巡回点検・搬入搬出・署名・請求人工は今日の分を入力してください。業者の行は追加・削除・編集できます。`;
@@ -864,6 +870,63 @@ copyPrevChoices.addEventListener("click", async (e) => {
   if (!b) return;
   const src = await getReport(b.dataset.copyFrom);
   if (src && !src.isDeleted) applyCopyFrom(src);
+});
+
+/* ---------- 別の日報を選択（コピー元を自分で選ぶ。2026-10-06）----------
+   作成する日付より前の日報だけを、月ごとに並べる（［◀ 前の月］［次の月 ▶］で、保存されているどの月までもさかのぼれる。日数の制限なし）。
+   日報の無い日は並ばないので選べない。同じ日に複数あれば1件ずつ別のボタンにする（自動で選ばない・まとめない）。
+   選んだ日報からのコピーは「📋 前の日報から作成」と同じ applyCopyFrom（コピーする・しない項目は同じ）。 */
+let pickState = { months: [], index: 0, byMonth: new Map() };
+const WEEK = ["日", "月", "火", "水", "木", "金", "土"];
+const pickWhen = (iso) => (iso ? new Date(iso).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "不明");
+
+function renderPickPanel() {
+  const { months, index, byMonth } = pickState;
+  const ym = months[index];
+  const [y, m] = ym.split("-").map(Number);
+  const reports = byMonth.get(ym);
+  const dates = [...new Set(reports.map((r) => r.date))].sort().reverse();
+  const items = dates.map((d) => {
+    const same = reports.filter((r) => r.date === d).sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+    const [, mm, dd] = d.split("-").map(Number);
+    const wd = WEEK[new Date(`${d}T00:00:00`).getDay()];
+    const btns = same.map((r, i) => {
+      const names = [...new Set((r.companies || []).map((c) => (c.companyName || "").trim()).filter(Boolean))];
+      return `<button type="button" class="secondary-btn" data-pick-from="${escapeHtml(r.id)}">${same.length > 1 ? `${i + 1}. ` : ""}${escapeHtml(dayLabelOf(DAY_STATUSES, dayStatusOf(r)))}／業者 ${escapeHtml(names.join("・") || "なし")}${same.length > 1 ? `／作成 ${escapeHtml(pickWhen(r.createdAt))}` : ""}</button>`;
+    }).join("");
+    return `<li><p class="copy-pick-date">${mm}/${dd}（${wd}）${same.length > 1 ? `　日報${same.length}件（1件ずつ選んでください）` : ""}</p>${btns}</li>`;
+  }).join("");
+  copyPickPanel.innerHTML = `
+    <div class="copy-pick-head">
+      <button type="button" class="secondary-btn" data-pick-month="1"${index >= months.length - 1 ? " disabled" : ""}>◀ 前の月</button>
+      <b>${y}年${m}月の日報</b>
+      <button type="button" class="secondary-btn" data-pick-month="-1"${index <= 0 ? " disabled" : ""}>次の月 ▶</button>
+    </div>
+    <p class="copy-prev-info">${dateInput.value.replace(/-/g, "/")} より前の日報だけを出しています（日報の無い日は選べません）。コピーする日報を押してください。</p>
+    <ul class="copy-pick-list">${items}</ul>`;
+  copyPickPanel.hidden = false;
+}
+
+copyPickBtn.addEventListener("click", async () => {
+  if (!copyPickPanel.hidden) { copyPickPanel.hidden = true; return; } // もう一度押すと閉じる
+  const all = (await listReportsBySite(currentSiteId)).filter((r) => r.date && dateInput.value && r.date < dateInput.value);
+  if (!all.length) return;
+  const byMonth = new Map();
+  for (const r of all) { const ym = r.date.slice(0, 7); if (!byMonth.has(ym)) byMonth.set(ym, []); byMonth.get(ym).push(r); }
+  pickState = { months: [...byMonth.keys()].sort().reverse(), index: 0, byMonth }; // 0 = 一番新しい月
+  copyPrevChoices.hidden = true;
+  renderPickPanel();
+});
+
+copyPickPanel.addEventListener("click", async (e) => {
+  const nav = e.target.closest("[data-pick-month]");
+  if (nav) { pickState.index = Math.max(0, Math.min(pickState.months.length - 1, pickState.index + Number(nav.dataset.pickMonth))); renderPickPanel(); return; }
+  const b = e.target.closest("[data-pick-from]");
+  if (!b) return;
+  const hasInput = [...companiesContainer.querySelectorAll(".company-row")].some((row) => [".companyName", ".occupation", ".workContent"].some((sel) => row.querySelector(sel).value.trim()) || (row._signaturePad && !row._signaturePad.isEmpty())) || remarksInput.value.trim();
+  if (hasInput && !confirm("入力中の業者・連絡事項・流れを、選んだ日報の内容に置き換えます（入力中の署名も消えます）。よろしいですか？")) return;
+  const src = await getReport(b.dataset.pickFrom);
+  if (src && !src.isDeleted && src.date < dateInput.value) applyCopyFrom(src);
 });
 
 /** 保存のメッセージ用: 前の日報との違い（業者×工種の 継続・追加・削除） */

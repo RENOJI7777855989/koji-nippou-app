@@ -1995,3 +1995,13 @@ dialog h3 {
 .copy-prev-choices button { min-height: 48px; margin: 0; text-align: left; }
 .copy-prev-notice { margin: 8px 0 0; font-size: 14px; color: #276749; font-weight: bold; }
 .company-row.is-copied h3::after { content: "（前の日報から）"; font-size: 12px; font-weight: normal; color: #2b6cb0; margin-left: 6px; }
+/* 日報カレンダーへの入口（ダッシュボードのタブの並びの右端） */
+.dash-cal-jump { margin: 0 0 4px auto; min-height: 44px; padding: 8px 14px; font-size: 15px; background: #fff; color: #2b6cb0; border: 1px solid #2b6cb0; border-radius: 8px; cursor: pointer; align-self: center; }
+/* 別の日報を選択（コピー元を選ぶ） */
+.copy-prev-area #copyPickBtn { min-height: 48px; margin: 0 8px 0 0; font-size: 16px; }
+.copy-pick-panel { margin-top: 8px; padding: 8px; border: 1px solid #c9d6e8; border-radius: 8px; background: #fff; max-height: 60vh; overflow-y: auto; }
+.copy-pick-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.copy-pick-head button { min-height: 44px; margin: 0; }
+.copy-pick-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.copy-pick-date { margin: 0 0 4px; font-weight: bold; }
+.copy-pick-list button { display: block; width: 100%; min-height: 48px; margin: 0 0 4px; text-align: left; }
