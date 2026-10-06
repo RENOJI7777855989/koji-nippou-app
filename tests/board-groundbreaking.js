@@ -101,7 +101,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   const printed = await page.$eval("#reportPrintFrame", (f) => f.srcdoc); await page.click("#reportPrintCloseBtn");
   const pBand = await page.evaluate((html) => [...new DOMParser().parseFromString(html, "text/html").querySelectorAll(".band .bi")].map((b) => `${b.querySelector(".bl").textContent} ${b.querySelector(".bv").textContent}`), printed);
   const expected = ["工期 2026/10/01 ～ 2027/03/31（182日）", "本日 2026/10/05（月）", "工期経過 5日", "着工 1日目", "残り 177日", "進捗 3%", "天気 晴れ　22℃"];
-  check("画面の表示と印刷画面に渡るA3が同じ（工期・本日・工期経過・着工・残り・進捗・天気）・レイアウトの版 2026-10-06-1", JSON.stringify(pBand) === JSON.stringify(expected) && expected.every((t) => chips.includes(t.replace("　", " "))) && printed.includes("現場掲示レイアウト 2026-10-06-1版"), pBand.join(" | "));
+  check("画面の表示と印刷画面に渡るA3が同じ（工期・本日・工期経過・着工・残り・進捗・天気）・レイアウトの版 2026-10-07-1", JSON.stringify(pBand) === JSON.stringify(expected) && expected.every((t) => chips.includes(t.replace("　", " "))) && printed.includes("現場掲示レイアウト 2026-10-07-1版"), pBand.join(" | "));
 
   // 18〜20 A3横1ページ・既存の欄・請求人工なし
   const p = await ctx.newPage(); await p.setContent(printed); await p.emulateMedia({ media: "print" }); await p.waitForTimeout(300);

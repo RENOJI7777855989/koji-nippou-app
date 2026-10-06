@@ -2,7 +2,8 @@
 //   ・日報の入力画面で追加（1件・複数件）・編集・削除・保存。日報の日付に結びつく（別の日には出ない）
 //   ・現場掲示（画面）・A3印刷（印刷画面に渡るHTML）・PDF保存（同じHTMLから作る画像PDF）が同じ行を全件出す（件数の上限なし）
 //   ・本日の現場の流れは別の欄のまま変わらない。A3に現場メモが無い。請求人工は出ない
-//   ・情報の多い日（業者14社・流れ20件・搬入搬出12件・監督予定12件／30件）でもA3横1ページ・どの欄も切れない
+//   ・A3では v57 の「現場メモ」の枠をそのまま監督予定に使う（2026-10-07）。監督予定が何件でも、ほかの欄の高さ・文字の大きさは
+//     変わらない（0・3・5・8・12・20・30件で比べる）。枠に収まらない日は監督予定の欄だけがあふれ、紙面に注意書きを出す（データは全件のまま）
 //   ・前の日報から作成ではコピーしない。ほかの日報のデータは変わらない
 const path = require("path");
 const fs = require("fs");
@@ -84,6 +85,8 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0
         schInFlow: !!document.querySelector('[data-section="flow"] table.sch'),
         ver: document.querySelector(".ver")?.textContent || "",
         warn: document.querySelector(".a3-overflow-warn")?.textContent || "",
+        boxes: Object.fromEntries([...document.querySelectorAll(".box[data-section]")].map((b) => [b.dataset.section, `${Math.round(b.getBoundingClientRect().height * 10) / 10}mm相当px/${b.querySelector(".content").style.fontSize || "10.5pt"}`])),
+        bottomOrder: [...document.querySelectorAll(".bottom > .box")].map((b) => b.dataset.section).join(","),
         minPt: Math.min(...[...document.querySelectorAll('[data-section="flow"] .content, [data-section="schedule"] .content')].map((c) => parseFloat(c.style.fontSize || "10.5"))),
         minOtherPt: Math.min(...[...document.querySelectorAll(".box .content")].filter((c) => !["flow", "schedule"].includes(c.parentNode.dataset.section)).map((c) => parseFloat(c.style.fontSize || "10.5"))),
         text: document.body.textContent
@@ -158,10 +161,10 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0
   check("現場掲示（画面）: 別の日の予定は出ない・本日の現場の流れは別の欄のまま（8件）", !bd.text.includes("B日の別の予定") && bd.flow.length === 8 && !bd.flow.some((t) => t.includes("発注者")));
   let html = await printedHtml();
   let a3 = await a3Of(html);
-  check("A3印刷: 画面と同じ7行が同じ順で出る（全件・切れていない・時刻などが隣の列にはみ出さない）", JSON.stringify(a3.rows) === JSON.stringify(expectRows) && a3.rowsInside && a3.cellsFit, a3.rows.join(" / "));
-  check("A3: 現場メモが無い・監督予定は流れの欄とは別の欄・下段は3列（作業間の連絡・調整｜連絡事項｜明日の予定）", !a3.sections.includes("memo") && !a3.text.includes("現場メモ") && a3.sections.includes("schedule") && !a3.schInFlow && a3.bottomCols === 3 && ["coordination", "notice", "tomorrow"].every((k) => a3.sections.includes(k)), a3.sections.join(","));
+  check("A3印刷: 画面と同じ7行が同じ順で印刷用HTMLに入る（省略しない）・時刻などが隣の列にはみ出さない", JSON.stringify(a3.rows) === JSON.stringify(expectRows) && a3.cellsFit, a3.rows.join(" / "));
+  check("A3: 現場メモが無い・v57の現場メモの枠（下段の右端）が監督予定・社内連絡（下段は 作業間の連絡・調整｜連絡事項｜明日の予定｜監督予定・社内連絡 の4列）", !a3.sections.includes("memo") && !a3.text.includes("現場メモ") && !a3.schInFlow && a3.bottomCols === 4 && a3.bottomOrder === "coordination,notice,tomorrow,schedule", a3.bottomOrder);
   check("A3: 本日の現場の流れは8件のまま", a3.flowInFlowBox.length === 8);
-  check("A3: 横1ページ・欄からあふれない・レイアウトの版 2026-10-06-1・請求人工なし", a3.pages === 1 && a3.a3land && a3.overflow && a3.overflow.length === 0 && a3.ver.includes("2026-10-06-1") && !a3.text.includes("請求"), JSON.stringify(a3.overflow));
+  check("A3: 横1ページ・監督予定以外の欄はあふれない（監督予定があふれたときは紙面に注意書き）・レイアウトの版 2026-10-07-1・請求人工なし", a3.pages === 1 && a3.a3land && a3.overflow && a3.overflow.every((k) => k === "schedule") && (!a3.overflow.length || a3.warn.includes("監督予定・社内連絡")) && a3.ver.includes("2026-10-07-1") && !a3.text.includes("請求"), JSON.stringify(a3.overflow));
   const pdf = await boardPdf();
   const pdfA3 = await a3Of(pdf.html);
   check("PDF保存: A3印刷と同じHTMLから作る（監督予定7行が同じ）", pdf.status.includes("作成しました") && pdf.html === html && JSON.stringify(pdfA3.rows) === JSON.stringify(expectRows), pdf.status);
@@ -173,7 +176,7 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0
   html = await printedHtml();
   check("日報の無い日は監督予定なし（画面・A3とも。架空の予定は出さない）", bd.rows.length === 0 && html.includes("（本日の監督予定・社内連絡なし）"));
 
-  // ===== 5 情報の多い日: 実際にありうる多さは6pt以上で全件・とても多い日も全件（文字は小さくなる）・極端な日は紙面に注意書き =====
+  // ===== 5 監督予定の件数を変えても、ほかの欄の高さ・文字の大きさは変わらない（v58 の不具合の再発防止） =====
   const heavy = async (n, C, F, D) => {
     const sid = await page.evaluate(async ([siteId, date, n, C, F, D]) => {
       const { dbPut, dbGetAll } = await import("/js/db.js"); const { stampNew } = await import("/js/utils.js");
@@ -195,18 +198,23 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0
     const h = await printedHtml();
     const out = await a3Of(h);
     const rep = await reportOf(HEAVY);
-    const want = rep.supervisorSchedule.map((s) => s.title);
+    // A3・画面は開始時刻の順（開始の無い行は最後・同じ時刻は保存の順）に並べるので、期待値も同じ順にする
+    const want = rep.supervisorSchedule.map((s, i) => ({ s, i })).sort((a, b) => (a.s.start ? 0 : 1) - (b.s.start ? 0 : 1) || String(a.s.start).localeCompare(String(b.s.start)) || a.i - b.i).map(({ s }) => s.title);
     return { sid, out, want, got: out.rows.map((x) => x.split("|")[1]) };
   };
-  let hv = await heavy(8, 8, 12, 6);
-  check("多い日（業者8社・流れ12件・搬入搬出6件・監督予定8件）: A3横1ページ・どの欄もあふれない・注意書きなし", hv.out.pages === 1 && hv.out.a3land && hv.out.overflow?.length === 0 && !hv.out.warn, JSON.stringify(hv.out.overflow));
-  check("多い日: 監督予定8件・流れ12件が全件、枠の中・どの欄も6pt以上（読める大きさ）・請求人工なし", JSON.stringify(hv.got) === JSON.stringify(hv.want) && hv.out.rowsInside && hv.out.cellsFit && hv.out.flowInFlowBox.length === 12 && hv.out.minPt >= 6 && !hv.out.text.includes("請求"), `最小 ${hv.out.minPt}pt ${hv.got.length}/${hv.want.length}`);
-  hv = await heavy(12, 14, 20, 12);
-  check("とても多い日（業者14社・流れ20件・搬入搬出12件・監督予定12件）: A3横1ページ・あふれない（流れ・監督予定の2欄だけ6ptより小さくしてよい）", hv.out.pages === 1 && hv.out.overflow?.length === 0 && !hv.out.warn && JSON.stringify(hv.got) === JSON.stringify(hv.want) && hv.out.rowsInside && hv.out.flowInFlowBox.length === 20 && hv.out.minOtherPt >= 6, `流れ・監督予定 最小 ${hv.out.minPt}pt／ほかの欄 最小 ${hv.out.minOtherPt}pt`);
-  hv = await heavy(30, 14, 20, 12);
-  const screen30 = await boardRows();
-  check("極端に多い日（監督予定30件＋上の量）: 1枚に収まらないことを紙面に注意書きで出す（黙って切らない）・A3は1ページのまま", hv.out.pages === 1 && hv.out.warn.includes("1枚に収まりません") && hv.out.warn.includes("監督予定・社内連絡"), hv.out.warn);
-  check("極端に多い日: データは消えない（日報の30件・画面の現場掲示の30件はそのまま）", hv.want.length === 30 && screen30.rows.length === 30);
+  for (const [nm, C, F, D] of [["業者4社・流れ8件・搬入搬出2件", 4, 8, 2], ["業者8社・流れ12件・搬入搬出6件", 8, 12, 6]]) {
+    const base = (await heavy(0, C, F, D)).out;
+    const others = (bx) => JSON.stringify(Object.fromEntries(Object.entries(bx).filter(([k]) => k !== "schedule")));
+    for (const n of [3, 5, 8, 12, 20, 30]) {
+      const hv = await heavy(n, C, F, D);
+      const screen = await boardRows();
+      const ok = others(hv.out.boxes) === others(base.boxes) && hv.out.boxes.schedule.split("/")[0] === base.boxes.schedule.split("/")[0];
+      check(`${nm}・監督予定${n}件: 本日の作業・流れ・搬入搬出・巡回点検・重点指示・下段など、ほかの欄の高さ・文字の大きさが0件の日と同じ（監督予定の枠の高さも同じ）`, ok, ok ? `監督予定 ${hv.out.boxes.schedule.split("/")[1]}` : `0件 ${others(base.boxes)} / ${n}件 ${others(hv.out.boxes)}`);
+      check(`${nm}・監督予定${n}件: A3横1ページ・全${n}件が順に印刷用HTMLにある（省略しない）・画面も全件・あふれるのは監督予定の欄だけで、あふれたら注意書き・時刻がはみ出さない・請求人工なし`,
+        hv.out.pages === 1 && JSON.stringify(hv.got) === JSON.stringify(hv.want) && screen.rows.length === n && hv.out.overflow.every((k) => base.overflow.includes(k) || k === "schedule") && (!hv.out.overflow.includes("schedule") || hv.out.warn.includes("監督予定・社内連絡")) && hv.out.cellsFit && !hv.out.text.includes("請求"),
+        `文字 ${hv.out.boxes.schedule.split("/")[1]} あふれ[${hv.out.overflow}] 注意書き${hv.out.warn ? "あり" : "なし"} 頁${hv.out.pages} 件数${hv.got.length}/${hv.want.length}/画面${screen.rows.length} 一致${JSON.stringify(hv.got) === JSON.stringify(hv.want)} はみ出し無し${hv.out.cellsFit}`);
+    }
+  }
 
   // ===== 6 ほかの日報は変わらない =====
   const prevAfter = await page.evaluate(async (id) => JSON.stringify(await (await import("/js/db.js")).dbGet("reports", id)), ids.prev);

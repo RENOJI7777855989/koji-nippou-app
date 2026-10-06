@@ -90,7 +90,7 @@ const DEFAULT7 = "08:00 朝礼,08:20 作業,10:00 休憩,12:00 昼休憩,13:00 �
   let out = await a3AndPdf();
   check("5 A3印刷（印刷画面に渡るHTML）に8件（13:00 昼礼を含む）", out.a3.flow.join() === DEFAULT7, out.a3.flow.join());
   check("6 PDFの文字に8件（時刻・内容。13:00 昼礼を含む）がある", pdfHas(out.pdfText, DEFAULT7.split(",")), out.pdfText.split("\n").filter((x) => /^\d\d:\d\d$/.test(x.trim())).join(","));
-  check("6 PDF（同じHTML）はA3横1ページ・欄からあふれない・レイアウトの版は変えていない・請求人工なし", out.pages === 1 && out.a3land && out.a3.over === 0 && out.a3.ver.includes("2026-10-06-1") && !out.a3.text.includes("請求"), out.a3.ver);
+  check("6 PDF（同じHTML）はA3横1ページ・欄からあふれない・レイアウトの版は変えていない・請求人工なし", out.pages === 1 && out.a3land && out.a3.over === 0 && out.a3.ver.includes("2026-10-07-1") && !out.a3.text.includes("請求"), out.a3.ver);
 
   // ===== 7〜14 日報で変更・追加・削除 → ダッシュボード・A3・PDF =====
   await page.goto(`${BASE}#/sites/${ids.siteId}/report/${r.id}`); await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(400);

@@ -9,7 +9,7 @@
    ========================================================== */
 
 /** 現場掲示のレイアウトの版。画面の現場掲示タブとA3の印刷の両方に小さく表示し、古い版が出ていないか見分けられるようにする */
-export const BOARD_LAYOUT_VERSION = "2026-10-06-1"; // 2026-10-06-1: 監督予定・社内連絡を追加（A3は流れの列の下半分）、A3の現場メモ（手書き用の空欄）を外した
+export const BOARD_LAYOUT_VERSION = "2026-10-07-1"; // 2026-10-06-1: 監督予定・社内連絡を追加、A3の現場メモ（手書き用の空欄）を外した／2026-10-07-1: A3の監督予定を v57 の現場メモの枠へ（ほかの欄の配置・高さは v57 のまま）
 
 /**
  * 現場掲示の欄（この順に並べる）。a3: A3での置き場所
@@ -18,7 +18,7 @@ export const BOARD_LAYOUT_VERSION = "2026-10-06-1"; // 2026-10-06-1: 監督予�
 export const BOARD_SECTIONS = [
   { key: "works", title: "本日の作業・業者別 稼働状況", a3: "works" },
   { key: "flow", title: "本日の現場の流れ", a3: "flow" },
-  { key: "schedule", title: "監督予定・社内連絡", a3: "flow" }, // A3では流れの列の下半分
+  { key: "schedule", title: "監督予定・社内連絡", a3: "bottom" }, // A3では下段の右端（v57 の現場メモの枠）
   { key: "deliveries", title: "本日の搬入・搬出", a3: "deliveries" },
   { key: "focus", title: "本日の重点指示", a3: "side" },
   { key: "ky", title: "本日の危険予知活動表", a3: "side" },
