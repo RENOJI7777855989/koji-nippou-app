@@ -21,6 +21,7 @@ import { showView, showMessage } from "./common.js";
 import { navigate } from "../router.js";
 import { FLOW_KINDS, FLOW_STATUSES, DELIVERY_DIRECTIONS, DELIVERY_STATUSES, WORK_TIME_OPTIONS, directionOf, normalizeFlowRow, normalizeDeliveryRow, parseWorkHours, formatWorkHours, workMinutes, durationLabel, defaultWorkdayTimeline, isUntouchedDefaultFlowRow, normalizeScheduleRow, sortSchedule } from "../dashboard/dailyFlow.js";
 import { reportMissingDetails } from "../dashboard/siteDashboardModel.js";
+import { parseBillingInput, BILLING_INPUT_RULE } from "../billing/billingValue.js";
 import { attachProgressSlider } from "./progress-slider.js";
 
 const reportSaveBtn = document.getElementById("reportSaveBtn");
@@ -262,7 +263,7 @@ function addCompanyRow(data = {}) {
       <input type="hidden" class="workHours">
     </div>
     <label>請求人工（任意）
-      <input type="number" class="billingManDays" min="0" step="0.25" inputmode="decimal" placeholder="未入力">
+      <input type="number" class="billingManDays" min="0" step="0.01" inputmode="decimal" placeholder="未入力">
     </label>
     <label class="full-row">使用機械
       <input type="text" class="machinery" placeholder="例）バックホウ">
@@ -295,6 +296,8 @@ function addCompanyRow(data = {}) {
   row.querySelector(".machinery").value = data.machinery || "";
   // 請求人工。以前の版で「人工（請求用）」として保存した manDays も請求人工として読む（同じ入力欄の値）
   row.querySelector(".billingManDays").value = data.billingManDays ?? data.manDays ?? "";
+  // 読み込んだときの値（前から保存されている値。変えていなければ、決まりに合わなくても保存を止めない＝自動で直さない）
+  row.querySelector(".billingManDays").dataset.orig = String(data.billingManDays ?? data.manDays ?? "");
   setupWorkHours(row, data.workHours || "");
   row.querySelector(".workContent").value = data.workContent || "";
   row.querySelector(".safetyNotes").value = data.safetyNotes || "";
@@ -1315,7 +1318,8 @@ function collectCompanies() {
       machinery: row.querySelector(".machinery").value.trim(),
       // 請求人工（請求・見積・提出用。利用者の入力だけ）。未入力は ""。稼働人数・人工・作業時間からは計算しない。
       // ダッシュボード・03-2には使わない（人工は稼働人数から1人＝1人工で数える）
-      billingManDays: row.querySelector(".billingManDays").value.trim(),
+      // 決まりに合う値は数の形にそろえる。前から保存されている値を変えていない行は、そのまま残す
+      billingManDays: row.querySelector(".billingManDays").value.trim() === (row.querySelector(".billingManDays").dataset.orig ?? "") ? (row.querySelector(".billingManDays").dataset.orig ?? "") : (parseBillingInput(row.querySelector(".billingManDays").value)?.value ?? row.querySelector(".billingManDays").value.trim()),
       workHours: row.querySelector(".workHours").value.trim(),
       workContent: row.querySelector(".workContent").value.trim(),
       safetyNotes: row.querySelector(".safetyNotes").value.trim(),
@@ -1341,9 +1345,10 @@ form.addEventListener("submit", async (e) => {
   }
 
   // 請求人工（任意）は0以上の数字だけ
-  const badManDays = [...companiesContainer.querySelectorAll(".billingManDays")].find((el) => el.validity.badInput || (el.value.trim() !== "" && !(Number(el.value) >= 0)));
+  // 請求人工は請求人工入力の画面・保存処理と同じ決まり（billingValue.js）。誤りは別の数に変えずに保存を止める
+  const badManDays = [...companiesContainer.querySelectorAll(".billingManDays")].find((el) => el.validity.badInput || (el.value.trim() !== (el.dataset.orig ?? "") && !parseBillingInput(el.value)));
   if (badManDays) {
-    showMessage("請求人工は0以上の数字で入力してください（未定の場合は空欄のままにしてください）。", true);
+    showMessage(BILLING_INPUT_RULE, true);
     badManDays.focus();
     return;
   }

@@ -6,6 +6,7 @@
    ========================================================== */
 
 import { dbGetAll, dbGet, dbPut, dbPutMany } from "./db.js";
+import { parseBillingInput, BILLING_INPUT_RULE } from "./billing/billingValue.js";
 import { stampNew, stampUpdate } from "./utils.js";
 import { recordChange } from "./auditLog.js";
 
@@ -20,7 +21,25 @@ export async function getReport(id) {
   return dbGet("reports", id);
 }
 
-export async function createReport(fields) {
+/**
+ * 請求人工（companies[].billingManDays）の値を保存の前に検査する（2026-10-17。画面の検査に加えて保存処理でも確かめる）。
+ * previous を渡したときは、前と同じ値の行は検査しない（以前から保存されている値を理由に、ほかの項目の保存を止めないため。
+ * 既存の値を自動で直したり消したりはしない）。誤りがあれば保存せずに止める（別の数に変えない）。
+ */
+function assertBillingValues(companies, previous = null) {
+  const prev = new Map((previous || []).map((c, i) => [c?.companyId || `#${i}`, String(c?.billingManDays ?? "")]));
+  (companies || []).forEach((c, i) => {
+    const raw = c?.billingManDays;
+    if (raw === undefined || raw === null) return;
+    const key = c?.companyId || `#${i}`;
+    if (previous && prev.has(key) && prev.get(key) === String(raw)) return;
+    if (!parseBillingInput(raw)) throw new Error(`請求人工の値が正しくないため保存しませんでした（${c?.companyName || "業者"}：${raw}）。${BILLING_INPUT_RULE}`);
+  });
+}
+
+/** @param {{trustBilling?: boolean}} [options] trustBilling: 既存の日報の値をそのまま写すとき（現場のコピー）だけ true（請求人工の検査をしない） */
+export async function createReport(fields, { trustBilling = false } = {}) {
+  if (!trustBilling) assertBillingValues(fields.companies);
   const site = fields.siteId ? await dbGet("sites", fields.siteId) : null;
   if (site?.completedAt) throw new Error("工事完了済みの現場には日報を追加できません（現場の「工事完了を取り消す」で解除できます）");
   const base = {
@@ -78,6 +97,7 @@ async function applyPatch(id, patch) {
 export async function updateReport(id, patch) {
   const existing = await dbGet("reports", id);
   if (existing?.finalizedAt) throw new Error("この日報は工事完了により確定済みのため修正できません（現場の「工事完了を取り消す」で確定を解除してください）");
+  if (patch && "companies" in patch) assertBillingValues(patch.companies, existing?.companies || []);
   // 内容を修正した日時（印刷状態の管理用: 印刷後に修正された日報を見分ける）
   const updated = await applyPatch(id, { ...patch, lastEditedAt: new Date().toISOString() });
   await recordChange({ entityType: "report", entityId: id, action: "update", summary: `日報（${updated.date || "日付未設定"}）を更新` });

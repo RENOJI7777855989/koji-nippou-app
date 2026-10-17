@@ -21,6 +21,7 @@ import {
   findLatestBackupInDirHandle
 } from "../backup.js";
 import { escapeHtml } from "../utils.js";
+import { storageProtectionStatus } from "../storagePersist.js";
 import { showView, showMessage } from "./common.js";
 import { navigate } from "../router.js";
 
@@ -257,8 +258,28 @@ restoreFromFolderBtn.addEventListener("click", async () => {
 
 backBtn.addEventListener("click", () => navigate("/sites"));
 
+/** 保存データの保護（ブラウザが返した結果だけを表示する。保護されたと推測では出さない） */
+async function renderStorageProtection() {
+  const el = document.getElementById("storageProtection");
+  if (!el) return;
+  const st = await storageProtectionStatus();
+  const mb = (b) => (b == null ? "" : `${(b / 1024 / 1024).toFixed(1)}MB`);
+  const state = !st.supported ? "このブラウザでは、保存データを残すよう求める仕組みが使えないため、状態を確認できません。"
+    : st.persisted === true ? "このブラウザは、保存データを残すことを許可しています（ブラウザが返した結果）。"
+    : st.persisted === false ? "このブラウザは、保存データを残すことをまだ許可していません。使わない期間が続く・容量が足りないなどのときに、ブラウザが保存データを削除する可能性があります。"
+    : "保存データの状態を確認できませんでした。";
+  el.innerHTML = `<h3>保存データの保護</h3>
+    <p class="storage-protection-state${st.persisted === true ? " is-ok" : " is-warn"}">${escapeHtml(state)}</p>
+    <ul class="storage-protection-tips">
+      ${st.standalone ? "<li>ホーム画面に追加したアプリとして開いています。</li>" : "<li>iPadでは、Safariの共有ボタン →「ホーム画面に追加」から開くと、保存データが消されにくくなります（ブラウザのタブで開いたままにしない）。</li>"}
+      <li>許可されていても、端末の故障・初期化・機種変更・サイトデータの削除では消えます。定期的に「フルバックアップを作成してダウンロード」し、ファイルを端末の外（パソコン・共有フォルダなど）にも保存してください。</li>
+      ${st.usage != null && st.quota ? `<li>このアプリの使用量: ${mb(st.usage)}（ブラウザが示す上限の目安: ${mb(st.quota)}）</li>` : ""}
+    </ul>`;
+}
+
 export async function initBackupView() {
   showView("view-backup");
+  await renderStorageProtection();
   await renderReminder();
   await renderHistory();
   await renderFolderStatus();

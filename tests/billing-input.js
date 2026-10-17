@@ -108,6 +108,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   await page.click('[data-billing-shift="1"]'); await page.waitForTimeout(200);
   await page.click('[data-billing-shift="1"]'); await page.waitForTimeout(300);
   check("同じ日に日報が2件ある日（10/1）は、入力する日報を選べる", (await page.inputValue("#billingDate")) === "2026-10-01" && (await page.locator("#billingDay .billing-report-select option").count()) === 2 && (await page.textContent("#billingMonth")).includes("2026年10月"));
+  check("同じ日に日報が2件ある日は「月の請求人工はすべての日報を合算」と警告する（自動で削除・0にしない）", (await page.textContent("#billingDay")).includes("すべての日報に入力した値を合算") && (await page.textContent("#billingMonth")).includes("同じ日に日報が複数ある日"));
   await page.selectOption("#billingDay .billing-report-select", ids.o01a); await page.waitForTimeout(200);
   await page.locator("#billingDay .billing-value").first().fill("5");
   await page.click("#billingSaveBtn"); await page.waitForTimeout(400);
@@ -117,16 +118,22 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   check("10月の集計には10月の値だけ（月をまたいで足さない）", /ナダカ工業\s*5\s*1日/.test(oct) && !oct.includes("野本建装工業"), oct.replace(/\s+/g, " ").slice(0, 120));
   await page.click("#billingCloseBtn");
   await page.waitForTimeout(300);
+  check("業者管理: 同じ日に日報が複数ある日（10/1）を警告する（合算していることを示す）", await (async () => { await page.click('[data-vm-tab="billing"]'); await page.waitForTimeout(300); await page.selectOption("#vendorMgmtMonth", "2026-10"); await page.waitForTimeout(300); return (await page.textContent("#vendorMgmtBody")).includes("同じ日に日報が複数ある日があります（10/1）"); })());
   check("業者管理の請求人工管理に同じ値が出る（既存の集計とつながる）", await (async () => { await page.click('[data-vm-tab="billing"]'); await page.waitForTimeout(300); await page.selectOption("#vendorMgmtMonth", "2026-09"); await page.waitForTimeout(300); const t = await page.textContent("#vendorMgmtBody"); return t.includes("ナダカ工業") && t.includes("3.75"); })());
 
-  // ===== 6 もう一度開くと保存した値が出る（ダッシュボードから）=====
+  // ===== 6 もう一度開くと保存した値が出る（業者管理から。2026-10-17: 現場ダッシュボードのボタンは外し、業者管理に集約）=====
+  await page.goto(`${BASE}#/sites`); await page.waitForSelector("#view-site-list:not([hidden])");
+  await page.goto(`${BASE}#/sites/${ids.siteId}/vendors`); await page.waitForSelector("#view-vendor-management:not([hidden])"); await page.waitForTimeout(300);
+  await page.selectOption("#vendorMgmtMonth", "2026-09"); await page.waitForTimeout(300);
+  await page.click("#vendorMgmtBillingInputBtn"); await page.waitForFunction(() => document.getElementById("billingDialog").open);
+  await page.fill("#billingDate", "2026-09-28"); await page.dispatchEvent("#billingDate", "change"); await page.waitForTimeout(300);
+  const again = await page.$$eval("#billingDay .billing-value", (xs) => xs.map((x) => x.value).join(","));
+  check("6 業者管理からもう一度開くと、保存した値（9/28: 3・0・3.75・未入力）がそのまま出る", again === "3,0,3.75,", again);
+  await page.click("#billingCloseBtn");
   await page.goto(`${BASE}#/sites`); await page.waitForSelector("#view-site-list:not([hidden])");
   await page.evaluate((sid) => { window.__dashboardDate = { siteId: sid, date: "2026-09-28" }; }, ids.siteId);
   await page.goto(`${BASE}#/sites/${ids.siteId}`); await page.waitForSelector("#siteDashboard:not([hidden])"); await page.waitForTimeout(500);
-  await page.click('#siteDashboard [data-action="billing"]'); await page.waitForFunction(() => document.getElementById("billingDialog").open);
-  const again = await page.$$eval("#billingDay .billing-value", (xs) => xs.map((x) => x.value).join(","));
-  check("1・6 現場ダッシュボードの「💴 請求人工入力」から、表示している日（9/28）で開き、保存した値が出る", (await page.inputValue("#billingDate")) === "2026-09-28" && again === "3,0,3.75,", again);
-  await page.click("#billingCloseBtn");
+  check("現場ダッシュボードには「請求人工入力」のボタンを置かない（業者管理に集約）", (await page.$('#siteDashboard [data-action="billing"]')) === null && !(await page.textContent("#siteDashboard")).includes("請求人工入力"));
 
   // ===== 15 現場掲示・A3・PDF・日報の印刷に請求人工は出ない =====
   await page.click("#siteDashboard .dash-tab[data-tab=board]"); await page.waitForTimeout(300);

@@ -223,7 +223,7 @@ export function buildTodaySheetHtml(model) {
      監督予定の欄は幅約81mm→約146mm。3つの連絡欄は約105mm→約83mm で、手書き用の罫線4行はそのまま） */
   .bottom { flex: 0 0 46mm; height: 46mm; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.75fr); grid-template-rows: minmax(0, 1fr); gap: 3mm; }
   .a3-overflow-warn { position: absolute; right: 2mm; bottom: 1mm; background: #fff4f4; border: 0.4mm solid #b42318; color: #b42318; font-size: 9pt; font-weight: bold; padding: 0.5mm 2mm; }
-  /* 監督予定・社内連絡（v57の現場メモの枠） */
+  /* 監督予定・社内連絡（下段の右端の枠） */
   table.sch { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 0.9em; }
   table.sch th, table.sch td { border: 0.2mm solid #999; padding: 0.2em 0.3em; vertical-align: top; overflow-wrap: anywhere; }
   table.sch th { background: #f2f2f2; font-weight: normal; white-space: nowrap; }

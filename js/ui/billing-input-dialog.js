@@ -16,6 +16,7 @@ import { getSite } from "../sites.js";
 import { dayStatusOf, isWorkDay, labelOf as dayLabelOf, DAY_STATUSES } from "../dashboard/dailyFlow.js";
 import { buildMonthlyBilling, billingValueOf, setBillingStatus, BILLING_STATUSES } from "../billing/billingMonthly.js";
 import { escapeHtml } from "../utils.js";
+import { parseBillingInput, BILLING_INPUT_RULE } from "../billing/billingValue.js";
 import { navigate } from "../router.js";
 import { showMessage } from "./common.js";
 
@@ -39,12 +40,8 @@ const isBlank = (v) => v === null || v === undefined || String(v).trim() === "";
 const named = (c) => (c.companyName || "").trim() || (c.occupation || "").trim();
 const fmt = (n) => String(Math.round(n * 100) / 100);
 
-/** 0以上の数（小数点以下2桁まで）か空欄。それ以外は null（入力の誤り） */
-function readValue(input) {
-  const raw = input.value.trim().replace(/[０-９．]/g, (d) => (d === "．" ? "." : String.fromCharCode(d.charCodeAt(0) - 0xfee0))); // 全角数字・小数点も読む
-  if (raw === "") return { value: "" };
-  return /^\d+(\.\d{1,2})?$/.test(raw) || /^\.\d{1,2}$/.test(raw) ? { value: String(Number(raw)) } : null;
-}
+/** 0以上の数（小数点以下2桁まで）か空欄。それ以外は null（入力の誤り）。決まりは日報画面・保存処理と共通（billingValue.js） */
+const readValue = (input) => parseBillingInput(input.value);
 
 /** その日の日報（同じ日に複数あれば最後に更新したもの。選び直せる） */
 const reportsOn = (date) => current.reports.filter((r) => r.date === date).sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
@@ -80,7 +77,7 @@ function renderDay() {
   }
   const rows = (report.companies || []).map((c, i) => ({ c, key: rowKey(c, i) })).filter(({ c }) => named(c));
   const work = isWorkDay(report);
-  const choose = same.length > 1 ? `<label class="billing-choose">この日の日報が${same.length}件あります（入力する日報を選んでください）<select class="billing-report-select">${same.map((r, i) => `<option value="${escapeHtml(r.id)}"${r.id === report.id ? " selected" : ""}>${i + 1}. ${escapeHtml(dayLabelOf(DAY_STATUSES, dayStatusOf(r)))}／業者 ${escapeHtml([...new Set((r.companies || []).map((c) => (c.companyName || "").trim()).filter(Boolean))].join("・") || "なし")}</option>`).join("")}</select></label>` : "";
+  const choose = same.length > 1 ? `<p class="billing-warn">⚠ この日の日報が${same.length}件あります。月の請求人工は、この日のすべての日報に入力した値を合算します（重複登録なら、日報カレンダーから不要な日報を確認してください。自動では削除・0にしません）。</p><label class="billing-choose">入力する日報を選んでください<select class="billing-report-select">${same.map((r, i) => `<option value="${escapeHtml(r.id)}"${r.id === report.id ? " selected" : ""}>${i + 1}. ${escapeHtml(dayLabelOf(DAY_STATUSES, dayStatusOf(r)))}／業者 ${escapeHtml([...new Set((r.companies || []).map((c) => (c.companyName || "").trim()).filter(Boolean))].join("・") || "なし")}</option>`).join("")}</select></label>` : "";
   if (!rows.length) {
     dayEl.innerHTML = `${choose}<p class="chorei-note">この日の日報（${escapeHtml(dayLabelOf(DAY_STATUSES, dayStatusOf(report)))}）に業者の行がありません。請求人工は業者の行ごとに入れます。業者を登録するときは日報を開いてください。</p><button type="button" class="chorei-go" data-billing-open="${escapeHtml(report.id)}">日報を開く</button>`;
     progressEl.textContent = "";
@@ -113,7 +110,8 @@ function renderMonth() {
   const missing = [...new Set(current.reports.filter((r) => r.date && r.date.slice(0, 7) === ym && r.date <= m.cutoff && (r.companies || []).some((c) => (c.companyName || "").trim() && billingValueOf(c) == null)).map((r) => r.date))].sort();
   const statusOptions = (v) => BILLING_STATUSES.map((s) => `<option value="${s.value}"${s.value === v ? " selected" : ""}>${s.label}</option>`).join("");
   monthEl.innerHTML = `<h4>${monthLabel(ym)}の請求人工（日報に入力した値の合計。${md(m.cutoff)}まで）</h4>
-    ${m.rows.length ? `<div class="dash-table-wrap"><table class="dash-table billing-month-table"><thead><tr><th>業者</th><th class="num">月間請求人工</th><th class="num">入力日数</th><th>請求状況</th></tr></thead><tbody>${m.rows.map((r) => `<tr><td>${escapeHtml(r.vendor)}</td><td class="num">${fmt(r.manDays)}</td><td class="num">${r.enteredDays}日</td><td><select class="billing-month-status" data-vendor="${escapeHtml(r.vendor)}"${current.readOnly ? " disabled" : ""}>${statusOptions(r.status)}</select></td></tr>`).join("")}</tbody><tfoot><tr><th>合計</th><td class="num">${fmt(m.total)}</td><td colspan="2"></td></tr></tfoot></table></div>` : `<p class="empty-message">この月に請求人工を入力した業者はまだありません。</p>`}
+    ${m.rows.length ? `<div class="dash-table-wrap"><table class="dash-table billing-month-table"><thead><tr><th>業者</th><th class="num">月間請求人工</th><th class="num">入力日数</th><th>請求状況</th></tr></thead><tbody>${m.rows.map((r) => `<tr><td>${escapeHtml(r.vendor)}</td><td class="num">${fmt(r.manDays)}${r.multiReportDates.length ? `<br><small class="billing-multi">⚠ 同じ日に日報が複数（${r.multiReportDates.map(md).join("・")}）の分も合算</small>` : ""}</td><td class="num">${r.enteredDays}日</td><td><select class="billing-month-status" data-vendor="${escapeHtml(r.vendor)}"${current.readOnly ? " disabled" : ""}>${statusOptions(r.status)}</select></td></tr>`).join("")}</tbody><tfoot><tr><th>合計</th><td class="num">${fmt(m.total)}</td><td colspan="2"></td></tr></tfoot></table></div>` : `<p class="empty-message">この月に請求人工を入力した業者はまだありません。</p>`}
+    ${m.sameDayReportDates.length ? `<p class="billing-warn">⚠ 同じ日に日報が複数ある日（${m.sameDayReportDates.map(md).join("・")}）は、すべての日報の請求人工を合算しています（重複登録の可能性）。</p>` : ""}
     ${m.billedWithoutManDays.length ? `<p class="billing-warn">請求状況が「請求あり」なのに、この月の請求人工が未入力の業者: ${escapeHtml(m.billedWithoutManDays.join("・"))}</p>` : ""}
     <p class="billing-missing-head">請求人工が未入力の業者の行がある日（押すとその日へ移ります）</p>
     ${missing.length ? `<div class="billing-missing">${missing.map((d) => `<button type="button" class="secondary-btn" data-billing-date="${d}"${d === current.date ? " aria-current=\"true\"" : ""}>${md(d)}</button>`).join("")}</div>` : `<p class="empty-message">ありません。</p>`}`;
@@ -203,7 +201,7 @@ saveBtn?.addEventListener("click", async () => {
   for (const row of dayEl.querySelectorAll(".billing-row")) {
     const input = row.querySelector(".billing-value");
     const r = readValue(input);
-    if (!r) { showMessage("請求人工は0以上の数で入力してください（小数は2桁まで。分からない業者は空欄のまま＝未入力）。", true); input.focus(); return; }
+    if (!r) { showMessage(BILLING_INPUT_RULE, true); input.focus(); return; }
     edits.set(row.dataset.key, r.value);
   }
   saveBtn.disabled = true;

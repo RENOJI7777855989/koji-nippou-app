@@ -2053,3 +2053,11 @@ dialog h3 {
 .billing-missing button { min-height: 44px; min-width: 4em; margin: 0; }
 .billing-missing button[aria-current="true"] { border-color: #2b6cb0; font-weight: bold; }
 .vm-billing-input-btn { min-height: 48px; margin: 8px 0 12px; font-weight: bold; }
+/* 保存データの保護（バックアップ管理） */
+.storage-protection { margin: 8px 0 16px; padding: 10px 12px; border: 1px solid #c9d6e8; border-radius: 8px; background: #f8fbff; }
+.storage-protection h3 { margin: 0 0 6px; font-size: 16px; }
+.storage-protection-state { font-weight: bold; margin: 0 0 6px; }
+.storage-protection-state.is-ok { color: #276749; }
+.storage-protection-state.is-warn { color: #b45309; }
+.storage-protection-tips { margin: 0; padding-left: 1.2em; font-size: 14px; }
+.billing-multi { color: #b45309; font-weight: bold; }

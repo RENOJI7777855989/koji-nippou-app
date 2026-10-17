@@ -10,6 +10,8 @@ const config = fs.existsSync(CONFIG_FILE) ? JSON.parse(fs.readFileSync(CONFIG_FI
 const ORIGINAL_TEMPLATE = process.env.ANZEN_TEMPLATE || config.originalTemplatePath || "";
 const ORIGINAL_SHA256 = config.originalSha256 || null;
 const REMOVE_TEXTS = config.removeTexts || [];
+// 提出内訳書（会社指定の内訳書様式・完成したもの）の場所。環境変数 SUBMISSION_TEMPLATE か config.json の submissionTemplatePath（2026-10-17）
+const SUBMISSION_TEMPLATE = process.env.SUBMISSION_TEMPLATE || config.submissionTemplatePath || "";
 
 /**
  * 漏れ検査で「出力に残っていてはいけない語」を、実行時に原本から取り出す（テストのコードに書かない）。
@@ -44,4 +46,4 @@ async function leakWordsFromOriginal(page, originalBuffer = fs.readFileSync(ORIG
   for (const generic of ["テンプレート"]) words.delete(generic);
   return [...words];
 }
-module.exports = { CONFIG_FILE, ORIGINAL_TEMPLATE, ORIGINAL_SHA256, REMOVE_TEXTS, leakWordsFromOriginal };
+module.exports = { SUBMISSION_TEMPLATE, CONFIG_FILE, ORIGINAL_TEMPLATE, ORIGINAL_SHA256, REMOVE_TEXTS, leakWordsFromOriginal };

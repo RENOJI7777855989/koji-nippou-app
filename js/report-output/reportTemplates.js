@@ -212,6 +212,17 @@ export async function listTemplateVersions(templateId) {
     .sort((a, b) => (b.revision || 0) - (a.revision || 0));
 }
 
+/**
+ * ファイル（Blob）を中身ごと複製した、独立したBlobを作る（2026-10-17）。
+ * 退避・差し替え・「前の版に戻す」で、保存場所から読んだBlobを別のレコードへそのまま渡すと、WebKit（Safari）では
+ * 元のレコードを上書きしたときに渡した側のBlobが読めなくなることがあった（旧版に固定した現場のExcel出力で NotFoundError、
+ * 戻す操作で保存の失敗）。中身を読み出して新しいBlobにしてから保存する。中身・指紋（SHA-256）は変わらない。
+ */
+async function independentBlob(blob) {
+  if (!blob) return blob;
+  return new Blob([await blob.arrayBuffer()], { type: blob.type || "" });
+}
+
 async function archiveCurrentVersion(current) {
   const archived = stampNew({
     companyProfileId: current.companyProfileId,
@@ -221,7 +232,7 @@ async function archiveCurrentVersion(current) {
     mapping: current.mapping,
     isDefault: false,
     isAppDefault: false,
-    sourceFileBlob: current.sourceFileBlob,
+    sourceFileBlob: await independentBlob(current.sourceFileBlob),
     sourceFileName: current.sourceFileName,
     sourceFileMimeType: current.sourceFileMimeType,
     sourceFileSha256: current.sourceFileSha256 || (current.sourceFileBlob ? await sha256OfBlob(current.sourceFileBlob) : ""),
@@ -254,7 +265,7 @@ export async function replaceReportTemplateFile(id, { blob, fileName, mimeType, 
   }
   if (current.sourceFileBlob) await archiveCurrentVersion(current);
   const updated = stampUpdate(current, {
-    sourceFileBlob: blob,
+    sourceFileBlob: await independentBlob(blob),
     sourceFileName: fileName,
     sourceFileMimeType: mimeType || current.sourceFileMimeType || "",
     sourceFileSha256: sha,
@@ -274,7 +285,7 @@ export async function restoreReportTemplateVersion(id, archiveId) {
   if (!current || !archived || archived.archivedOf !== id || archived.isDeleted) throw new Error("戻す版が見つかりません");
   await archiveCurrentVersion(current);
   const updated = stampUpdate(current, {
-    sourceFileBlob: archived.sourceFileBlob,
+    sourceFileBlob: await independentBlob(archived.sourceFileBlob),
     sourceFileName: archived.sourceFileName,
     sourceFileMimeType: archived.sourceFileMimeType,
     sourceFileSha256: archived.sourceFileSha256 || (await sha256OfBlob(archived.sourceFileBlob)),

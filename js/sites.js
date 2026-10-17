@@ -118,7 +118,7 @@ export async function copySite(sourceSiteId, { newName, copyReports = false } = 
         companies: r.companies,
         remarks: r.remarks,
         tomorrowPlan: r.tomorrowPlan
-      });
+      }, { trustBilling: true }); // 既存の日報の値をそのまま写す（請求人工の値は検査しない）
     }
   }
 

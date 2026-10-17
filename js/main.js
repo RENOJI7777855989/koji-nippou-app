@@ -15,6 +15,7 @@ import { runMigration } from "./migrate.js";
 import { seedBundledTemplatesOnFreshInstall, extractSetupKey, runBundledSetup } from "./report-output/bundledTemplates.js";
 import { pinUnpinnedSites } from "./report-output/templateResolver.js";
 import { registerServiceWorker } from "./pwaRegister.js";
+import { requestPersistentStorage } from "./storagePersist.js";
 import { registerRoute, startRouter } from "./router.js";
 import { initSiteListView } from "./ui/site-list-view.js";
 import { initSiteFormViewNew, initSiteFormViewEdit } from "./ui/site-form-view.js";
@@ -70,6 +71,8 @@ async function bootstrap() {
     if (key) runSetupLink(key).then(() => pinUnpinnedSites()).catch(() => {});
   });
   registerServiceWorker();
+  // 保存データを残すようブラウザに求める（許可されるかはブラウザしだい。結果はバックアップ管理の画面に表示。起動は待たせない）
+  requestPersistentStorage().catch(() => {});
   await runMigration();
 
   // 具体的なパターンを先に、汎用的な":id"パターンを後に登録する

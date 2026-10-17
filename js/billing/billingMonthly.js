@@ -14,6 +14,7 @@
    ========================================================== */
 
 import { dbGet } from "../db.js";
+export { parseBillingInput, BILLING_INPUT_RULE } from "./billingValue.js";
 import { updateSite } from "../sites.js";
 import { isWorkDay, dayStatusOf, labelOf as statusLabelOf, DAY_STATUSES, parseWorkHours, workMinutes } from "../dashboard/dailyFlow.js";
 
@@ -50,7 +51,7 @@ export function buildMonthlyBilling({ reports = [], site = null, month, today })
   const savedVendors = saved.vendors || {};
   const byVendor = new Map();
   const ensure = (name) => {
-    if (!byVendor.has(name)) byVendor.set(name, { vendor: name, total: 0, entered: 0, missing: 0, lastDate: "", trades: new Set(), days: new Set(), billingDays: new Set() });
+    if (!byVendor.has(name)) byVendor.set(name, { vendor: name, total: 0, entered: 0, missing: 0, lastDate: "", trades: new Set(), days: new Set(), billingDays: new Set(), billingReportsByDate: new Map() });
     return byVendor.get(name);
   };
   for (const r of reports) {
@@ -63,7 +64,11 @@ export function buildMonthlyBilling({ reports = [], site = null, month, today })
       if ((c.occupation || "").trim()) v.trades.add(c.occupation.trim());
       const b = billingValueOf(c);
       if (b == null) v.missing++;
-      else { v.total += b; v.entered++; v.billingDays.add(r.date); if (r.date > v.lastDate) v.lastDate = r.date; }
+      else {
+        v.total += b; v.entered++; v.billingDays.add(r.date); if (r.date > v.lastDate) v.lastDate = r.date;
+        if (!v.billingReportsByDate.has(r.date)) v.billingReportsByDate.set(r.date, new Set());
+        v.billingReportsByDate.get(r.date).add(r.id);
+      }
     }
   }
   // 一覧・集計の対象は、この月に請求人工が1件以上入力されている業者だけ
@@ -83,6 +88,8 @@ export function buildMonthlyBilling({ reports = [], site = null, month, today })
       status,
       statusLabel: labelOf(BILLING_STATUSES, status),
       statusUpdatedAt: st.updatedAt || "",
+      // 同じ日に複数の日報があり、その業者の請求人工がそれぞれに入っている日（集計は従来どおり全部を合算する。重複登録の可能性の警告用）
+      multiReportDates: [...v.billingReportsByDate].filter(([, ids]) => ids.size > 1).map(([d]) => d).sort(),
     };
   }).sort((a, b) => a.vendor.localeCompare(b.vendor, "ja"));
   // 請求状況は「請求あり」で保存されているのに、この月の請求人工が1件も入力されていない業者（一覧には出さず、確認事項にだけ出す）
@@ -99,7 +106,9 @@ export function buildMonthlyBilling({ reports = [], site = null, month, today })
     billedWithoutManDays,
     closeStatus,
     closeLabel: labelOf(BILLING_CLOSE_STATUSES, closeStatus),
-    closeUpdatedAt: saved.closeUpdatedAt || ""
+    closeUpdatedAt: saved.closeUpdatedAt || "",
+    // 基準日までで、同じ日に日報が2件以上ある日（請求人工の有無に関係なく。重複登録の可能性）
+    sameDayReportDates: (() => { const c = new Map(); for (const r of reports) { if (r.isDeleted || !r.date || r.date.slice(0, 7) !== month || r.date > cutoff) continue; c.set(r.date, (c.get(r.date) || 0) + 1); } return [...c].filter(([, n]) => n > 1).map(([d]) => d).sort(); })()
   };
 }
 

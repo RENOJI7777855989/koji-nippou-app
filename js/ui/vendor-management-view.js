@@ -74,9 +74,10 @@ function billingHtml() {
     ${b.rows.length
       ? `<div class="dash-table-wrap"><table class="dash-table vm-table billing-table">
           <thead><tr><th>業者</th><th class="num">月間請求人工</th><th class="num">入力日数</th><th>請求状況</th></tr></thead>
-          <tbody>${b.rows.map((r) => `<tr class="billing-${r.status}" data-billing-row="${escapeHtml(r.vendor)}"><td><button type="button" class="link-btn vm-vendor" data-vm-vendor="${escapeHtml(r.vendor)}">${escapeHtml(r.vendor)}</button></td><td class="num">${r.manDays}人工</td><td class="num">${r.enteredDays}日</td><td>${statusSelect(r)}</td></tr>`).join("")}</tbody>
+          <tbody>${b.rows.map((r) => `<tr class="billing-${r.status}" data-billing-row="${escapeHtml(r.vendor)}"><td><button type="button" class="link-btn vm-vendor" data-vm-vendor="${escapeHtml(r.vendor)}">${escapeHtml(r.vendor)}</button></td><td class="num">${r.manDays}人工${r.multiReportDates.length ? `<br><small class="billing-multi">⚠ 同じ日に日報が複数（${r.multiReportDates.map(md).join("・")}）の分も合算</small>` : ""}</td><td class="num">${r.enteredDays}日</td><td>${statusSelect(r)}</td></tr>`).join("")}</tbody>
         </table></div>`
       : `<p class="empty-message">${monthLabel(state.month)}に請求人工を入力した業者はありません。</p>`}
+    ${b.sameDayReportDates.length ? `<p class="billing-warn">⚠ 同じ日に日報が複数ある日があります（${b.sameDayReportDates.map(md).join("・")}）。月間請求人工は、その日のすべての日報の請求人工を合算しています。同じ内容の重複登録なら、日報カレンダーから不要な日報を確認してください（自動では削除・0にしません）。</p>` : ""}
     ${b.billedWithoutManDays.length ? `<p class="billing-warn">請求あり・請求人工未入力：${escapeHtml(b.billedWithoutManDays.join("・"))}（請求状況は「請求あり」ですが、この月の請求人工が入力されていません）</p>` : ""}
     <label class="billing-close">月の締め <select class="billing-close-status"${canEdit ? "" : " disabled"}>${BILLING_CLOSE_STATUSES.map((s) => `<option value="${s.value}"${s.value === b.closeStatus ? " selected" : ""}>${s.label}</option>`).join("")}</select></label>
     <p class="empty-message">請求人工は入力された値だけを使います（稼働人数・実績人工・作業時間からは作りません。未入力は0にしません）。請求状況は請求書を確認して選びます（請求人工が入っていても自動で「請求あり」にはしません。「請求なし」でも請求人工は0にしません）。月を切り替えると、その月に入力された値だけで集計します。</p>`;
