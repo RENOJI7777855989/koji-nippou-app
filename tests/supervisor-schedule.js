@@ -87,6 +87,8 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0
         warn: document.querySelector(".a3-overflow-warn")?.textContent || "",
         boxes: Object.fromEntries([...document.querySelectorAll(".box[data-section]")].map((b) => [b.dataset.section, `${Math.round(b.getBoundingClientRect().height * 10) / 10}mm相当px/${b.querySelector(".content").style.fontSize || "10.5pt"}`])),
         bottomOrder: [...document.querySelectorAll(".bottom > .box")].map((b) => b.dataset.section).join(","),
+        bottomWidthMm: Object.fromEntries([...document.querySelectorAll(".bottom > .box")].map((b) => [b.dataset.section, Math.round(b.getBoundingClientRect().width / 3.7795)])),
+        notesText: [...document.querySelectorAll(".bottom .filled")].map((f) => f.innerText.replace(/\s+/g, "")).join("|"),
         minPt: Math.min(...[...document.querySelectorAll('[data-section="flow"] .content, [data-section="schedule"] .content')].map((c) => parseFloat(c.style.fontSize || "10.5"))),
         minOtherPt: Math.min(...[...document.querySelectorAll(".box .content")].filter((c) => !["flow", "schedule"].includes(c.parentNode.dataset.section)).map((c) => parseFloat(c.style.fontSize || "10.5"))),
         text: document.body.textContent
@@ -164,7 +166,7 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0
   check("A3印刷: 画面と同じ7行が同じ順で印刷用HTMLに入る（省略しない）・時刻などが隣の列にはみ出さない", JSON.stringify(a3.rows) === JSON.stringify(expectRows) && a3.cellsFit, a3.rows.join(" / "));
   check("A3: 現場メモが無い・v57の現場メモの枠（下段の右端）が監督予定・社内連絡（下段は 作業間の連絡・調整｜連絡事項｜明日の予定｜監督予定・社内連絡 の4列）", !a3.sections.includes("memo") && !a3.text.includes("現場メモ") && !a3.schInFlow && a3.bottomCols === 4 && a3.bottomOrder === "coordination,notice,tomorrow,schedule", a3.bottomOrder);
   check("A3: 本日の現場の流れは8件のまま", a3.flowInFlowBox.length === 8);
-  check("A3: 横1ページ・監督予定以外の欄はあふれない（監督予定があふれたときは紙面に注意書き）・レイアウトの版 2026-10-07-1・請求人工なし", a3.pages === 1 && a3.a3land && a3.overflow && a3.overflow.every((k) => k === "schedule") && (!a3.overflow.length || a3.warn.includes("監督予定・社内連絡")) && a3.ver.includes("2026-10-07-1") && !a3.text.includes("請求"), JSON.stringify(a3.overflow));
+  check("A3: 横1ページ・監督予定以外の欄はあふれない（監督予定があふれたときは紙面に注意書き）・レイアウトの版 2026-10-17-1・請求人工なし", a3.pages === 1 && a3.a3land && a3.overflow && a3.overflow.every((k) => k === "schedule") && (!a3.overflow.length || a3.warn.includes("監督予定・社内連絡")) && a3.ver.includes("2026-10-17-1") && !a3.text.includes("請求"), JSON.stringify(a3.overflow));
   const pdf = await boardPdf();
   const pdfA3 = await a3Of(pdf.html);
   check("PDF保存: A3印刷と同じHTMLから作る（監督予定7行が同じ）", pdf.status.includes("作成しました") && pdf.html === html && JSON.stringify(pdfA3.rows) === JSON.stringify(expectRows), pdf.status);
@@ -177,8 +179,8 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0
   check("日報の無い日は監督予定なし（画面・A3とも。架空の予定は出さない）", bd.rows.length === 0 && html.includes("（本日の監督予定・社内連絡なし）"));
 
   // ===== 5 監督予定の件数を変えても、ほかの欄の高さ・文字の大きさは変わらない（v58 の不具合の再発防止） =====
-  const heavy = async (n, C, F, D) => {
-    const sid = await page.evaluate(async ([siteId, date, n, C, F, D]) => {
+  const heavy = async (n, C, F, D, notes = null) => {
+    const sid = await page.evaluate(async ([siteId, date, n, C, F, D, notes]) => {
       const { dbPut, dbGetAll } = await import("/js/db.js"); const { stampNew } = await import("/js/utils.js");
       for (const old of (await dbGetAll("reports")).filter((x) => x.siteId === siteId && x.date === date)) await dbPut("reports", { ...old, isDeleted: true });
       const T = (h, m) => `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
@@ -191,9 +193,10 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0
         focusInstructions: "足場上の整理整頓\n開口部の養生確認\n重機旋回範囲の立入禁止", workCoordination: "塗装と防水の作業区画を分ける\n3階は午後から内装が入る\n搬入時間の重複に注意\n北側道路の通行止め時間",
         remarks: "明日は午前中に役所の検査あり\n駐車場の割当変更\n詰所の清掃当番\n朝礼場所を東側へ変更", tomorrowPlan: "外壁シーリング北面\n防水下地処理\n内装ボード張り（3階）\n足場一部解体",
         patrolChecklist: { morningMeeting: "good" }, patrolComment: "2階足場の手すり外れを是正" });
+      if (notes) Object.assign(report, notes);
       await dbPut("reports", report);
       return report.id;
-    }, [ids.siteId, HEAVY, n, C, F, D]);
+    }, [ids.siteId, HEAVY, n, C, F, D, notes]);
     await openDash(HEAVY);
     const h = await printedHtml();
     const out = await a3Of(h);
@@ -214,6 +217,25 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0
         hv.out.pages === 1 && JSON.stringify(hv.got) === JSON.stringify(hv.want) && screen.rows.length === n && hv.out.overflow.every((k) => base.overflow.includes(k) || k === "schedule") && (!hv.out.overflow.includes("schedule") || hv.out.warn.includes("監督予定・社内連絡")) && hv.out.cellsFit && !hv.out.text.includes("請求"),
         `文字 ${hv.out.boxes.schedule.split("/")[1]} あふれ[${hv.out.overflow}] 注意書き${hv.out.warn ? "あり" : "なし"} 頁${hv.out.pages} 件数${hv.got.length}/${hv.want.length}/画面${screen.rows.length} 一致${JSON.stringify(hv.got) === JSON.stringify(hv.want)} はみ出し無し${hv.out.cellsFit}`);
     }
+  }
+
+  // ===== 5b 下段の列幅（2026-10-17: 1:1:1:1.75。監督予定の欄を広げた）と、長い連絡欄が欠けないこと =====
+  {
+    const long = {
+      workCoordination: "午後は塗装と足場解体が同じ区画のため、足場解体は14時以降に開始し、塗装班は北面へ移動する。\n3階は午後から内装が入るため、資材置き場を東側へ移す。\n重機の旋回範囲（南側）に立ち入らないよう、各業者の職長から作業員へ周知すること。\n北側道路は10時〜12時通行止め。搬入車両は東側ゲートを使用。\n高所作業車の使用は午前のみ。",
+      remarks: "明日は午前中に役所の完了検査があるため、正面玄関付近の資材を片付けておくこと。\n駐車場の割当を変更（B区画→C区画）。\n元請より安全書類の再提出依頼あり。各社の職長は本日中に提出すること。\n詰所の清掃当番は協力業者3工業。\n朝礼場所を東側へ変更。",
+      tomorrowPlan: "外壁シーリング北面（2〜4階）\n防水下地処理・プライマー塗布\n内装ボード張り（3階東側）\n足場一部解体（南面）\n産廃回収（午後）\n清掃"
+    };
+    const w = (await heavy(0, 4, 8, 2)).out.bottomWidthMm;
+    check("下段の列幅: 監督予定・社内連絡の欄が約146mm（以前は約81mm）、作業間の連絡・調整・連絡事項・明日の予定は約83mm（以前は約105mm）", w.schedule >= 140 && w.schedule <= 150 && ["coordination", "notice", "tomorrow"].every((k) => w[k] >= 80 && w[k] <= 86), JSON.stringify(w));
+    // 8件以上が枠に収まるかは連絡事項の長さで変わる（収まらない日は注意書き。上の件数ごとの確認で見ている）
+    for (const [nm, n] of [["監督予定5件", 5]]) {
+      const hv = await heavy(n, 4, 8, 2);
+      check(`業者4社・流れ8件・${nm}: 監督予定は全件が枠に収まる（あふれ・注意書きなし）`, hv.out.overflow.length === 0 && !hv.out.warn && hv.out.rowsInside && JSON.stringify(hv.got) === JSON.stringify(hv.want), `文字 ${hv.out.boxes.schedule.split("/")[1]}`);
+    }
+    const hv = await heavy(5, 4, 8, 2, long);
+    const flat = (t) => t.replace(/\s+/g, "");
+    check("長い作業間の連絡・調整・連絡事項・明日の予定（各5〜6行）: 全文がA3に入り、欄からあふれない（文字は8pt以上）", hv.out.overflow.length === 0 && [long.workCoordination, long.remarks, long.tomorrowPlan].every((t) => hv.out.notesText.includes(flat(t))) && ["coordination", "notice", "tomorrow"].every((k) => parseFloat(hv.out.boxes[k].split("/")[1]) >= 8), ["coordination", "notice", "tomorrow"].map((k) => hv.out.boxes[k].split("/")[1]).join(" / "));
   }
 
   // ===== 6 ほかの日報は変わらない =====

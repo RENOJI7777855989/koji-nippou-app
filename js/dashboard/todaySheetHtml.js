@@ -7,7 +7,7 @@
    ・並び: 上段＝本日の作業・業者別 稼働状況（業者・工種・稼働人数・人工・作業時間・作業内容・職長・安全注意事項）、
      中段＝本日の現場の流れ｜本日の搬入・搬出／本日の巡回点検｜（本日の重点指示・本日の危険予知活動表・本日の人員）、
      下段＝作業間の連絡・調整｜連絡事項｜明日の予定（日誌の内容のあとは手書き用の罫線）｜監督予定・社内連絡
-   ・監督予定・社内連絡は、v57まで「現場メモ」（手書き用の空欄）があった枠をそのまま使う（2026-10-06）。件数に応じて
+   ・監督予定・社内連絡は、v57まで「現場メモ」（手書き用の空欄）があった枠をそのまま使う（2026-10-06）。下段の列幅は 1:1:1:1.75（2026-10-17）。件数に応じて
      ほかの欄の高さを変えることはしない。枠に収まらない日は文字を小さくし（最小6pt）、それでも収まらなければ紙面に注意書きを出す
    ・用紙はA3横（@page）。1枚に収まるよう、各欄の文字が溢れる場合だけ表示時・印刷前に文字を小さくする
      （最小6pt。情報が少ない日は小さくしない）。本日の作業が収まらない日はその欄の高さを広げて詰め直す
@@ -218,8 +218,10 @@ export function buildTodaySheetHtml(model) {
   .ky .ky-not_submitted { color: #b42318; font-weight: bold; }
   .ky .ky-excluded { color: #888; }
   .ky-sum { margin-top: 1mm; font-size: 0.9em; color: #444; }
-  /* 下段は高さ46mmで固定（中身の量で伸ばさない。監督予定が多くてもほかの欄を押し縮めない） */
-  .bottom { flex: 0 0 46mm; height: 46mm; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.3fr) minmax(0, 1.3fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 3mm; }
+  /* 下段は高さ46mmで固定（中身の量で伸ばさない。監督予定が多くてもほかの欄を押し縮めない）。
+     列幅は 作業間の連絡・調整｜連絡事項｜明日の予定｜監督予定・社内連絡 ＝ 1:1:1:1.75（2026-10-17。以前は 1.3:1.3:1.3:1 で、
+     監督予定の欄は幅約81mm→約146mm。3つの連絡欄は約105mm→約83mm で、手書き用の罫線4行はそのまま） */
+  .bottom { flex: 0 0 46mm; height: 46mm; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.75fr); grid-template-rows: minmax(0, 1fr); gap: 3mm; }
   .a3-overflow-warn { position: absolute; right: 2mm; bottom: 1mm; background: #fff4f4; border: 0.4mm solid #b42318; color: #b42318; font-size: 9pt; font-weight: bold; padding: 0.5mm 2mm; }
   /* 監督予定・社内連絡（v57の現場メモの枠） */
   table.sch { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 0.9em; }
