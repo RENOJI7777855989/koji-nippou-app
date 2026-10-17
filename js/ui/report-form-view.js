@@ -512,6 +512,7 @@ function collectDeliveries() {
 }
 
 function loadFlowAndDeliveries(report = {}) {
+  closeDlvPick();
   stashedDefaultRows = [];
   timelineDefaultNote.hidden = true;
   timelineContainer.innerHTML = "";
@@ -656,6 +657,130 @@ function applyReadOnlyMode(readOnly) {
    ・missing（未記入を入力）: reportMissingDetails の項目がある欄・業者の行だけ。上の一覧から1つずつ移動して入力する。
    保存・キャンセル後は from（calendar=日報カレンダー／check=今日の確認事項）へ戻る。 */
 const quickBar = document.getElementById("reportQuickBar");
+/* ---------- 過去の搬入・搬出から選択して追加（2026-10-17）----------
+   この現場の別の日報（この日報自身・この日付より後の日報・削除済みは除く）の搬入・搬出（report.deliveries）を、日付→日報→行の順に選び、
+   入力中の搬入・搬出の末尾に「追加」する（入力中の行は上書き・削除しない）。保存はいつもの保存ボタンで、元の日報は読むだけで変えない。
+   コピーする項目は既存の搬入・搬出の項目のまま（区分・時刻・品名・数量・業者・元・先・車両・備考）。id は新しく作り、状況は「予定」に戻す
+   （その日の実績ではないため。流れのコピーと同じ）。時刻・数量などは追加後に入力欄で直せる。値の無い項目は空のまま（補わない）。
+   同じ内容（id・状況を除く全項目が同じ）の行が入力中にあれば「重複の可能性」と表示し、追加の前に件数を確認する（自動で削除・統合しない）。 */
+const dlvPickPanel = document.getElementById("dlvPickPanel");
+const DLV_LABEL = { in: "搬入", out: "搬出" };
+const DLV_KEY_FIELDS = ["direction", "time", "item", "quantity", "vendor", "origin", "destination", "vehicle", "note"];
+const dlvKey = (r) => DLV_KEY_FIELDS.map((f) => String(r?.[f] ?? "")).join("\u0000");
+let dlvPick = { dir: "in", months: [], index: 0, byMonth: new Map(), report: null, selected: new Set() };
+
+function closeDlvPick() { if (dlvPickPanel) { dlvPickPanel.hidden = true; dlvPickPanel.innerHTML = ""; } }
+const dlvRowsOf = (report, dir) => (report.deliveries || []).map((d) => normalizeDeliveryRow(d)).filter((d) => d && d.direction === dir);
+
+function renderDlvDates() {
+  const { dir, months, index, byMonth } = dlvPick;
+  const label = DLV_LABEL[dir];
+  if (!months.length) {
+    dlvPickPanel.innerHTML = `<p class="copy-prev-info">この日付（${escapeHtml(dateInput.value.replace(/-/g, "/"))}）までのほかの日報に、${label}の登録はありません。</p><button type="button" class="secondary-btn" data-dlv-cancel>閉じる</button>`;
+    dlvPickPanel.hidden = false;
+    return;
+  }
+  const ym = months[index];
+  const [y, m] = ym.split("-").map(Number);
+  const reports = byMonth.get(ym);
+  const dates = [...new Set(reports.map((r) => r.date))].sort().reverse();
+  const items = dates.map((d) => {
+    const same = reports.filter((r) => r.date === d).sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+    const [, mm, dd] = d.split("-").map(Number);
+    const wd = WEEK[new Date(`${d}T00:00:00`).getDay()];
+    const btns = same.map((r, i) => {
+      const rows = dlvRowsOf(r, dir);
+      return `<button type="button" class="secondary-btn" data-dlv-report="${escapeHtml(r.id)}">${same.length > 1 ? `${i + 1}. ` : ""}${label} ${rows.length}件：${escapeHtml(rows.slice(0, 3).map((x) => x.item || "（品名なし）").join("・"))}${rows.length > 3 ? " ほか" : ""}${same.length > 1 ? `／作成 ${escapeHtml(pickWhen(r.createdAt))}` : ""}</button>`;
+    }).join("");
+    return `<li><p class="copy-pick-date">${mm}/${dd}（${wd}）${same.length > 1 ? `　日報${same.length}件（1件ずつ選んでください）` : ""}</p>${btns}</li>`;
+  }).join("");
+  dlvPickPanel.innerHTML = `
+    <div class="copy-pick-head">
+      <button type="button" class="secondary-btn" data-dlv-month="1"${index >= months.length - 1 ? " disabled" : ""}>◀ 前の月</button>
+      <b>${y}年${m}月の${label}</b>
+      <button type="button" class="secondary-btn" data-dlv-month="-1"${index <= 0 ? " disabled" : ""}>次の月 ▶</button>
+    </div>
+    <p class="copy-prev-info">この現場の ${escapeHtml(dateInput.value.replace(/-/g, "/"))} までのほかの日報のうち、${label}がある日だけを出しています。日報を押すと、その日の${label}を選べます。</p>
+    <ul class="copy-pick-list">${items}</ul>
+    <button type="button" class="secondary-btn" data-dlv-cancel>キャンセル</button>`;
+  dlvPickPanel.hidden = false;
+}
+
+function renderDlvRows() {
+  const { dir, report, selected } = dlvPick;
+  const label = DLV_LABEL[dir];
+  const rows = dlvRowsOf(report, dir);
+  const existing = new Set(collectDeliveries().map(dlvKey));
+  const [, mm, dd] = report.date.split("-").map(Number);
+  const cell = (k, v) => (v ? `<span><small>${k}</small>${escapeHtml(v)}</span>` : "");
+  const statusLabel = (v) => DELIVERY_STATUSES.find((s) => s.value === v)?.label || v;
+  const list = rows.map((r, i) => `<li class="dlv-pick-item${existing.has(dlvKey(r)) ? " is-dup" : ""}"><label>
+      <input type="checkbox" data-dlv-row="${i}"${selected.has(i) ? " checked" : ""}>
+      <span class="dlv-pick-main"><b>${escapeHtml(r.time || "時刻なし")}</b> ${escapeHtml(r.item || "（品名なし）")}${r.quantity ? ` ${escapeHtml(r.quantity)}` : ""}</span>
+      <span class="dlv-pick-sub">${cell("業者", r.vendor)}${cell(dir === "out" ? "搬出元" : "搬入元", r.origin)}${cell(dir === "out" ? "搬出先" : "搬入先", r.destination)}${cell("車両", r.vehicle)}${cell("備考", r.note)}${cell("元の状況", statusLabel(r.status))}</span>
+      ${existing.has(dlvKey(r)) ? `<span class="dlv-pick-dup">⚠ 同じ内容がこの日報にすでにあります（重複の可能性）</span>` : ""}
+    </label></li>`).join("");
+  dlvPickPanel.innerHTML = `
+    <div class="copy-pick-head"><button type="button" class="secondary-btn" data-dlv-back>◀ 日付の選択に戻る</button><b>${mm}/${dd} の${label}（${rows.length}件）</b></div>
+    <p class="copy-prev-info">追加する${label}を選んでください。入力中の搬入・搬出は消えません（末尾に追加されます）。状況は「予定」になり、時刻・数量などは追加後に直せます。</p>
+    <ul class="dlv-pick-list">${list}</ul>
+    <p class="dlv-pick-count">選択 ${selected.size}件／${rows.length}件</p>
+    <div class="dlv-pick-actions">
+      <button type="button" data-dlv-add${selected.size ? "" : " disabled"}>選択した${label}を追加（${selected.size}件）</button>
+      <button type="button" class="secondary-btn" data-dlv-cancel>キャンセル</button>
+    </div>`;
+  dlvPickPanel.hidden = false;
+}
+
+async function openDlvPick(dir) {
+  if (!dlvPickPanel.hidden && dlvPick.dir === dir) { closeDlvPick(); return; } // もう一度押すと閉じる
+  const formDate = dateInput.value;
+  const all = (await listReportsBySite(currentSiteId)).filter((r) => r.siteId === currentSiteId && r.id !== editingReportId && r.date && formDate && r.date <= formDate && dlvRowsOf(r, dir).length);
+  const byMonth = new Map();
+  for (const r of all) { const ym = r.date.slice(0, 7); if (!byMonth.has(ym)) byMonth.set(ym, []); byMonth.get(ym).push(r); }
+  dlvPick = { dir, months: [...byMonth.keys()].sort().reverse(), index: 0, byMonth, report: null, selected: new Set() };
+  renderDlvDates();
+}
+
+document.querySelectorAll("[data-dlv-pick]").forEach((b) => b.addEventListener("click", () => openDlvPick(b.dataset.dlvPick)));
+
+dlvPickPanel?.addEventListener("change", (e) => {
+  const cb = e.target.closest("[data-dlv-row]");
+  if (!cb) return;
+  const i = Number(cb.dataset.dlvRow);
+  if (cb.checked) dlvPick.selected.add(i); else dlvPick.selected.delete(i);
+  renderDlvRows();
+});
+
+dlvPickPanel?.addEventListener("click", async (e) => {
+  if (e.target.closest("[data-dlv-cancel]")) { closeDlvPick(); return; }
+  if (e.target.closest("[data-dlv-back]")) { dlvPick.report = null; dlvPick.selected = new Set(); renderDlvDates(); return; }
+  const nav = e.target.closest("[data-dlv-month]");
+  if (nav) { dlvPick.index = Math.max(0, Math.min(dlvPick.months.length - 1, dlvPick.index + Number(nav.dataset.dlvMonth))); renderDlvDates(); return; }
+  const rb = e.target.closest("[data-dlv-report]");
+  if (rb) {
+    const src = await getReport(rb.dataset.dlvReport);
+    if (!src || src.isDeleted || src.siteId !== currentSiteId || src.id === editingReportId) return;
+    dlvPick.report = src; dlvPick.selected = new Set();
+    renderDlvRows();
+    return;
+  }
+  if (!e.target.closest("[data-dlv-add]")) return;
+  const { dir, report, selected } = dlvPick;
+  const rows = dlvRowsOf(report, dir).filter((_, i) => selected.has(i));
+  if (!rows.length) return;
+  const existing = new Set(collectDeliveries().map(dlvKey));
+  const dup = rows.filter((r) => existing.has(dlvKey(r))).length;
+  const label = DLV_LABEL[dir];
+  if (!confirm(`選択した${label} ${rows.length}件を、この日報に追加します（${rows.length}件追加されます）。${dup ? `\nそのうち ${dup}件は同じ内容がこの日報にすでにあります（重複の可能性）。` : ""}\n入力中の搬入・搬出は消えません。よろしいですか？`)) return;
+  // 新しい id・状況「予定」で、元とは別の行として追加（元の日報は変えない）
+  const added = rows.map((r) => addDeliveryRow({ ...r, id: createId(), status: "plan" }));
+  closeDlvPick();
+  added.forEach((row) => row.classList.add("is-copied"));
+  added[0]?.scrollIntoView({ block: "center" });
+  showMessage(`${report.date.replace(/-/g, "/")} の${label}を${added.length}件追加しました。時刻・数量などを確認してから保存してください。`);
+});
+
 const quickTitleEl = document.getElementById("reportQuickTitle");
 const missingGuideEl = document.getElementById("reportMissingGuide");
 const nextMissingBtn = document.getElementById("reportNextMissingBtn");

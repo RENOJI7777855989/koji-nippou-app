@@ -25,6 +25,10 @@ async function newPage(browser) {
 async function runMigrationScenario(browser, photoPath) {
   const { context, page, consoleErrors, pageErrors } = await newPage(browser);
   await page.goto(BASE_URL);
+  // アプリの起動（起動時の移行処理を含む）が終わってから旧データを置く（起動途中に置くと、最初のページの移行処理が
+  // 先に旧データを読んでしまい、再読み込み後に移行するものが無くなることがあった）
+  await page.waitForSelector("#view-site-list:not([hidden])");
+  await page.waitForTimeout(500);
   await page.evaluate(() => {
     localStorage.clear();
     indexedDB.deleteDatabase("constructionReportsDB");
@@ -52,6 +56,8 @@ async function runMigrationScenario(browser, photoPath) {
   });
   await page.reload();
   await page.waitForLoadState("networkidle");
+  // 移行（旧データ→現場・日報）が終わって現場の一覧が出るまで待つ（固定の300msでは移行より先に数えてしまうことがあった）
+  await page.waitForSelector("#siteList .site-card", { timeout: 10000 }).catch(() => {});
   await page.waitForTimeout(300);
 
   const siteCount = await page.locator("#siteList .site-card").count();

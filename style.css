@@ -2019,3 +2019,18 @@ dialog h3 {
   .schedule-row label.full-row:has(.schNote) { grid-column: 1 / 4; }
   .schedule-row .removeRowBtn { grid-column: 4; min-height: 40px; margin: 0; padding: 6px; font-size: 14px; }
 }
+/* 日誌: 過去の搬入・搬出から選択（2026-10-17） */
+.delivery-add-btns button[data-dlv-pick] { font-size: 15px; }
+.dlv-pick-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.dlv-pick-item label { display: grid; grid-template-columns: 32px 1fr; gap: 2px 8px; align-items: start; padding: 8px; border: 1px solid #ddd; border-radius: 6px; background: #fafafa; margin: 0; cursor: pointer; }
+.dlv-pick-item input[type=checkbox] { width: 26px; height: 26px; margin: 2px 0 0; grid-row: span 3; }
+.dlv-pick-main { font-size: 16px; }
+.dlv-pick-sub { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 14px; color: #333; }
+.dlv-pick-sub small { color: #666; margin-right: 4px; }
+.dlv-pick-item.is-dup label { border-color: #f0b35a; background: #fffaf0; }
+.dlv-pick-dup { color: #b45309; font-size: 14px; font-weight: bold; }
+.dlv-pick-count { font-weight: bold; margin: 8px 0 4px; }
+.dlv-pick-actions { display: flex; flex-wrap: wrap; gap: 8px; position: sticky; bottom: 0; background: #fff; padding-top: 6px; }
+.dlv-pick-actions button { min-height: 48px; margin: 0; }
+.delivery-row.is-copied { outline: 2px dashed #2b6cb0; outline-offset: 2px; }
+.read-only-form #dlvPickPanel { display: none; }
