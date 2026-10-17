@@ -16,6 +16,7 @@ import { navigate } from "../router.js";
 import { showView, showMessage } from "./common.js";
 import { buildVendorActivity, buildMonthlyBilling, buildVendorMonthDetail, setBillingStatus, setBillingClose, BILLING_STATUSES, BILLING_CLOSE_STATUSES } from "../billing/billingMonthly.js";
 import { durationLabel } from "../dashboard/dailyFlow.js";
+import { openBillingDialog } from "./billing-input-dialog.js";
 
 const siteNameEl = document.getElementById("vendorMgmtSiteName");
 const monthSelect = document.getElementById("vendorMgmtMonth");
@@ -116,12 +117,20 @@ export async function initVendorManagementView(params) {
   const sameSite = state.site?.id === site.id;
   state = { site, reports: (await listReportsBySite(site.id)).filter((r) => !r.isDeleted), month: sameSite && state.month ? state.month : todayIso().slice(0, 7), tab: sameSite ? state.tab : "activity", vendor: sameSite ? state.vendor : null };
   siteNameEl.textContent = `（${site.name}）`;
+  document.getElementById("vendorMgmtBillingInputBtn").hidden = !hasPermission("editReports");
   renderMonthSelect();
   render();
   showView("view-vendor-management");
 }
 
 document.getElementById("backToSiteFromVendorMgmtBtn")?.addEventListener("click", () => navigate(`/sites/${state.site.id}`));
+// 請求人工入力: 表示している月の今日（過去の月なら月末）から開き、閉じたあと（保存のたび）この画面を読み直す
+document.getElementById("vendorMgmtBillingInputBtn")?.addEventListener("click", () => {
+  const today = todayIso();
+  const end = (() => { const [y, m] = state.month.split("-").map(Number); return `${state.month}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`; })();
+  const date = today.slice(0, 7) === state.month ? today : today < end ? `${state.month}-01` : end;
+  openBillingDialog({ site: state.site, date, onSaved: () => reload() });
+});
 // 月・タブを切り替えるたびに、現場（請求状況）と日報を読み直してから表示する
 monthSelect?.addEventListener("change", async () => { state.month = monthSelect.value; await reload(); });
 viewEl?.addEventListener("click", async (e) => {

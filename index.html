@@ -645,6 +645,7 @@
         <button type="button" role="tab" class="dash-tab" data-vm-tab="activity">業者別稼働</button>
         <button type="button" role="tab" class="dash-tab" data-vm-tab="billing">請求人工管理</button>
       </div>
+      <button type="button" id="vendorMgmtBillingInputBtn" class="vm-billing-input-btn">💴 請求人工入力</button>
       <div id="vendorMgmtBody"></div>
     </section>
 
@@ -1161,6 +1162,28 @@
       <div class="chorei-actions">
         <button type="button" id="choreiCloseBtn" class="secondary-btn">閉じる</button>
         <button type="button" id="choreiSaveBtn">保存</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- 請求人工入力（日ごとに業者の行の請求人工を入れる。js/ui/billing-input-dialog.js） -->
+  <dialog id="billingDialog" class="chorei-dialog billing-dialog">
+    <h3>💴 請求人工入力</h3>
+    <div class="billing-date-bar">
+      <button type="button" class="secondary-btn" data-billing-shift="-1" aria-label="前の日">◀ 前の日</button>
+      <input type="date" id="billingDate" aria-label="入力する日">
+      <button type="button" class="secondary-btn" data-billing-shift="1" aria-label="次の日">次の日 ▶</button>
+    </div>
+    <div class="chorei-body billing-body">
+      <p class="billing-lead">業者から請求された人工を、日報の業者の行ごとに入れます（稼働人数・稼働人工からは計算しません）。空欄は未入力、0人工は「0」。月の合計は下に自動で出ます。</p>
+      <div id="billingDay"></div>
+      <div id="billingMonth" class="billing-month"></div>
+    </div>
+    <div class="chorei-footer">
+      <p id="billingProgress" class="chorei-progress"></p>
+      <div class="chorei-actions">
+        <button type="button" id="billingCloseBtn" class="secondary-btn">閉じる</button>
+        <button type="button" id="billingSaveBtn">この日の請求人工を保存</button>
       </div>
     </div>
   </dialog>
