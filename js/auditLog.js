@@ -8,9 +8,10 @@ import { dbGetAll, dbPut } from "./db.js";
 import { stampNew } from "./utils.js";
 import { getCurrentUser } from "./currentUser.js";
 
-export async function recordChange({ entityType, entityId, action, summary }) {
+/** 変更履歴の1件を作る（保存はしない。ほかの書き込みと同じトランザクションで保存するときに使う） */
+export function buildChangeEntry({ entityType, entityId, action, summary }) {
   const user = getCurrentUser();
-  const entry = stampNew({
+  return stampNew({
     entityType,
     entityId,
     action, // "create" | "update" | "delete" | "archive" | "unarchive" 等
@@ -19,6 +20,10 @@ export async function recordChange({ entityType, entityId, action, summary }) {
     userId: user?.id || "",
     userName: user?.displayName || user?.username || "（不明なユーザー）"
   });
+}
+
+export async function recordChange({ entityType, entityId, action, summary }) {
+  const entry = buildChangeEntry({ entityType, entityId, action, summary });
   await dbPut("auditLog", entry);
   return entry;
 }

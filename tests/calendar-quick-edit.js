@@ -10,6 +10,7 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const { chromium } = require("playwright");
+const { restoreViaUi } = require("./helpers/restore");
 const { waitForAsync } = require("./helpers/wait.js");
 
 const BASE = "http://localhost:8934/index.html";
@@ -298,7 +299,7 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
   const ctx2 = await chromium.launchPersistentContext(fs.mkdtempSync(path.join(os.tmpdir(), "cal-edit-restore-")), { serviceWorkers: "block" });
   const p3 = await ctx2.newPage(); p3.on("dialog", (d) => d.accept());
   await p3.goto(BASE); await p3.waitForSelector("#view-site-list:not([hidden])");
-  await p3.goto(`${BASE}#/backup`); await p3.setInputFiles("#restoreFileInput", zipPath);
+  await p3.goto(`${BASE}#/backup`); await restoreViaUi(p3, zipPath); // 新しい復元の流れ（検査→復元前のバックアップ→一括適用）
   await waitForAsync(p3, async () => (await (await import("/js/db.js")).dbGetAll("reports")).length >= 7, null, { timeout: 20000 });
   const restored = await p3.evaluate(async () => (await (await import("/js/db.js")).dbGetAll("reports")).find((r) => r.date === "2026-09-10"));
   check("46 バックアップ・復元で日報の流れ（変更・追加・削除後）が保たれる", JSON.stringify(restored.timeline) === JSON.stringify((await reportOf("2026-09-10")).timeline));

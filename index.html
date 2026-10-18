@@ -17,6 +17,9 @@
 </head>
 <body>
 
+  <!-- 未完了の復元の知らせ（決着するまで上部に固定。js/ui/restore-pending-banner.js） -->
+  <div id="restorePendingBanner" class="restore-pending-banner" role="alert" hidden></div>
+
   <p id="offlineBanner" hidden>オフラインモードです</p>
 
   <header class="app-header">
@@ -1031,6 +1034,8 @@
       <p class="app-subtitle">サーバーを持たないため、この端末でアプリを開いている間だけ動く手動バックアップです。他の端末とは共有されません。</p>
       <p id="backupReminder" class="empty-message" hidden></p>
       <div id="storageProtection" class="storage-protection"></div>
+      <!-- 未完了の復元（書き込み後の確認待ち・復旧が必要・復旧失敗）。復旧は利用者が押したときだけ（js/ui/backup-view.js） -->
+      <section id="restoreJournalSection" class="restore-journal" hidden></section>
       <div class="toolbar">
         <button type="button" id="exportBackupBtn">フルバックアップを作成してダウンロード</button>
       </div>
@@ -1059,17 +1064,25 @@
   <p id="message" role="status"></p>
 
   <!-- バックアップ復元 競合確認モーダル -->
-  <dialog id="backupConflictDialog">
-    <h3>復元による上書きの確認</h3>
-    <p class="app-subtitle">バックアップより新しいローカルデータが見つかりました。チェックした項目だけバックアップの内容で上書きします（チェックしなければローカルの内容を残します）。</p>
-    <div class="toolbar">
-      <button type="button" id="conflictKeepAllLocalBtn" class="secondary-btn">すべてローカルを残す</button>
-      <button type="button" id="conflictOverwriteAllBtn" class="secondary-btn">すべてバックアップで上書き</button>
-    </div>
-    <ul id="backupConflictList" class="backup-conflict-list"></ul>
+  <!-- バックアップからの復元（検査→計画→復元前のバックアップ→一括適用。js/ui/backup-view.js・js/backup.js） -->
+  <dialog id="backupRestoreDialog" class="backup-restore-dialog">
+    <h3>バックアップから復元</h3>
+    <p id="restoreFileInfo" class="app-subtitle"></p>
+    <div id="restoreErrors" class="restore-errors" hidden></div>
+    <div id="restorePlan" class="restore-plan"></div>
+    <div id="restoreChoices" class="restore-choices"></div>
+    <section id="restorePreBackup" class="restore-prebackup" hidden>
+      <h4>① 復元前のバックアップ（必須）</h4>
+      <p class="app-subtitle">復元を始める前に、今のこの端末のデータ（写真・署名・テンプレートのファイルを含む）を1つのファイルに保存します。作ったファイルはアプリが読み直して、件数と添付ファイルの指紋が今のデータと一致することを確かめます。復元の結果が思っていたものと違ったときは、このファイルから戻せます。</p>
+      <p class="app-subtitle">iPad: 「ダウンロード」の確認が出たら［ダウンロード］を押し、ファイルアプリの「ダウンロード」に同じ名前のファイルがあることを確かめてください。共有フォルダを設定している場合は、そのフォルダに保存されます。保存できたかどうかはアプリからは確かめられないため、下の確認欄で確かめてください。</p>
+      <button type="button" id="restorePreBackupBtn">今のデータのバックアップを作成して保存</button>
+      <p id="restorePreBackupStatus" class="restore-prebackup-status"></p>
+      <label class="checkbox-label" id="restorePreBackupConfirmLabel" hidden><input type="checkbox" id="restorePreBackupConfirm"> 上のファイルを保存したことを確認しました</label>
+    </section>
+    <p id="restoreStatus" class="restore-status"></p>
     <div class="form-actions">
-      <button type="button" id="backupConflictApplyBtn">選択内容で復元を実行</button>
-      <button type="button" id="backupConflictCancelBtn" class="secondary-btn">キャンセル</button>
+      <button type="button" id="restoreApplyBtn" disabled>② この内容で復元する</button>
+      <button type="button" id="restoreCancelBtn" class="secondary-btn">キャンセル</button>
     </div>
   </dialog>
 
@@ -1198,6 +1211,23 @@
     <div class="report-delete-actions">
       <button type="button" id="reportDeleteCancelBtn" class="secondary-btn" autofocus>キャンセル</button>
       <button type="button" id="reportDeleteConfirmBtn" class="report-delete-confirm">この日報を削除</button>
+    </div>
+  </dialog>
+
+  <!-- 「復旧せずに記録を閉じる」の確認（退避データを削除する操作。復旧ではない。js/ui/backup-view.js） -->
+  <dialog id="restoreCloseDialog" class="day-status-dialog restore-close-dialog">
+    <h3>復旧せずに記録を閉じますか？（退避データを削除します）</h3>
+    <p class="restore-close-warn"><strong>この操作は復旧ではありません。</strong>データは復元した状態のまま残り、<strong>復元前の状態には戻りません</strong>。</p>
+    <ul class="restore-close-list">
+      <li><strong>削除されるもの:</strong> この復元の退避データ（復元で上書きする前の各データの内容と、その職長サイン・写真などの画像、復元で追加したデータの一覧）</li>
+      <li>閉じた後は、<strong>同じ退避データを使って復旧（復元前の状態に戻す）することはできません</strong></li>
+      <li>削除されないもの: 今の現場・日報・署名などのデータ、復元前のバックアップのファイル（ファイルアプリ等に保存したもの）</li>
+    </ul>
+    <p id="restoreCloseTarget" class="restore-close-target"></p>
+    <label class="checkbox-label"><input type="checkbox" id="restoreCloseConfirm"> 復元前の状態には戻らず、この退避データでは復旧できなくなることを理解しました</label>
+    <div class="report-delete-actions">
+      <button type="button" id="restoreCloseCancelBtn" class="secondary-btn" autofocus>キャンセル（何もしない）</button>
+      <button type="button" id="restoreCloseOkBtn" class="report-delete-confirm" disabled>退避データを削除して記録を閉じる</button>
     </div>
   </dialog>
 

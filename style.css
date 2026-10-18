@@ -2061,3 +2061,40 @@ dialog h3 {
 .storage-protection-state.is-warn { color: #b45309; }
 .storage-protection-tips { margin: 0; padding-left: 1.2em; font-size: 14px; }
 .billing-multi { color: #b45309; font-weight: bold; }
+/* バックアップからの復元（検査→計画→復元前のバックアップ→一括適用） */
+.backup-restore-dialog { width: min(96vw, 860px); max-height: 92vh; overflow-y: auto; }
+.restore-errors { border: 1px solid #f5a3a3; background: #fff5f5; border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; }
+.restore-errors-head { color: #b42318; font-weight: bold; margin: 0 0 6px; }
+.restore-errors ul { margin: 0; padding-left: 1.2em; font-size: 14px; max-height: 40vh; overflow-y: auto; }
+.restore-plan-table td.num, .restore-plan-table th.num { text-align: right; }
+.restore-prebackup { border: 2px solid #c9d6e8; border-radius: 8px; padding: 10px 12px; margin: 12px 0; background: #f8fbff; }
+.restore-prebackup h4 { margin: 0 0 6px; }
+.restore-prebackup button { min-height: 48px; }
+.restore-prebackup-status { font-weight: bold; }
+.restore-status { font-weight: bold; color: #b45309; }
+#restoreApplyBtn { min-height: 48px; }
+/* 未完了の復元（確認待ち・復旧が必要・復旧失敗） */
+.restore-journal { border: 2px solid #f5a3a3; background: #fff5f5; border-radius: 8px; padding: 10px 12px; margin: 12px 0; }
+.restore-journal h3 { margin: 0 0 6px; color: #b42318; }
+.restore-journal-lead { margin: 0 0 8px; font-size: 14px; }
+.restore-journal-item { border-top: 1px solid #f5c2c2; padding-top: 8px; margin-top: 8px; }
+.restore-journal-error { color: #b42318; font-size: 14px; margin: 4px 0; }
+.restore-journal-item button { min-height: 44px; }
+/* 未完了の復元の知らせ（決着するまで上部に固定。通常の一時的なメッセージ #message とは別） */
+.restore-pending-banner { position: sticky; top: 0; z-index: 50; margin: 0; padding: 8px 16px; background: #fff1f0; border-bottom: 3px solid #d92d20; color: #7a1712; box-shadow: 0 2px 8px rgba(0,0,0,0.12); max-height: 40vh; overflow-y: auto; }
+.restore-pending-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.restore-pending-head strong { font-size: 16px; }
+.restore-pending-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.restore-pending-buttons button { min-height: 44px; margin: 0; }
+.restore-pending-note { margin: 6px 0 4px; font-size: 14px; }
+.restore-pending-list { margin: 0; padding-left: 1.2em; font-size: 14px; }
+.restore-pending-banner.is-compact { padding-top: 4px; padding-bottom: 4px; }
+/* 知らせが出ているあいだは、日報画面の固定表示の欄を知らせの下に置く（重ならないように） */
+body.has-restore-banner .report-quick-bar { top: 64px; }
+.restore-close-dialog { max-width: 640px; }
+.restore-close-warn { color: #b42318; }
+.restore-close-list { padding-left: 1.2em; font-size: 15px; }
+.restore-close-target { font-size: 14px; color: #555; }
+.restore-journal-close { border-color: #d92d20; color: #b42318; }
+.restore-warnings { border: 1px solid #f0b35a; background: #fffaf0; border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; }
+.restore-warnings ul { margin: 0; padding-left: 1.2em; font-size: 14px; }

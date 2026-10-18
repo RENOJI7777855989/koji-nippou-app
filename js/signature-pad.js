@@ -71,6 +71,19 @@ export function createSignaturePad(canvas) {
     isEmpty() {
       return !hasStroke;
     },
+    /**
+     * 保存済みの署名の画像を、欄の内部の画素（canvas.width × canvas.height）いっぱいに描く。
+     * 欄は手書きのために座標を画面の倍率（devicePixelRatio）で拡大しているので、その拡大を一時的に外して描く
+     * （外さないと倍率が二重にかかり、iPad（倍率2）では署名が2倍に拡大されて左上の一部しか見えず、
+     *   その上に書き足して保存すると元の署名の一部が失われていた。2026-10-18 修正）。
+     * 描いただけでは「書いた」扱いにしない（isEmpty のまま。書き足したときだけ保存される）
+     */
+    showImage(image) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    },
     toBlob() {
       // 描画直後にtoBlob()を呼ぶと、環境によっては描画がまだ
       // コンポジット（画面反映）される前でコールバックが来ないことが

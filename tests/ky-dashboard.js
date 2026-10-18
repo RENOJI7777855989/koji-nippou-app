@@ -10,6 +10,7 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const { chromium } = require("playwright");
+const { restoreViaUi } = require("./helpers/restore");
 const { waitForAsync } = require("./helpers/wait.js");
 
 const BASE = "http://localhost:8934/index.html";
@@ -185,7 +186,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   const ctx2 = await chromium.launchPersistentContext(fs.mkdtempSync(path.join(os.tmpdir(), "ky-restore-")), { serviceWorkers: "block" });
   const p3 = await ctx2.newPage(); p3.on("pageerror", (e) => errors.push(e.message)); p3.on("dialog", (d) => d.accept());
   await p3.goto(BASE); await p3.waitForSelector("#view-site-list:not([hidden])");
-  await p3.goto(`${BASE}#/backup`); await p3.setInputFiles("#restoreFileInput", zipPath);
+  await p3.goto(`${BASE}#/backup`); await restoreViaUi(p3, zipPath); // 新しい復元の流れ（検査→復元前のバックアップ→一括適用）
   await waitForAsync(p3, async () => (await (await import("/js/db.js")).dbGetAll("kySubmissions")).length === 3, null, { timeout: 20000 });
   const restored = await p3.evaluate(async () => JSON.stringify((await (await import("/js/db.js")).dbGetAll("kySubmissions")).sort((a, b) => a.id.localeCompare(b.id))));
   check("バックアップに危険予知活動表が含まれ、別の端末に復元すると同じ内容（提出時刻・変更履歴を含む）", zipHasKy === 3 && restored === kyAfter);

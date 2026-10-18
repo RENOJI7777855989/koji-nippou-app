@@ -10,6 +10,7 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const { chromium } = require("playwright");
+const { restoreViaUi } = require("./helpers/restore");
 const { waitForAsync } = require("./helpers/wait.js");
 const { loadKey } = require("./helpers/templateKey.js");
 
@@ -118,7 +119,7 @@ const day = (n) => { const d = new Date(Date.now() + n * 86400000); return `${d.
   const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "diary-progress-restore-"));
   const ctx2 = await chromium.launchPersistentContext(dir2, {}); const q = await ctx2.newPage(); q.on("dialog", (d) => d.accept());
   await q.goto(BASE); await q.waitForSelector("#view-site-list:not([hidden])");
-  await q.goto(`${BASE}#/backup`); await q.waitForSelector("#view-backup:not([hidden])"); await q.setInputFiles("#restoreFileInput", bf);
+  await q.goto(`${BASE}#/backup`); await q.waitForSelector("#view-backup:not([hidden])"); await restoreViaUi(q, bf); // 新しい復元の流れ（検査→復元前のバックアップ→一括適用）
   await waitForAsync(q, async () => (await (await import("/js/db.js")).dbGetAll("reports")).length === 3, null, { timeout: 20000 });
   const restored = await q.evaluate(async () => (await (await import("/js/db.js")).dbGetAll("reports")).map((r) => r.progressPercent).sort().join(","));
   const restoredSite = await q.evaluate(async () => (await (await import("/js/db.js")).dbGetAll("sites"))[0].progressPercent);

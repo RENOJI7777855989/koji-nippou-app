@@ -314,9 +314,9 @@ function addCompanyRow(data = {}) {
 async function loadSignatureIntoRow(row, signature) {
   row.dataset.existingSignatureId = signature.id;
   row.querySelector(".signatureSignedAt").textContent = `署名日時: ${new Date(signature.signedAt).toLocaleString("ja-JP")}`;
-  const canvas = row.querySelector(".signatureCanvas");
   const bitmap = await createImageBitmap(signature.imageBlob);
-  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  row._signaturePad.showImage(bitmap); // 画面の倍率を二重にかけずに、欄いっぱいに描く（signature-pad.js）
+  bitmap.close?.();
 }
 
 companiesContainer.addEventListener("input", (e) => {
@@ -1412,9 +1412,14 @@ form.addEventListener("submit", async (e) => {
   for (const row of companiesContainer.querySelectorAll(".company-row")) {
     const pad = row._signaturePad;
     if (!pad || pad.isEmpty()) continue;
-    const blob = await pad.toBlob();
-    if (row.dataset.existingSignatureId) await deleteSignature(row.dataset.existingSignatureId);
-    await saveSignature({ reportId: report.id, companyId: row.dataset.companyId, blob });
+    const blob = await pad.toBlob(); // 画像はトランザクションの前に作る
+    // 古い署名の削除・新しい署名の保存・変更履歴を1つのトランザクションで（途中で失敗しても古い署名は残る）
+    try {
+      await saveSignature({ reportId: report.id, companyId: row.dataset.companyId, blob, replaceId: row.dataset.existingSignatureId || null });
+    } catch (err) {
+      showMessage(`日報は保存しましたが、職長サインを保存できませんでした（前のサインはそのまま残っています）: ${err.message}`, true);
+      return;
+    }
   }
 
   const left = formMissingDetails();

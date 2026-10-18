@@ -24,6 +24,7 @@ import { initReportFormViewNew, initReportFormViewEdit } from "./ui/report-form-
 import { initReportTemplateListView } from "./ui/report-template-view.js";
 import { initAuditLogView } from "./ui/audit-log-view.js";
 import { initBackupView } from "./ui/backup-view.js";
+import { initRestorePendingBanner } from "./ui/restore-pending-banner.js";
 import { initReportOutputView } from "./ui/report-output-view.js";
 import { initEstimateListView } from "./ui/estimate-list-view.js";
 import { initEstimateImportView } from "./ui/estimate-import-view.js";
@@ -109,6 +110,9 @@ async function bootstrap() {
     .catch((err) => console.warn("同梱テンプレートの初回登録をスキップしました", err))
     .then(() => pinUnpinnedSites())
     .catch((err) => console.warn("様式の版の記録をスキップしました", err));
+  // 前回のバックアップからの復元が決着していない（書き込み後の確認の前にページが閉じられた・復旧が必要など）ときは、
+  // 決着するまで画面の上部に知らせを出し続ける（3秒で消える通常のメッセージとは別）。自動では確認も復旧もしない
+  initRestorePendingBanner();
 }
 
 bootstrap().catch((err) => {

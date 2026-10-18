@@ -7,6 +7,7 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const { chromium } = require("playwright");
+const { restoreViaUi } = require("./helpers/restore");
 const { waitForAsync } = require("./helpers/wait");
 
 const BASE = "http://localhost:8934/index.html";
@@ -160,7 +161,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   const ctx2 = await chromium.launchPersistentContext(fs.mkdtempSync(path.join(os.tmpdir(), "billing-restore-")), { serviceWorkers: "block" });
   const p3 = await ctx2.newPage(); p3.on("pageerror", (e) => errors.push(e.message)); p3.on("dialog", (d) => d.accept());
   await p3.goto(BASE); await p3.waitForSelector("#view-site-list:not([hidden])");
-  await p3.goto(`${BASE}#/backup`); await p3.setInputFiles("#restoreFileInput", zipPath);
+  await p3.goto(`${BASE}#/backup`); await restoreViaUi(p3, zipPath); // 新しい復元の流れ（検査→復元前のバックアップ→一括適用）
   await waitForAsync(p3, async (id) => !!(await (await import("/js/db.js")).dbGet("reports", id)), ids.o01a, { timeout: 20000 });
   const restored = await p3.evaluate(async ([a, b, s]) => { const { dbGet } = await import("/js/db.js"); return { a: (await dbGet("reports", a)).companies.map((c) => c.billingManDays).join(","), b: (await dbGet("reports", b)).companies[0].billingManDays, st: (await dbGet("sites", s)).billingMonths["2026-09"].vendors["野本建装工業"].status }; }, [ids.d28, ids.o01a, ids.siteId]);
   check("16 バックアップから別の端末に復元しても、請求人工（9月・10月）と請求状況はそのまま", restored.a === "3,0,3.75," && restored.b === "5" && restored.st === "none", JSON.stringify(restored));

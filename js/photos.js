@@ -4,7 +4,8 @@
    エンコードしてから保存し、IndexedDBの容量肥大を防ぐ
    ========================================================== */
 
-import { dbGetAll, dbPut, dbDelete } from "./db.js";
+import { dbGetAll, dbPut, dbDelete, dbGet } from "./db.js";
+import { recordChange } from "./auditLog.js";
 import { stampNew } from "./utils.js";
 
 const MAX_DIMENSION = 1600;
@@ -37,6 +38,12 @@ export async function listPhotosByReport(reportId) {
   return all.filter((p) => !p.isDeleted).sort((a, b) => a.order - b.order);
 }
 
+/**
+ * 写真を削除する（保存場所から消す）。2026-10-18 から、削除したことを変更履歴に残す（バックアップから復元するとき、
+ * この端末で削除した写真を「復元候補」として見分けるため。過去の削除の記録は作らない）。
+ */
 export async function deletePhoto(id) {
-  return dbDelete("photos", id);
+  const photo = await dbGet("photos", id).catch(() => null);
+  await dbDelete("photos", id);
+  await recordChange({ entityType: "photo", entityId: id, action: "delete", summary: `写真を削除（日報 ${photo?.reportId || "不明"}）` }).catch(() => {});
 }

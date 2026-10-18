@@ -8,8 +8,15 @@
 
 import {
   exportFullBackup,
-  restoreFromBackup,
-  analyzeBackupRestore,
+  analyzeBackupFile,
+  RESTORE_PLAN_STALE_MESSAGE,
+  RESTORE_JOURNAL_STATE_LABELS,
+  listRestoreJournals,
+  verifyPendingRestore,
+  recoverRestore,
+  closeRestoreJournal,
+  applyBackupRestore,
+  createVerifiedBackup,
   listBackupHistory,
   getLastBackupAt,
   isFolderHandleSupported,
@@ -24,6 +31,7 @@ import { escapeHtml } from "../utils.js";
 import { storageProtectionStatus } from "../storagePersist.js";
 import { showView, showMessage } from "./common.js";
 import { navigate } from "../router.js";
+import { refreshRestorePendingBanner } from "./restore-pending-banner.js";
 
 const reminderEl = document.getElementById("backupReminder");
 const exportBtn = document.getElementById("exportBackupBtn");
@@ -38,14 +46,28 @@ const chooseFolderBtn = document.getElementById("chooseFolderHandleBtn");
 const clearFolderBtn = document.getElementById("clearFolderHandleBtn");
 const restoreFromFolderBtn = document.getElementById("restoreFromFolderBtn");
 
-const conflictDialog = document.getElementById("backupConflictDialog");
-const conflictListEl = document.getElementById("backupConflictList");
-const conflictApplyBtn = document.getElementById("backupConflictApplyBtn");
-const conflictCancelBtn = document.getElementById("backupConflictCancelBtn");
-const conflictKeepAllLocalBtn = document.getElementById("conflictKeepAllLocalBtn");
-const conflictOverwriteAllBtn = document.getElementById("conflictOverwriteAllBtn");
+const restoreDialog = document.getElementById("backupRestoreDialog");
+const restoreFileInfoEl = document.getElementById("restoreFileInfo");
+const restoreErrorsEl = document.getElementById("restoreErrors");
+const restorePlanEl = document.getElementById("restorePlan");
+const restoreChoicesEl = document.getElementById("restoreChoices");
+const restorePreBackupEl = document.getElementById("restorePreBackup");
+const restorePreBackupBtn = document.getElementById("restorePreBackupBtn");
+const restorePreBackupStatusEl = document.getElementById("restorePreBackupStatus");
+const restorePreBackupConfirmLabel = document.getElementById("restorePreBackupConfirmLabel");
+const restorePreBackupConfirm = document.getElementById("restorePreBackupConfirm");
+const restoreStatusEl = document.getElementById("restoreStatus");
+const restoreApplyBtn = document.getElementById("restoreApplyBtn");
+const restoreCancelBtn = document.getElementById("restoreCancelBtn");
+const journalSectionEl = document.getElementById("restoreJournalSection");
+const closeDialog = document.getElementById("restoreCloseDialog");
+const closeConfirm = document.getElementById("restoreCloseConfirm");
+const closeOkBtn = document.getElementById("restoreCloseOkBtn");
+const closeCancelBtn = document.getElementById("restoreCloseCancelBtn");
+const closeTargetEl = document.getElementById("restoreCloseTarget");
 
-let pendingRestoreFile = null;
+/** 復元の途中の状態（検査の結果・復元前のバックアップ） */
+let restoreState = { analysis: null, preBackup: null, busy: false };
 
 const REMINDER_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
@@ -129,40 +151,54 @@ exportBtn.addEventListener("click", async () => {
   }
 });
 
-function renderConflicts(conflicts) {
-  conflictListEl.innerHTML = "";
-  conflicts.forEach((c) => {
-    const li = document.createElement("li");
-    li.className = "backup-conflict-item";
-    li.innerHTML = `
-      <label class="checkbox-label">
-        <input type="checkbox" class="conflictOverwriteCheckbox" data-key="${escapeHtml(c.store)}:${escapeHtml(c.id)}">
-        ${escapeHtml(c.storeLabel)}「${escapeHtml(String(c.label))}」をバックアップの内容で上書きする
-      </label>
-      <p class="backup-history-meta">ローカルの更新: ${escapeHtml(formatDateTime(c.localUpdatedAt))} ／ バックアップの更新: ${escapeHtml(formatDateTime(c.incomingUpdatedAt))}</p>
-    `;
-    conflictListEl.appendChild(li);
-  });
+const ACTION_LABELS = { new: "新規", overwrite: "上書き", same: "同じ内容", conflict: "ローカルを残す（競合）", candidate: "復元候補・要確認" };
+
+function renderRestoreDialog() {
+  const a = restoreState.analysis;
+  const f = a.format;
+  restoreFileInfoEl.textContent = `ファイル: ${a.fileName}${a.manifest?.exportedAt ? `（作成 ${formatDateTime(a.manifest.exportedAt)}）` : ""}${f ? `・形式 ${f.legacy ? "版1（従来の形式）" : `版${f.formatVersion}`}${f.dbVersion ? `・DB v${f.dbVersion}` : ""}` : ""}`;
+  // 検査の結果
+  if (a.errors.length) {
+    restoreErrorsEl.hidden = false;
+    restoreErrorsEl.innerHTML = `<p class="restore-errors-head">検査で ${a.errors.length}件の問題が見つかったため、復元できません（何も書き込んでいません）。</p><ul>${a.errors.slice(0, 200).map((e) => `<li>${escapeHtml(e.store)}${e.id ? `（${escapeHtml(e.id)}）` : ""}: ${escapeHtml(e.reason)}</li>`).join("")}</ul>${a.errors.length > 200 ? `<p>ほか ${a.errors.length - 200}件</p>` : ""}`;
+  } else {
+    restoreErrorsEl.hidden = true;
+    restoreErrorsEl.innerHTML = "";
+  }
+  // 計画（ストアごとの件数）
+  const rows = Object.entries(a.stores).filter(([, s]) => s.new + s.overwrite + s.same + s.conflict + s.candidate + s.errors > 0);
+  const warningsHtml = (a.warnings || []).length ? `<div class="restore-warnings"><p class="restore-errors-head">確認してください（${a.warnings.length}件。復元は止めません）</p><ul>${a.warnings.slice(0, 50).map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul></div>` : "";
+  restorePlanEl.innerHTML = warningsHtml + (a.manifest ? `<h4>復元の内容（ストアごと）</h4><div class="dash-table-wrap"><table class="dash-table restore-plan-table"><thead><tr><th>データ</th><th class="num">新規</th><th class="num">上書き</th><th class="num">同じ内容</th><th class="num">ローカルを残す（競合）</th><th class="num">復元候補・要確認</th><th class="num">添付ファイル</th><th class="num">検査エラー</th></tr></thead><tbody>${rows.map(([store, s]) => `<tr data-store="${escapeHtml(store)}"><td>${escapeHtml(a.items.find((it) => it.store === store)?.storeLabel || store)}</td><td class="num">${s.new}</td><td class="num">${s.overwrite}</td><td class="num">${s.same}</td><td class="num">${s.conflict}</td><td class="num">${s.candidate}</td><td class="num">${s.attachments}</td><td class="num">${s.errors}</td></tr>`).join("")}</tbody></table></div><p class="app-subtitle">バックアップに無いデータは消しません。「ローカルを残す（競合）」と「復元候補・要確認」は、下で選んだものだけを復元します（既定では復元しません）。</p>` : "");
+  // 選択（競合・復元候補）
+  const choices = a.ok ? a.items.filter((it) => it.action === "conflict" || it.action === "candidate") : [];
+  restoreChoicesEl.innerHTML = choices.length ? `<h4>選んで復元するもの（${choices.length}件）</h4>
+    <div class="toolbar"><button type="button" class="secondary-btn" data-restore-all="0">すべて復元しない</button><button type="button" class="secondary-btn" data-restore-all="1">すべて復元する</button></div>
+    <ul class="backup-conflict-list">${choices.map((it) => `<li class="backup-conflict-item"><label class="checkbox-label"><input type="checkbox" class="restoreChoice" data-key="${escapeHtml(it.key)}"> ${escapeHtml(it.storeLabel)}「${escapeHtml(it.label)}」を復元する（${escapeHtml(ACTION_LABELS[it.action])}）</label><p class="backup-history-meta">${escapeHtml(it.reason)}${it.localUpdatedAt || it.incomingUpdatedAt ? `　この端末: ${escapeHtml(it.localUpdatedAt ? formatDateTime(it.localUpdatedAt) : "なし")}／バックアップ: ${escapeHtml(it.incomingUpdatedAt ? formatDateTime(it.incomingUpdatedAt) : "なし")}` : ""}</p></li>`).join("")}</ul>` : "";
+  restorePreBackupEl.hidden = !a.ok;
+  restorePreBackupStatusEl.textContent = "";
+  restorePreBackupConfirmLabel.hidden = true;
+  restorePreBackupConfirm.checked = false;
+  restoreStatusEl.textContent = "";
+  updateRestoreApplyButton();
 }
 
-async function runRestore(file, skipKeys) {
-  const counts = await restoreFromBackup(file, { skipKeys });
-  showMessage(`復元しました（${Object.entries(counts).map(([k, v]) => `${k}:${v}件`).join("、")}）`);
-  await renderReminder();
+function updateRestoreApplyButton() {
+  const a = restoreState.analysis;
+  restoreApplyBtn.disabled = restoreState.busy || !a?.ok || !restoreState.preBackup || !restorePreBackupConfirm.checked;
 }
 
 async function startRestoreFlow(file) {
-  const { conflicts } = await analyzeBackupRestore(file);
-  if (conflicts.length === 0) {
-    if (!confirm("バックアップから復元しますか？バックアップに含まれるデータで、同じIDの既存データが上書きされます（バックアップに無いデータは削除されません）。")) {
-      return;
-    }
-    await runRestore(file, new Set());
+  const pending = await listRestoreJournals({ onlyUnresolved: true }).catch(() => []);
+  if (pending.length) {
+    showMessage("前回のバックアップからの復元が決着していません。上の「未完了の復元」で確認・復旧してから、もう一度復元してください（何も書き込んでいません）。", true);
+    await renderRestoreJournals();
     return;
   }
-  pendingRestoreFile = file;
-  renderConflicts(conflicts);
-  conflictDialog.showModal();
+  restoreState = { analysis: null, preBackup: null, busy: false, file };
+  showMessage("バックアップを検査しています…");
+  restoreState.analysis = await analyzeBackupFile(file);
+  renderRestoreDialog();
+  restoreDialog.showModal();
 }
 
 restoreInput.addEventListener("change", async () => {
@@ -177,31 +213,150 @@ restoreInput.addEventListener("change", async () => {
   }
 });
 
-conflictKeepAllLocalBtn.addEventListener("click", () => {
-  conflictListEl.querySelectorAll(".conflictOverwriteCheckbox").forEach((cb) => (cb.checked = false));
+restoreChoicesEl.addEventListener("click", (e) => {
+  const all = e.target.closest("[data-restore-all]");
+  if (all) restoreChoicesEl.querySelectorAll(".restoreChoice").forEach((cb) => (cb.checked = all.dataset.restoreAll === "1"));
 });
-conflictOverwriteAllBtn.addEventListener("click", () => {
-  conflictListEl.querySelectorAll(".conflictOverwriteCheckbox").forEach((cb) => (cb.checked = true));
-});
-conflictCancelBtn.addEventListener("click", () => {
-  pendingRestoreFile = null;
-  conflictDialog.close();
-});
-conflictApplyBtn.addEventListener("click", async () => {
-  if (!pendingRestoreFile) return;
-  const file = pendingRestoreFile;
-  const skipKeys = new Set();
-  conflictListEl.querySelectorAll(".conflictOverwriteCheckbox").forEach((cb) => {
-    if (!cb.checked) skipKeys.add(cb.dataset.key); // 未チェック＝上書きしない＝ローカルを残す
-  });
-  pendingRestoreFile = null;
-  conflictDialog.close();
+restorePreBackupConfirm.addEventListener("change", updateRestoreApplyButton);
+
+restorePreBackupBtn.addEventListener("click", async () => {
+  restorePreBackupBtn.disabled = true;
+  restoreState.preBackup = null;
+  restorePreBackupConfirm.checked = false;
+  restorePreBackupConfirmLabel.hidden = true;
+  restorePreBackupStatusEl.textContent = "作成して確かめています…";
+  updateRestoreApplyButton();
   try {
-    await runRestore(file, skipKeys);
+    const pre = await createVerifiedBackup();
+    const dirHandle = await getSavedExportDirHandle();
+    let where;
+    if (dirHandle && (await verifyDirHandlePermission(dirHandle, "readwrite"))) {
+      await writeBackupToDirHandle(dirHandle, pre.filename, pre.blob);
+      where = `共有フォルダ「${dirHandle.name}」`;
+    } else {
+      downloadBlob(pre.blob, pre.filename);
+      where = "この端末のダウンロード（iPadはファイルアプリの「ダウンロード」）";
+    }
+    restoreState.preBackup = pre;
+    restorePreBackupStatusEl.textContent = `作成しました: ${pre.filename}（${formatSize(pre.blob.size)}）。読み直して確かめました（${pre.check.records}件・添付ファイル ${pre.check.attachments}件が今のデータと一致）。保存先: ${where}`;
+    restorePreBackupConfirmLabel.hidden = false;
+    await renderHistory();
   } catch (err) {
-    showMessage(`復元に失敗しました: ${err.message}`, true);
+    restorePreBackupStatusEl.textContent = `作成できませんでした: ${err.message}（復元は開始できません）`;
+  } finally {
+    restorePreBackupBtn.disabled = false;
+    updateRestoreApplyButton();
   }
 });
+
+restoreCancelBtn.addEventListener("click", () => {
+  if (restoreState.busy) return;
+  restoreState = { analysis: null, preBackup: null, busy: false };
+  restoreDialog.close();
+});
+
+restoreApplyBtn.addEventListener("click", async () => {
+  const a = restoreState.analysis;
+  if (!a?.ok || !restoreState.preBackup || !restorePreBackupConfirm.checked) return;
+  const applyKeys = new Set([...restoreChoicesEl.querySelectorAll(".restoreChoice")].filter((cb) => cb.checked).map((cb) => cb.dataset.key));
+  restoreState.busy = true;
+  updateRestoreApplyButton();
+  restoreCancelBtn.disabled = true;
+  restoreStatusEl.textContent = "復元しています…（画面を閉じないでください）";
+  try {
+    const res = await applyBackupRestore(a, { applyKeys });
+    restoreDialog.close();
+    showMessage(`復元しました（${Object.entries(res.counts).map(([k, n]) => `${a.items.find((it) => it.store === k)?.storeLabel || k}:${n}件`).join("、") || "変更なし"}）。書き込み後の確認も済んでいます。`);
+    restoreState = { analysis: null, preBackup: null, busy: false };
+    await renderReminder();
+  } catch (err) {
+    if (err?.stale && restoreState.file) {
+      // 計画を作った後に端末のデータが変わった: 何も書いていない。古い計画は使わず、今の状態で検査し直して計画を作り直す。
+      // 復元前のバックアップは計画より前の状態かもしれないので、作り直しを求める（確認欄も外す）
+      showMessage(`${RESTORE_PLAN_STALE_MESSAGE}。`, true);
+      restoreState.busy = false;
+      restoreState.preBackup = null;
+      try {
+        restoreState.analysis = await analyzeBackupFile(restoreState.file);
+        renderRestoreDialog();
+        restoreStatusEl.textContent = `${RESTORE_PLAN_STALE_MESSAGE}。今の状態で検査し直し、復元の内容を作り直しました（何も書き込んでいません）。内容を確かめ、復元前のバックアップを作り直してから復元してください。`;
+      } catch (e2) {
+        restoreState.analysis = null;
+        restoreStatusEl.textContent = `${RESTORE_PLAN_STALE_MESSAGE}。再検査できませんでした（${e2.message}）。画面を閉じて、もう一度ファイルを選んでください。`;
+      }
+    } else {
+      restoreStatusEl.textContent = `復元できませんでした: ${err.message}`;
+      showMessage(`復元できませんでした: ${err.message}`, true);
+      if (err?.needsRecovery) { restoreState.analysis = null; await renderRestoreJournals(); await refreshRestorePendingBanner(); }
+    }
+  } finally {
+    restoreState.busy = false;
+    restoreCancelBtn.disabled = false;
+    updateRestoreApplyButton();
+  }
+});
+
+/** 未完了の復元（written・needs_recovery・recovery_failed）。確認・復旧・閉じるは、利用者が押したときだけ */
+async function renderRestoreJournals() {
+  const list = await listRestoreJournals({ onlyUnresolved: true }).catch(() => []);
+  journalSectionEl.hidden = list.length === 0;
+  if (!list.length) { journalSectionEl.innerHTML = ""; return; }
+  journalSectionEl.innerHTML = `<h3>未完了の復元</h3>
+    <p class="restore-journal-lead">バックアップからの復元が決着していません。決着するまで、新しい復元はできません。復元前の状態に戻す（復旧）のは、下のボタンを押したときだけです。</p>
+    ${list.map((j) => `<div class="restore-journal-item" data-key="${escapeHtml(j.key)}">
+      <p><strong>${escapeHtml(RESTORE_JOURNAL_STATE_LABELS[j.state] || j.state)}</strong>　${escapeHtml(j.fileName || "")}（${escapeHtml(formatDateTime(j.createdAt))}・上書き ${j.overwritten || 0}件・追加 ${j.added || 0}件）</p>
+      ${j.lastError ? `<p class="restore-journal-error">${escapeHtml(j.lastError)}</p>` : ""}
+      ${(j.conflicts || []).length ? `<p class="restore-journal-error">復元の後に変更されたデータ（手動での対応が必要）: ${escapeHtml(j.conflicts.slice(0, 20).join("・"))}${j.conflicts.length > 20 ? ` ほか${j.conflicts.length - 20}件` : ""}</p>` : ""}
+      <div class="toolbar">
+        ${j.state === "written" ? `<button type="button" data-journal-action="verify">書き込みを確認する</button>` : ""}
+        <button type="button" data-journal-action="recover">復元前の状態に戻す（復旧）</button>
+        <button type="button" class="secondary-btn restore-journal-close" data-journal-action="close">復旧せずに記録を閉じる（退避データを削除）</button>
+      </div>
+    </div>`).join("")}`;
+}
+
+journalSectionEl.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-journal-action]");
+  if (!btn) return;
+  const key = btn.closest("[data-key]").dataset.key;
+  const action = btn.dataset.journalAction;
+  if (action === "recover" && !confirm("この復元で書き込んだ内容を取り消し、復元前の状態に戻します。\n・復元で上書きしたデータは元の内容に戻ります\n・復元で追加したデータは削除されます\n・復元の後に変更されたデータがあれば、消さずに中止します\nよろしいですか？")) return;
+  if (action === "close" && !(await askCloseWithoutRecovery(btn.closest("[data-key]").querySelector("p")?.textContent || ""))) return;
+  journalSectionEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
+  try {
+    if (action === "verify") {
+      const r = await verifyPendingRestore(key);
+      showMessage(r.state === "verified" ? "書き込みを確認しました（復元は成功しています）。" : `確認で食い違いが見つかりました（${r.mismatches.slice(0, 3).join("／")}）。「復元前の状態に戻す」で戻せます。`, r.state !== "verified");
+    } else if (action === "recover") {
+      const r = await recoverRestore(key);
+      showMessage(`復元前の状態に戻しました（戻した ${r.restored}件・削除 ${r.deleted}件）。`);
+    } else if (action === "close") {
+      await closeRestoreJournal(key);
+      showMessage("記録を閉じました（データは変えていません）。");
+    }
+  } catch (err) {
+    showMessage(`${action === "recover" ? "復旧できませんでした" : "できませんでした"}: ${err.message}`, true);
+  } finally {
+    await renderRestoreJournals();
+    await renderHistory();
+    await refreshRestorePendingBanner();
+  }
+});
+
+/** 「復旧せずに記録を閉じる」の確認（理解した旨の確認欄にチェックするまで実行できない。キャンセルでは何も変えない） */
+function askCloseWithoutRecovery(targetText) {
+  return new Promise((resolve) => {
+    closeTargetEl.textContent = targetText ? `対象: ${targetText}` : "";
+    closeConfirm.checked = false;
+    closeOkBtn.disabled = true;
+    const done = (v) => { closeDialog.close(); closeConfirm.onchange = null; closeOkBtn.onclick = null; closeCancelBtn.onclick = null; closeDialog.oncancel = null; resolve(v); };
+    closeConfirm.onchange = () => { closeOkBtn.disabled = !closeConfirm.checked; };
+    closeOkBtn.onclick = () => { if (closeConfirm.checked) done(true); };
+    closeCancelBtn.onclick = () => done(false);
+    closeDialog.oncancel = (e) => { e.preventDefault(); done(false); };
+    closeDialog.showModal();
+  });
+}
 
 async function renderFolderStatus() {
   if (!isFolderHandleSupported()) {
@@ -280,6 +435,7 @@ async function renderStorageProtection() {
 export async function initBackupView() {
   showView("view-backup");
   await renderStorageProtection();
+  await renderRestoreJournals();
   await renderReminder();
   await renderHistory();
   await renderFolderStatus();

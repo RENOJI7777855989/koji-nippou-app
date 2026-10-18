@@ -5,7 +5,7 @@
    ========================================================== */
 
 const DB_NAME = "constructionReportsDB";
-const DB_VERSION = 10;
+export const DB_VERSION = 10;
 
 let dbPromise = null;
 
@@ -240,10 +240,87 @@ export async function dbPutMany(entries) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(stores, "readwrite");
     let lastReq = null;
-    for (const e of entries) lastReq = tx.objectStore(e.store).put(e.value);
-    const fail = () => reject(storageError(lastReq?.error || tx.error, stores.join(",")));
+    let thrown = null;
+    const fail = () => reject(storageError(thrown || lastReq?.error || tx.error, stores.join(",")));
     tx.oncomplete = () => resolve();
     tx.onerror = fail;
     tx.onabort = fail;
+    // put の途中で例外が出た場合（不正なキー・容量不足など）は、トランザクション全体を取り消す（それまでの put も残さない）。
+    // 取り消しの完了は onabort で知らせる（成功とは扱わない）
+    try {
+      for (const e of entries) lastReq = tx.objectStore(e.store).put(e.value);
+    } catch (err) {
+      thrown = err;
+      try { tx.abort(); } catch { /* すでに終わっている場合 */ }
+    }
+  });
+}
+
+/**
+ * 確かめてから書き込む（読み取り・確認・書き込みを1つの readwrite トランザクションで行う）。
+ *   1. reads（ストアとid）・readAll（ストア全体）を、このトランザクションの中で読む
+ *   2. check(読んだ結果) を呼ぶ。Error を返したら（または投げたら）トランザクションを取り消し、何も書かずにその Error で失敗する
+ *   3. 問題が無ければ entries を同じトランザクションで書き、完了（oncomplete）してから成功とする
+ * 読み取りから書き込みまでが1つのトランザクションなので、その間に別のタブ・ウィンドウの書き込みが割り込むことはない
+ * （IndexedDB は、範囲が重なる readwrite のトランザクションを同時に動かさない）。
+ * check は同期の関数にすること（トランザクションの途中で IndexedDB 以外の非同期処理（SHA-256 の計算など）を待つと、
+ * トランザクションが自動で終わってしまうため。添付ファイルの中身の照合は、呼び出し側がトランザクションの前に行う）。
+ * entries は { store, value }（put）か { store, delete: キー }（削除）。
+ * readIndexKeys は、索引で探したキーの一覧（例: ある日報を参照している写真のキー）を同じトランザクションで読む。
+ * @param {{reads?: {store: string, id: any}[], readAll?: string[], readIndexKeys?: {store: string, index: string, key: any}[],
+ *   check: (got: {records: Map<string, any>, all: Object<string, any[]>, indexKeys: Map<string, any[]>}) => (Error|null),
+ *   entries: ({store: string, value: object}|{store: string, delete: any})[]}} p
+ *   records のキーは "ストア:id"（無いレコードは undefined）、indexKeys のキーは "ストア|索引|キー"
+ *   readIndexAll は、索引で探したレコードそのもの（例: ある日報の署名）を読む（indexAll のキーは "ストア|索引|キー"）
+ *   entriesOf: check の後に書き込む内容を作る関数（読んだ内容から書き込む内容を決める場合。そのストアは reads か extraStores に含めること）
+ */
+export async function dbGuardedPutMany({ reads = [], readAll = [], readIndexKeys = [], readIndexAll = [], check, entries = [], entriesOf = null, extraStores = [] }) {
+  const stores = [...new Set([...reads.map((r) => r.store), ...readAll, ...readIndexKeys.map((r) => r.store), ...readIndexAll.map((r) => r.store), ...entries.map((e) => e.store), ...extraStores])];
+  if (!stores.length) return;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(stores, "readwrite");
+    let failure = null;
+    const abort = (err) => { if (!failure) failure = err; try { tx.abort(); } catch { /* すでに終わっている場合 */ } };
+    tx.oncomplete = () => resolve();
+    // 書き込みのリクエストの失敗（容量不足・一意の索引の重複など）は、そのリクエストのエラーを理由にする（トランザクションは自動で取り消される）
+    tx.onerror = (e) => { if (!failure) failure = storageError(e.target?.error || tx.error, stores.join(",")); };
+    tx.onabort = () => reject(failure || storageError(tx.error, stores.join(",")));
+    const records = new Map();
+    const all = {};
+    const indexKeys = new Map();
+    const indexAll = new Map();
+    let pending = reads.length + readAll.length + readIndexKeys.length + readIndexAll.length;
+    const afterReads = () => {
+      let problem = null;
+      try { problem = check({ records, all, indexKeys, indexAll }); } catch (e) { problem = e; }
+      if (problem) { abort(problem); return; }
+      try {
+        for (const e of entriesOf ? [...entries, ...entriesOf()] : entries) {
+          if ("delete" in e) tx.objectStore(e.store).delete(e.delete);
+          else tx.objectStore(e.store).put(e.value);
+        }
+      } catch (err) { abort(err); }
+    };
+    try {
+      if (pending === 0) { afterReads(); return; }
+      const done = () => { if (--pending === 0) afterReads(); };
+      for (const r of reads) {
+        const q = tx.objectStore(r.store).get(r.id);
+        q.onsuccess = () => { records.set(`${r.store}:${r.id}`, q.result); done(); };
+      }
+      for (const s of readAll) {
+        const q = tx.objectStore(s).getAll();
+        q.onsuccess = () => { all[s] = q.result; done(); };
+      }
+      for (const r of readIndexKeys) {
+        const q = tx.objectStore(r.store).index(r.index).getAllKeys(r.key);
+        q.onsuccess = () => { indexKeys.set(`${r.store}|${r.index}|${r.key}`, q.result); done(); };
+      }
+      for (const r of readIndexAll) {
+        const q = tx.objectStore(r.store).index(r.index).getAll(r.key);
+        q.onsuccess = () => { indexAll.set(`${r.store}|${r.index}|${r.key}`, q.result); done(); };
+      }
+    } catch (err) { abort(err); }
   });
 }

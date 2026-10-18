@@ -8,6 +8,7 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const { chromium } = require("playwright");
+const { restoreViaUi } = require("./helpers/restore");
 const { waitForAsync } = require("./helpers/wait");
 
 const BASE = "http://localhost:8934/index.html";
@@ -162,7 +163,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   const ctx2 = await chromium.launchPersistentContext(fs.mkdtempSync(path.join(os.tmpdir(), "dlv-copy-restore-")), { serviceWorkers: "block" });
   const p3 = await ctx2.newPage(); p3.on("pageerror", (e) => errors.push(e.message)); p3.on("dialog", (d) => d.accept());
   await p3.goto(BASE); await p3.waitForSelector("#view-site-list:not([hidden])");
-  await p3.goto(`${BASE}#/backup`); await p3.setInputFiles("#restoreFileInput", zipPath);
+  await p3.goto(`${BASE}#/backup`); await restoreViaUi(p3, zipPath); // 新しい復元の流れ（検査→復元前のバックアップ→一括適用）
   await waitForAsync(p3, async (id) => !!(await (await import("/js/db.js")).dbGet("reports", id)), ids.target, { timeout: 20000 });
   const restored = await p3.evaluate(async (id) => (await (await import("/js/db.js")).dbGet("reports", id)).deliveries, ids.target);
   check("14 バックアップから別の端末に復元しても、追加した搬入・搬出（id・内容）はそのまま", JSON.stringify(restored) === JSON.stringify(t.deliveries));

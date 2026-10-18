@@ -7,6 +7,7 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const { chromium } = require("playwright");
+const { restoreViaUi } = require("./helpers/restore");
 const { waitForAsync } = require("./helpers/wait.js");
 
 const BASE = "http://localhost:8934/index.html";
@@ -174,7 +175,7 @@ const D = "2026-09-03"; // 重複のある日（実際は10/3。テストは過�
   const ctx2 = await chromium.launchPersistentContext(fs.mkdtempSync(path.join(os.tmpdir(), "report-delete-restore-")), { serviceWorkers: "block" });
   const p3 = await ctx2.newPage(); p3.on("dialog", (d) => d.accept());
   await p3.goto(BASE); await p3.waitForSelector("#view-site-list:not([hidden])");
-  await p3.goto(`${BASE}#/backup`); await p3.setInputFiles("#restoreFileInput", zipPath);
+  await p3.goto(`${BASE}#/backup`); await restoreViaUi(p3, zipPath); // 新しい復元の流れ（検査→復元前のバックアップ→一括適用）
   await waitForAsync(p3, async () => (await (await import("/js/db.js")).dbGetAll("reports")).length >= 6, null, { timeout: 20000 });
   const restored = await p3.evaluate(async ([sid, d]) => {
     const { listReportsBySite } = await import("/js/reports.js"); const { listPhotosByReport } = await import("/js/photos.js");
