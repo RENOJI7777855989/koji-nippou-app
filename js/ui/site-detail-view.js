@@ -340,6 +340,8 @@ async function openBulkPrint(mode) {
     mode,
     title: `${mode === "pdf" ? "PDF一括出力" : "まとめて印刷"}（${targets.length}件: ${targets[0].date}〜${targets[targets.length - 1].date}）`,
     note: built.usedCompanyTemplate ? "会社指定様式のレイアウトで、1日報1ページで出力します。" : "会社指定様式が見つからない日報があるため、アプリ独自のレイアウトで出力します。",
+    // すべて会社指定様式のときだけ、1日報1ページのPDF（A3）も作れる（アプリ独自のレイアウトの日報が混ざると、その日報が抜けるため出さない）
+    onePagePdfName: built.usedCompanyTemplate ? `工事日報_${currentSite.name}_${targets[0].date}〜${targets[targets.length - 1].date}` : null,
     onPrinted: async () => {
       for (const t of targets) await recordReportOutput(t.id, "print");
       showMessage(`${targets.length}件を印刷済み（2回目以降は再印刷）として記録しました。`);

@@ -1098,6 +1098,15 @@
       <button type="button" id="reportPrintCloseBtn" class="secondary-btn">閉じる</button>
     </div>
     <p class="app-subtitle print-fallback-hint">印刷画面が開かない場合（iPadのホーム画面アプリなど）は「共有メニューから印刷」→「プリント」で印刷できます。</p>
+    <!-- 会社指定様式のとき: 1日報1ページのPDF（iPadで印刷画面から印刷すると2ページになることがあるため。js/ui/company-pdf.js） -->
+    <section id="reportOnePageArea" class="report-onepage" hidden>
+      <p class="app-subtitle"><strong>iPadで2ページになる場合は、こちら:</strong> 様式の用紙（A3横）・余白どおりに、日報1件を必ず1ページにしたPDFを作ります。共有メニューの「プリント」で印刷、または「ファイルに保存」できます（PDFの文字は画像なので、選択・検索はできません）。</p>
+      <div class="form-actions print-actions">
+        <button type="button" id="reportOnePageBtn">📄 1ページのPDFを作成（A3）</button>
+        <button type="button" id="reportOnePageShareBtn" class="secondary-btn" hidden>PDFを共有（プリント・ファイルに保存）</button>
+        <button type="button" id="reportOnePageSaveBtn" class="secondary-btn" hidden>PDFを保存</button>
+      </div>
+    </section>
     <p id="reportPrintStatus" class="print-status" role="status" hidden></p>
     <div id="reportPrintRecordArea" class="report-print-record" hidden>
       <p>紙に印刷できましたか？（「印刷できた」を押すと印刷状態に記録します）</p>

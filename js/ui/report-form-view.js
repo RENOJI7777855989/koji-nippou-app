@@ -1249,6 +1249,8 @@ async function openPrint(mode) {
     mode,
     title: `${mode === "pdf" ? "PDF出力" : mode === "reprint" ? "再印刷" : "印刷"}（${report.date || "日付未設定"}）`,
     note: built.usedCompanyTemplate ? `会社指定様式「${built.company.templateName}」のレイアウトで出力します。` : "会社指定様式が見つからないため、アプリ独自のレイアウトで出力します。",
+    // 会社指定様式のときは、1日報1ページのPDF（A3）も作れる（iPadの印刷画面で2ページになる場合のため）
+    onePagePdfName: built.usedCompanyTemplate ? `工事日報_${(await getSite(report.siteId).catch(() => null))?.name || "現場"}_${report.date || "日付未設定"}` : null,
     onPrinted: async () => {
       const updated = await recordReportOutput(reportId, "print");
       showMessage(`${PRINT_STATUS_LABELS[getPrintStatus(updated)]}として記録しました。`);

@@ -29,6 +29,7 @@ import { escapeHtml } from "../../utils.js";
 import { ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING } from "./mappings/anzenEiseiUchiawaseNisshi.js";
 import { getLayoutProfile } from "../layoutProfiles.js";
 import "../layouts/index.js";
+import { cropSignatureToInk } from "../signatureCrop.js";
 
 const EMU_PER_PX = 9525;
 export const PAPER_SIZE_MM = {
@@ -174,7 +175,7 @@ export function overlayImageHtml(img) {
       return `<div class="xlsx-overlay-crop" style="${box}"><img src="${img.dataUrl}" alt="" style="position:absolute;left:${left}px;top:${top}px;width:${w}px;height:${h}px;max-width:none"></div>`;
     }
   }
-  return `<img class="xlsx-overlay-img" style="${box}" src="${img.dataUrl}" alt="">`;
+  return `<img class="xlsx-overlay-img${img.cls ? ` ${img.cls}` : ""}" style="${box}" src="${img.dataUrl}" alt="">`;
 }
 
 export function cellStyleToCss(style) {
@@ -375,17 +376,21 @@ async function render(model, mapping, companyProfile, template) {
 
   const { images: templateImages, textShapes } = await collectTemplateShapes(zip, sheetPath, colOffsetPx, rowOffsetPx);
 
-  // 職長サイン画像は、Excel出力(excelXlsxTemplate.js)と同じくplan.imagesのセル位置に貼る
+  // 職長サイン画像は、Excel出力(excelXlsxTemplate.js)と同じくplan.imagesのセル位置に貼る。
+  // 保存されているサインは日報画面の欄全体（書いていない余白を含む横長の画像）なので、線のある範囲だけを切り出してから
+  // セルに収める（縦横比は保つ。2026-10-18。以前は余白ごと縮めていたため、サインが欄の幅の約3割・高さの約6割と小さかった）
   const signatureImages = await Promise.all(
     plan.images.map(async ({ cell, blob }) => {
       const col = colLettersToIndex(cell.match(/^[A-Z]+/)[0]);
       const row = Number(cell.match(/\d+$/)[0]);
+      const ink = await cropSignatureToInk(blob);
       return {
         left: colOffsetPx[col] || 0,
         top: rowOffsetPx[row] || 0,
         width: layout.colWidthPx[col] || 0,
         height: layout.rowHeightPx[row] || 0,
-        dataUrl: await blobToDataUrl(blob)
+        dataUrl: await blobToDataUrl(ink.blob),
+        cls: "xlsx-overlay-sign"
       };
     })
   );

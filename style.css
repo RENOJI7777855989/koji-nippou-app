@@ -2098,3 +2098,6 @@ body.has-restore-banner .report-quick-bar { top: 64px; }
 .restore-journal-close { border-color: #d92d20; color: #b42318; }
 .restore-warnings { border: 1px solid #f0b35a; background: #fffaf0; border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; }
 .restore-warnings ul { margin: 0; padding-left: 1.2em; font-size: 14px; }
+/* 会社指定様式の1日報1ページのPDF（印刷ダイアログの中） */
+.report-onepage { border: 1px solid #c9d6e8; border-radius: 8px; padding: 8px 12px; margin: 8px 0; background: #f8fbff; }
+.report-onepage button { min-height: 44px; }
