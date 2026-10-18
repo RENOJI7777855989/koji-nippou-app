@@ -417,10 +417,16 @@ async function render(model, mapping, companyProfile, template) {
   // （様式の余白で計算した 272mm より約13mm少ない）。さらに表を約1.4%大きく描く。このため表の下の2〜3行が2ページ目に出ていた。
   // 余白を左右15mm・上17mm・下22mmとした範囲と、様式の余白の範囲の小さい方に、拡大の分（下の script の 0.97）を見込んで収める。
   const SAFE_MARGIN_MM = { left: 15, right: 15, top: 17, bottom: 22 };
+  // さらに iPad の Safari は、印刷する内容を余白の内側の幅いっぱいに合わせて縮める（2枚目の実物の PDF で確認: 表をいくら縮めても、
+  // 表の幅は余白の内側の幅（約391.8mm）になり、高さも同じ割合で戻って下が2ページ目に出た）。このため、全体の縮小では高さを抑えられない。
+  // そこで紙面（.xlsx-sheet-wrap）の幅を「表の高さ ÷ PRINT_HEIGHT_RATIO」以上にして（表の右に空白を足す）、幅いっぱいに合わせられても
+  // 高さが 幅×PRINT_HEIGHT_RATIO 以下になるようにする（Safari の 1ページの高さ÷幅 ≈ 259/391.8 ≈ 0.66 より小さく、余裕を見て 0.63）。
+  // 表・図形・サインの位置は紙面の左上からのまま（右に空白が増えるだけ）。
+  const PRINT_HEIGHT_RATIO = 0.63;
   const availWpx = mmToPx(Math.min(pageSizeMm[0] - marginLeftMm - marginRightMm, pageSizeMm[0] - SAFE_MARGIN_MM.left - SAFE_MARGIN_MM.right));
   const availHpx = mmToPx(Math.min(pageSizeMm[1] - marginTopMm - marginBottomMm, pageSizeMm[1] - SAFE_MARGIN_MM.top - SAFE_MARGIN_MM.bottom));
   const fitScript = fitToPage
-    ? `<script>(function(){var AW=${availWpx.toFixed(1)},AH=${availHpx.toFixed(1)};function fit(){var ws=document.querySelectorAll(".xlsx-sheet-wrap");for(var i=0;i<ws.length;i++){var w=ws[i];var t=w.querySelector("table.xlsx-sheet");if(!t)continue;w.style.zoom="1";var r=t.getBoundingClientRect();if(!r.width||!r.height)continue;w.style.zoom=String(Math.min(1,AW/r.width*0.97,AH/r.height*0.97));}}fit();window.addEventListener("load",fit);window.addEventListener("beforeprint",fit);})();</script>`
+    ? `<script>(function(){var AW=${availWpx.toFixed(1)},AH=${availHpx.toFixed(1)},RATIO=${PRINT_HEIGHT_RATIO};function fit(){var ws=document.querySelectorAll(".xlsx-sheet-wrap");for(var i=0;i<ws.length;i++){var w=ws[i];var t=w.querySelector("table.xlsx-sheet");if(!t)continue;w.style.zoom="1";w.style.width="";var r=t.getBoundingClientRect();if(!r.width||!r.height)continue;var WW=Math.max(r.width,r.height/RATIO);w.style.width=WW+"px";w.style.zoom=String(Math.min(1,AW/WW*0.97,AH/r.height*0.97));}}fit();window.addEventListener("load",fit);window.addEventListener("beforeprint",fit);})();</script>`
     : "";
 
   const imagesHtml = [...templateImages, ...signatureImages].map(overlayImageHtml).join("");
