@@ -35,7 +35,7 @@ import { cropSignatureToInk } from "../signatureCrop.js";
  * 会社様式の印刷のレイアウトの版（印刷ダイアログに表示する。iPad で新しい版が読み込まれているかを、印刷の前に確かめるため）。
  * 印刷の縮小・紙面の大きさの決め方を変えたら上げる
  */
-export const PRINT_LAYOUT_VERSION = "v68";
+export const PRINT_LAYOUT_VERSION = "v69";
 
 const EMU_PER_PX = 9525;
 export const PAPER_SIZE_MM = {

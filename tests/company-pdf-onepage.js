@@ -155,13 +155,24 @@ async function runBrowser(bt, bname, errors) {
         const shown = await inkOf(blob); const s = Math.min(r.width / shown.W, r.height / shown.H);
         out.push({ top: Math.round(r.top), cellW: r.width, cellH: r.height, inkW: shown.w * s, inkH: shown.h * s, aspectShown: shown.w / shown.h, n: shown.n, inside: shown.W * s <= r.width + 0.5 && shown.H * s <= r.height + 0.5 });
       }
-      const orig = []; for (const g of sigs) orig.push(await inkOf(g.imageBlob));
-      return { out, orig: orig.map((o) => ({ aspect: o.w / o.h, n: o.n, ofPadW: o.w / o.W, ofPadH: o.h / o.H })) };
+      // 保存されているサインと、出力用に切り出して線を太くした画像（signatureCrop.js）を比べる
+      const { cropSignatureToInk } = await import("/js/report-output/signatureCrop.js");
+      const px = async (b) => { const bm = await createImageBitmap(b); const c = document.createElement("canvas"); c.width = bm.width; c.height = bm.height; const g = c.getContext("2d"); g.drawImage(bm, 0, 0); return { W: c.width, H: c.height, d: g.getImageData(0, 0, c.width, c.height).data }; };
+      const orig = [];
+      for (const g of sigs) {
+        const o = await inkOf(g.imageBlob); const res = await cropSignatureToInk(g.imageBlob); const a = await px(g.imageBlob); const b = await px(res.blob);
+        // 元の線の画素が、出力でもすべて線のまま（欠けない）
+        let lost = 0; for (let y = 0; y < a.H; y++) for (let x = 0; x < a.W; x++) { const i = (y * a.W + x) * 4; if (a.d[i + 3] > 24 && a.d[i] + a.d[i + 1] + a.d[i + 2] < 720) { const X = x - res.box.x, Y = y - res.box.y; if (X < 0 || Y < 0 || X >= b.W || Y >= b.H || b.d[(Y * b.W + X) * 4 + 3] <= 24) lost++; } }
+        const shown = await inkOf(res.blob);
+        orig.push({ aspect: o.w / o.h, expectedAspect: (o.w + 2 * res.radius) / (o.h + 2 * res.radius), n: o.n, nOut: shown.n, lost, radius: res.radius, outSize: [b.W, b.H] });
+      }
+      return { out, orig };
     }, drawnId);
     const fill = sz.out.map((o) => Math.max(o.inkW / o.cellW, o.inkH / o.cellH));
     check(T("職長サインの大きさ: 3件とも、線が欄の幅か高さの8割以上を使う（欄の大きさに合わせて大きく出る）"), sz.out.length === 3 && fill.every((f) => f >= 0.8), JSON.stringify(sz.out.map((o) => `幅${Math.round((o.inkW / o.cellW) * 100)}%・高さ${Math.round((o.inkH / o.cellH) * 100)}%`)));
-    check(T("職長サインの縦横比: 欄に収めたサインの線の縦横比が、保存されているサインの線と同じ（引き伸ばさない）"), sz.out.length === 3 && sz.out.every((o, i) => Math.abs(o.aspectShown - sz.orig[i].aspect) / sz.orig[i].aspect < 0.03), JSON.stringify(sz.out.map((o, i) => [o.aspectShown.toFixed(2), sz.orig[i].aspect.toFixed(2)])));
-    check(T("職長サインが欠けない: 切り出した画像の線の画素数が保存されているサインと同じで、欄の中に収まっている"), sz.out.every((o, i) => o.n === sz.orig[i].n && o.inside), JSON.stringify(sz.out.map((o, i) => [o.n, sz.orig[i].n, o.inside])));
+    check(T("職長サインの縦横比: 欄に収めたサインの線の縦横比が、保存されているサインの線（＋太くした分）と同じ（引き伸ばさない）"), sz.out.length === 3 && sz.out.every((o, i) => Math.abs(o.aspectShown - sz.orig[i].expectedAspect) / sz.orig[i].expectedAspect < 0.03), JSON.stringify(sz.out.map((o, i) => [o.aspectShown.toFixed(2), sz.orig[i].expectedAspect.toFixed(2)])));
+    check(T("職長サインが欠けない: 保存されているサインの線の画素が、出力の画像でもすべて線のまま残り、欄の中に収まっている"), sz.out.length === 3 && sz.orig.every((o) => o.lost === 0) && sz.out.every((o) => o.inside), JSON.stringify(sz.orig.map((o, i) => [o.lost, sz.out[i].inside])));
+    check(T("職長サインの線を、出力のときだけ太く・濃くする（線の画素が元の1.5倍以上・保存されているサインは変えない）"), sz.orig.length === 3 && sz.orig.every((o) => o.radius >= 1 && o.nOut >= o.n * 1.5), JSON.stringify(sz.orig.map((o) => ({ r: o.radius, n: o.n, nOut: o.nOut }))));
     check(T("職長サインの位置: 3件がそれぞれ別の業者の行（上から順）に置かれる"), sz.out.length === 3 && sz.out[0].top < sz.out[1].top && sz.out[1].top < sz.out[2].top, JSON.stringify(sz.out.map((o) => o.top)));
     // サインの欄は、業者1社分の見た目の欄（03-2 は Excel の2行分。下の行は空で罫線なし）。次の業者のサインとの間隔と同じ高さで、重ならない
     const pitch = sz.out.length === 3 ? [sz.out[1].top - sz.out[0].top, sz.out[2].top - sz.out[1].top] : [];
@@ -185,12 +196,15 @@ async function runBrowser(bt, bname, errors) {
       const out = {};
       const empty = await mk(1584, 360, () => {}); const re = await cropSignatureToInk(empty); out.empty = !re.cropped && re.blob === empty;
       const faint = await mk(1584, 360, (g) => { g.strokeStyle = "rgba(34,34,34,0.5)"; g.lineWidth = 1; g.beginPath(); g.moveTo(300.5, 60.3); g.lineTo(1290.7, 300.6); g.stroke(); });
-      const rf = await cropSignatureToInk(faint); const a0 = await alpha(faint), a1 = await alpha(rf.blob); out.faint = rf.cropped && a0.n > 0 && a0.n === a1.n && a0.sum === a1.sum;
-      const corners = await mk(1584, 360, (g) => { g.fillStyle = "#222"; g.fillRect(0, 0, 4, 4); g.fillRect(1580, 356, 4, 4); }); const rc = await cropSignatureToInk(corners); out.corners = !rc.cropped;
+      const px = async (b) => { const bm = await createImageBitmap(b); const c = document.createElement("canvas"); c.width = bm.width; c.height = bm.height; const g = c.getContext("2d"); g.drawImage(bm, 0, 0); return { W: c.width, H: c.height, d: g.getImageData(0, 0, c.width, c.height).data }; };
+      // 元の画像で少しでも描かれている画素（不透明度 > 0）が、出力でもすべて描かれている（1画素も欠けない）
+      const covered = async (src, res) => { const a = await px(src), b = await px(res.blob); for (let y = 0; y < a.H; y++) for (let x = 0; x < a.W; x++) { if (a.d[(y * a.W + x) * 4 + 3] === 0) continue; const X = x - res.box.x, Y = y - res.box.y; if (X < 0 || Y < 0 || X >= b.W || Y >= b.H || b.d[(Y * b.W + X) * 4 + 3] === 0) return false; } return true; };
+      const rf = await cropSignatureToInk(faint); const a0 = await alpha(faint); out.faint = rf.cropped && a0.n > 0 && (await covered(faint, rf));
+      const corners = await mk(1584, 360, (g) => { g.fillStyle = "#222"; g.fillRect(0, 0, 4, 4); g.fillRect(1580, 356, 4, 4); }); const rc = await cropSignatureToInk(corners); out.corners = !rc.cropped && rc.box.w === 1584 && rc.box.h === 360 && (await covered(corners, rc));
       const broken = new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }); const rb = await cropSignatureToInk(broken); out.broken = !rb.cropped && rb.blob === broken;
       return out;
     });
-    check(T("線の範囲の切り出し: 空（透明）・壊れた画像はそのまま、欄の端まで書いたものは切らない、かすれた細い線も透明度を含めて1画素も欠けない"), edge.empty && edge.broken && edge.corners && edge.faint, JSON.stringify(edge));
+    check(T("線の範囲の切り出し: 空（透明）・壊れた画像はそのまま、欄の端まで書いたものは切らない、かすれた細い線も1画素も欠けない（太くしても）"), edge.empty && edge.broken && edge.corners && edge.faint, JSON.stringify(edge));
 
     // ===== 台帳の印刷には出さない（1日1頁の台帳は別の印刷） =====
     await page.goto(`${BASE}#/sites/${ids.site}`); await page.waitForSelector("#ledgerPrintBtn", { state: "attached" });
