@@ -87,7 +87,9 @@ export function openReportPrintDialog(opts) {
     isPdf
       ? "「印刷画面を開く」を押し、印刷先で「PDFに保存」を選んでください。用紙サイズ・向きは帳票の設定（会社指定様式ならその様式の設定）に従います。"
       : "「印刷画面を開く」で印刷してください。印刷後、紙に印刷できたかを下のボタンで記録します（ブラウザからは印刷できたかどうかが分からないため）。",
-    opts.note || ""
+    opts.note || "",
+    // 会社様式の印刷のレイアウトの版（iPad で新しい版が読み込まれているかを確かめるため。印刷用HTMLの meta から読む）
+    (/<meta name="print-layout-version" content="([^"]+)">/.exec(opts.html || "") || [])[1] ? `（印刷レイアウト ${(/<meta name="print-layout-version" content="([^"]+)">/.exec(opts.html) || [])[1]}）` : ""
   ].filter(Boolean).join(" ");
   openBtn.textContent = isPdf ? "印刷画面を開く（PDFに保存）" : opts.mode === "reprint" ? "印刷画面を開く（再印刷）" : "印刷画面を開く";
   const share = canSharePrintFile();

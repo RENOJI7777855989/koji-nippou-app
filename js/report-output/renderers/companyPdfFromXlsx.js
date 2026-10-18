@@ -31,6 +31,12 @@ import { getLayoutProfile } from "../layoutProfiles.js";
 import "../layouts/index.js";
 import { cropSignatureToInk } from "../signatureCrop.js";
 
+/**
+ * 会社様式の印刷のレイアウトの版（印刷ダイアログに表示する。iPad で新しい版が読み込まれているかを、印刷の前に確かめるため）。
+ * 印刷の縮小・紙面の大きさの決め方を変えたら上げる
+ */
+export const PRINT_LAYOUT_VERSION = "v68";
+
 const EMU_PER_PX = 9525;
 export const PAPER_SIZE_MM = {
   1: [216, 279], 3: [216, 356], 5: [216, 356], 8: [297, 420], 9: [210, 297], 11: [148, 210]
@@ -221,6 +227,34 @@ export function cellStyleToCss(style) {
  *  ・箱はセルの上に重ねて置く（position:absolute）ので、中身が多くても表の行は伸びない。
  * 様式のセル・結合・罫線・列幅・行の高さは変えない（表示のしかただけ）。
  */
+/**
+ * 職長サインを置く箱（そのセルが見た目の1つの欄として占める範囲）。結合されていれば結合の範囲、さらに真下のセルが空で、
+ * 間に罫線が無い（結合もされていない）あいだは下に伸ばす（buildTableHtml の文字の箱と同じ決まり）。
+ * 03-2 の協力会社欄は1社がExcelの2行分（下の行は空・罫線なし）なので、サインは2行分の高さの欄に収まる（2026-10-18。
+ * 以前は1行分の高さに収めていたため、見た目の欄の上半分にしか入らず小さかった）。
+ * @returns {{width: number, height: number}} 画素
+ */
+function signatureBoxOf(layout, styles, row, col) {
+  const merge = layout.merges.find((m) => row >= m.r1 && row <= m.r2 && col >= m.c1 && col <= m.c2);
+  const r1 = merge ? merge.r1 : row, r2 = merge ? merge.r2 : row, c1 = merge ? merge.c1 : col, c2 = merge ? merge.c2 : col;
+  let width = 0;
+  for (let c = c1; c <= c2; c++) width += layout.colWidthPx[c] || 0;
+  let height = 0;
+  for (let r = r1; r <= r2; r++) height += layout.rowHeightPx[r] || 0;
+  const cellAt = (r, c) => layout.cells.get(`${colIndexToLetters(c)}${r}`);
+  const styleAt = (r, c) => styles.resolveStyle(cellAt(r, c)?.styleIndex || 0);
+  const inMerge = (r, c) => layout.merges.some((m) => r >= m.r1 && r <= m.r2 && c >= m.c1 && c <= m.c2);
+  for (let k = r2 + 1; k <= layout.maxRow; k++) {
+    let ok = true;
+    for (let c = c1; c <= c2; c++) {
+      if (inMerge(k, c) || String(cellAt(k, c)?.text || "").length || styleAt(k - 1, c).border.bottom || styleAt(k, c).border.top) { ok = false; break; }
+    }
+    if (!ok) break;
+    height += layout.rowHeightPx[k] || 0;
+  }
+  return { width, height, top: r1, left: c1 };
+}
+
 function buildTableHtml(layout, styles) {
   const covered = new Set(); // "r,c" 形式で、結合セルに覆われて描画をスキップする位置
   const spanAt = new Map(); // "r,c" -> {rowspan, colspan}（結合の左上セルのみ）
@@ -384,11 +418,12 @@ async function render(model, mapping, companyProfile, template) {
       const col = colLettersToIndex(cell.match(/^[A-Z]+/)[0]);
       const row = Number(cell.match(/\d+$/)[0]);
       const ink = await cropSignatureToInk(blob);
+      const box = signatureBoxOf(layout, styles, row, col); // 見た目の欄（03-2 の協力会社欄は2行分）
       return {
-        left: colOffsetPx[col] || 0,
-        top: rowOffsetPx[row] || 0,
-        width: layout.colWidthPx[col] || 0,
-        height: layout.rowHeightPx[row] || 0,
+        left: colOffsetPx[box.left] || 0,
+        top: rowOffsetPx[box.top] || 0,
+        width: box.width,
+        height: box.height,
         dataUrl: await blobToDataUrl(ink.blob),
         cls: "xlsx-overlay-sign"
       };
@@ -440,6 +475,7 @@ async function render(model, mapping, companyProfile, template) {
 <head>
 <meta charset="UTF-8">
 <title>${escapeHtml(model.site.name || "工事日報")}（会社指定様式）</title>
+<meta name="print-layout-version" content="${PRINT_LAYOUT_VERSION}">
 <style>
   @page { size: ${pageSizeMm[0]}mm ${pageSizeMm[1]}mm; margin: ${marginTopMm}mm ${marginRightMm}mm ${marginBottomMm}mm ${marginLeftMm}mm; }
   * { box-sizing: border-box; }

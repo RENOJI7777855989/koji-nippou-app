@@ -92,6 +92,9 @@ async function runBrowser(bt, bname, errors) {
     await page.waitForTimeout(800);
     const areaShown = await page.isVisible("#reportOnePageArea");
     check(T("会社指定様式の印刷ダイアログに「1ページのPDFを作成（A3）」が出る（従来の「印刷画面を開く」もそのまま）"), areaShown && (await page.isVisible("#reportPrintOpenBtn")));
+    const note = await page.textContent("#reportPrintNote");
+    const ver = await page.evaluate(async () => (await import("/js/report-output/renderers/companyPdfFromXlsx.js")).PRINT_LAYOUT_VERSION);
+    check(T("印刷ダイアログに、会社様式の印刷レイアウトの版を表示する（iPad で新しい版が読み込まれているかを確かめるため）"), !!ver && note.includes(`印刷レイアウト ${ver}`), note.slice(-40));
     const info = await sheetInfo(page);
     await page.click("#reportOnePageBtn");
     await page.waitForFunction(() => /作成しました|作成できませんでした/.test(document.getElementById("reportPrintStatus").textContent), null, { timeout: 60000 });
@@ -160,6 +163,9 @@ async function runBrowser(bt, bname, errors) {
     check(T("職長サインの縦横比: 欄に収めたサインの線の縦横比が、保存されているサインの線と同じ（引き伸ばさない）"), sz.out.length === 3 && sz.out.every((o, i) => Math.abs(o.aspectShown - sz.orig[i].aspect) / sz.orig[i].aspect < 0.03), JSON.stringify(sz.out.map((o, i) => [o.aspectShown.toFixed(2), sz.orig[i].aspect.toFixed(2)])));
     check(T("職長サインが欠けない: 切り出した画像の線の画素数が保存されているサインと同じで、欄の中に収まっている"), sz.out.every((o, i) => o.n === sz.orig[i].n && o.inside), JSON.stringify(sz.out.map((o, i) => [o.n, sz.orig[i].n, o.inside])));
     check(T("職長サインの位置: 3件がそれぞれ別の業者の行（上から順）に置かれる"), sz.out.length === 3 && sz.out[0].top < sz.out[1].top && sz.out[1].top < sz.out[2].top, JSON.stringify(sz.out.map((o) => o.top)));
+    // サインの欄は、業者1社分の見た目の欄（03-2 は Excel の2行分。下の行は空で罫線なし）。次の業者のサインとの間隔と同じ高さで、重ならない
+    const pitch = sz.out.length === 3 ? [sz.out[1].top - sz.out[0].top, sz.out[2].top - sz.out[1].top] : [];
+    check(T("職長サインの欄の高さ: 業者1社分の見た目の欄（2行分）いっぱいで、次の業者の欄に重ならない"), pitch.length === 2 && sz.out.slice(0, 2).every((o, i) => Math.abs(o.cellH - pitch[i]) <= 1.5), JSON.stringify({ heights: sz.out.map((o) => Math.round(o.cellH)), pitch }));
     // 1ページのPDFでも、サインが大きく出る
     const infoD = await sheetInfo(page);
     await page.click("#reportOnePageBtn");
