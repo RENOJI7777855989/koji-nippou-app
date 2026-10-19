@@ -151,48 +151,143 @@ const minutesOf = (c) => { const p = parseWorkHours(c?.workHours); return p && p
 const inMonth = (r, month, cutoff) => !r.isDeleted && r.date && r.date.slice(0, 7) === month && r.date <= cutoff;
 const cutoffOf = (month, today) => { const end = monthEnd(month); return today && today < end ? today : end; };
 
-/** その月の業者別稼働（純粋関数） */
-export function buildVendorActivity({ reports = [], month, today }) {
+/** 日報1件の、業者ごとの稼働（同じ日の同じ業者（複数の工種の行）をまとめる） */
+function dayVendorTotals(r) {
+  const dayTotals = new Map();
+  for (const c of r.companies || []) {
+    const name = String(c.companyName || "").trim();
+    if (!name) continue;
+    const t = dayTotals.get(name) || { workers: 0, minutes: 0, missingHours: 0, trades: new Set() };
+    t.workers += actualOf(c);
+    const m = minutesOf(c);
+    if (actualOf(c) > 0) { if (m == null) t.missingHours++; else t.minutes += m; }
+    if ((c.occupation || "").trim()) t.trades.add(c.occupation.trim());
+    dayTotals.set(name, t);
+  }
+  return dayTotals;
+}
+
+/**
+ * その月の業者別稼働（純粋関数）。
+ * cumManDays（累計実績人工）は、基準日（その月の末日。今月なら今日）までのすべての日報の実績人工の合計
+ * （工期の初めから。月の区切りは無く、決まりは月の稼働と同じ: 通常作業の日だけ・1人＝1人工・請求人工は使わない）。
+ * 一覧には、その月に稼働した業者に加えて、それより前に稼働した業者も出す（その月の稼働日数・稼働人数・実績人工・作業時間は0）。
+ * totals.vendors はその月に稼働した業者の数（以前どおり）、totals.listed は一覧の業者の数。
+ * startDate（現場の工期開始日）があれば、それより前の日付の日報は、その月の稼働にも累計にも入れない（実績人工は工期開始日以降だけ）
+ */
+export function buildVendorActivity({ reports = [], month, today, startDate = null }) {
   const cutoff = cutoffOf(month, today);
   const byVendor = new Map();
+  const blank = (name) => ({ vendor: name, days: 0, workers: 0, minutes: 0, missingHours: 0, trades: new Set(), cumManDays: 0 });
   for (const r of reports) {
-    if (!inMonth(r, month, cutoff) || !isWorkDay(r)) continue;
-    const dayTotals = new Map(); // 同じ日の同じ業者（複数の工種の行）をまとめる
-    for (const c of r.companies || []) {
-      const name = String(c.companyName || "").trim();
-      if (!name) continue;
-      const t = dayTotals.get(name) || { workers: 0, minutes: 0, missingHours: 0, trades: new Set() };
-      t.workers += actualOf(c);
-      const m = minutesOf(c);
-      if (actualOf(c) > 0) { if (m == null) t.missingHours++; else t.minutes += m; }
-      if ((c.occupation || "").trim()) t.trades.add(c.occupation.trim());
-      dayTotals.set(name, t);
-    }
-    for (const [name, t] of dayTotals) {
+    if (r.isDeleted || !r.date || r.date > cutoff || (startDate && r.date < startDate) || !isWorkDay(r)) continue;
+    const thisMonth = r.date.slice(0, 7) === month;
+    for (const [name, t] of dayVendorTotals(r)) {
       if (t.workers < 1) continue; // 稼働人数0の日は稼働日にしない
-      const v = byVendor.get(name) || { vendor: name, days: 0, workers: 0, minutes: 0, missingHours: 0, trades: new Set() };
-      v.days++; v.workers += t.workers; v.minutes += t.minutes; v.missingHours += t.missingHours;
-      t.trades.forEach((x) => v.trades.add(x));
+      const v = byVendor.get(name) || blank(name);
+      v.cumManDays += t.workers;
+      if (thisMonth) {
+        v.days++; v.workers += t.workers; v.minutes += t.minutes; v.missingHours += t.missingHours;
+        t.trades.forEach((x) => v.trades.add(x));
+      }
       byVendor.set(name, v);
     }
   }
-  const rows = [...byVendor.values()].map((v) => ({ vendor: v.vendor, days: v.days, workers: v.workers, manDays: v.workers, minutes: v.minutes, hoursMissing: v.missingHours, trades: [...v.trades] })).sort((a, b) => a.vendor.localeCompare(b.vendor, "ja"));
-  return { month, cutoff, rows, totals: { vendors: rows.length, days: rows.reduce((s, r) => s + r.days, 0), workers: rows.reduce((s, r) => s + r.workers, 0), minutes: rows.reduce((s, r) => s + r.minutes, 0) } };
+  const rows = [...byVendor.values()].map((v) => ({ vendor: v.vendor, days: v.days, workers: v.workers, manDays: v.workers, minutes: v.minutes, hoursMissing: v.missingHours, trades: [...v.trades], cumManDays: v.cumManDays })).sort((a, b) => a.vendor.localeCompare(b.vendor, "ja"));
+  const active = rows.filter((r) => r.days > 0);
+  return { month, cutoff, rows, totals: { vendors: active.length, listed: rows.length, days: rows.reduce((s, r) => s + r.days, 0), workers: rows.reduce((s, r) => s + r.workers, 0), minutes: rows.reduce((s, r) => s + r.minutes, 0), cumManDays: rows.reduce((s, r) => s + r.cumManDays, 0) } };
+}
+
+/* ----------------------------------------------------------
+   業者別稼働: 期間を指定した集計（開始年月の1日〜終了年月の末日。今月を含めば今日まで）
+   ・決まりは月の業者別稼働と同じ（dayVendorTotals。通常作業の日だけ・稼働人数0の日は数えない・1人＝1人工・
+     今日より後の日報は入れない・請求人工は使わない）。表示のたびに日報から計算し、保存しない
+   ・業者ごとに、月ごとの実績人工（期間内に稼働の無い月は0）と期間合計（＝月ごとの合計）・稼働日数・稼働人数・作業時間
+   ・期間内に稼働の無い業者も、期間より前に稼働していれば出す（月の業者別稼働と同じ考え方。期間内の欄は0）
+   ・startDate（現場の工期開始日）があれば、それより前の日付の日報は、期間に入っていても数えない（実績人工は工期開始日以降だけ）
+   ---------------------------------------------------------- */
+const monthsBetween = (from, to) => { const out = []; for (let m = from; m <= to && out.length < 240; ) { out.push(m); const [y, mm] = m.split("-").map(Number); const d = new Date(y, mm, 1); m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; } return out; };
+
+/**
+ * @returns {{error?: string, from: string, to: string, cutoff: string, months: string[], rows: object[], monthTotals: Object<string, number>, totals: object}}
+ */
+export function buildVendorPeriodActivity({ reports = [], fromMonth, toMonth, today, startDate = null }) {
+  if (!/^\d{4}-\d{2}$/.test(fromMonth || "") || !/^\d{4}-\d{2}$/.test(toMonth || "")) return { error: "開始年月と終了年月を選んでください。", from: fromMonth, to: toMonth, months: [], rows: [], monthTotals: {}, totals: null };
+  if (fromMonth > toMonth) return { error: "開始年月が終了年月より後になっています。開始年月か終了年月を選び直してください。", from: fromMonth, to: toMonth, months: [], rows: [], monthTotals: {}, totals: null };
+  const months = monthsBetween(fromMonth, toMonth);
+  const start = `${fromMonth}-01`;
+  const cutoff = cutoffOf(toMonth, today);
+  const byVendor = new Map();
+  const blank = (name) => ({ vendor: name, byMonth: Object.fromEntries(months.map((m) => [m, 0])), days: 0, workers: 0, minutes: 0, missingHours: 0, trades: new Set() });
+  for (const r of reports) {
+    if (r.isDeleted || !r.date || r.date > cutoff || (startDate && r.date < startDate) || !isWorkDay(r)) continue;
+    const inPeriod = r.date >= start;
+    for (const [name, t] of dayVendorTotals(r)) {
+      if (t.workers < 1) continue;
+      const v = byVendor.get(name) || blank(name);
+      if (inPeriod) {
+        v.byMonth[r.date.slice(0, 7)] += t.workers;
+        v.days++; v.workers += t.workers; v.minutes += t.minutes; v.missingHours += t.missingHours;
+        t.trades.forEach((x) => v.trades.add(x));
+      }
+      byVendor.set(name, v);
+    }
+  }
+  const rows = [...byVendor.values()].map((v) => ({ vendor: v.vendor, byMonth: v.byMonth, total: months.reduce((s, m) => s + v.byMonth[m], 0), days: v.days, workers: v.workers, minutes: v.minutes, hoursMissing: v.missingHours, trades: [...v.trades] })).sort((a, b) => a.vendor.localeCompare(b.vendor, "ja"));
+  const monthTotals = Object.fromEntries(months.map((m) => [m, rows.reduce((s, r) => s + r.byMonth[m], 0)]));
+  return { from: fromMonth, to: toMonth, cutoff, months, rows, monthTotals, totals: { vendors: rows.filter((r) => r.days > 0).length, listed: rows.length, total: months.reduce((s, m) => s + monthTotals[m], 0), days: rows.reduce((s, r) => s + r.days, 0), workers: rows.reduce((s, r) => s + r.workers, 0), minutes: rows.reduce((s, r) => s + r.minutes, 0) } };
 }
 
 /**
  * 業者・月の日別の詳細（稼働と請求人工の入力を日ごとに並べる。どちらかがある日を出す）
  * 稼働は通常作業の日の実績人数、請求人工は日の状態に関係なく入力された値（未入力は null）
  */
-export function buildVendorMonthDetail({ reports = [], site = null, month, today, vendor }) {
+export function buildVendorMonthDetail({ reports = [], site = null, month, today, vendor, startDate = null }) {
   const cutoff = cutoffOf(month, today);
   const name = String(vendor || "").trim();
+  // startDate（業者別稼働の詳細から渡す）: 工期開始日より前の日は稼働に数えない（請求人工の入力は従来どおり。請求人工管理の詳細は渡さない）
+  const days = vendorDetailDays(reports, (r) => inMonth(r, month, cutoff), name, startDate);
+  const billingInfo = buildMonthlyBilling({ reports, site, month, today }).rows.find((r) => r.vendor === name) || null;
+  const saved = site?.billingMonths?.[month]?.vendors?.[name];
+  return {
+    vendor: name,
+    month,
+    cutoff,
+    days,
+    summary: {
+      workDays: days.filter((d) => d.worked).length,
+      workers: days.reduce((s, d) => s + d.workers, 0),
+      manDays: days.reduce((s, d) => s + d.workers, 0),
+      billing: billingInfo ? billingInfo.manDays : null,
+      billingDays: days.filter((d) => d.billing != null).length,
+      status: billingInfo ? billingInfo.status : saved?.status || "unconfirmed",
+      statusLabel: labelOf(BILLING_STATUSES, billingInfo ? billingInfo.status : saved?.status || "unconfirmed")
+    }
+  };
+}
+
+/**
+ * 業者・期間の日別の稼働（業者別稼働の期間の集計の根拠。稼働した日だけ。月ごとの小計つき）。日の並べ方・数え方は月の詳細と同じ
+ * @returns {{vendor: string, from: string, to: string, cutoff: string, days: object[], months: {month: string, manDays: number, days: number}[], summary: object, error?: string}}
+ */
+export function buildVendorPeriodDetail({ reports = [], fromMonth, toMonth, today, vendor, startDate = null }) {
+  const name = String(vendor || "").trim();
+  if (!fromMonth || !toMonth || fromMonth > toMonth) return { vendor: name, from: fromMonth, to: toMonth, days: [], months: [], summary: { workDays: 0, workers: 0, manDays: 0 }, error: "期間が正しくありません。" };
+  const start = `${fromMonth}-01`;
+  const cutoff = cutoffOf(toMonth, today);
+  const days = vendorDetailDays(reports, (r) => !r.isDeleted && r.date && r.date >= start && r.date <= cutoff, name, startDate).filter((d) => d.worked);
+  const months = monthsBetween(fromMonth, toMonth).map((m) => { const ds = days.filter((d) => d.date.slice(0, 7) === m); return { month: m, manDays: ds.reduce((s, d) => s + d.workers, 0), days: ds.length }; });
+  return { vendor: name, from: fromMonth, to: toMonth, cutoff, days, months, summary: { workDays: days.length, workers: days.reduce((s, d) => s + d.workers, 0), manDays: days.reduce((s, d) => s + d.workers, 0) } };
+}
+
+/** 業者の日ごとの稼働と請求人工の入力（どちらかがある日。inRange(日報) が真の日報だけ）。startDate より前の日は稼働に数えない */
+function vendorDetailDays(reports, inRange, name, startDate = null) {
   const days = [];
   for (const r of [...reports].sort((a, b) => (a.date || "").localeCompare(b.date || ""))) {
-    if (!inMonth(r, month, cutoff)) continue;
+    if (!inRange(r)) continue;
     const rows = (r.companies || []).filter((c) => String(c.companyName || "").trim() === name);
     if (!rows.length) continue;
-    const work = isWorkDay(r);
+    const work = isWorkDay(r) && !(startDate && r.date < startDate);
     const workers = work ? rows.reduce((s, c) => s + actualOf(c), 0) : 0;
     const mins = rows.map(minutesOf).filter((m) => m != null);
     const billingVals = rows.map(billingValueOf).filter((b) => b != null);
@@ -211,21 +306,5 @@ export function buildVendorMonthDetail({ reports = [], site = null, month, today
       billing
     });
   }
-  const billingInfo = buildMonthlyBilling({ reports, site, month, today }).rows.find((r) => r.vendor === name) || null;
-  const saved = site?.billingMonths?.[month]?.vendors?.[name];
-  return {
-    vendor: name,
-    month,
-    cutoff,
-    days,
-    summary: {
-      workDays: days.filter((d) => d.worked).length,
-      workers: days.reduce((s, d) => s + d.workers, 0),
-      manDays: days.reduce((s, d) => s + d.workers, 0),
-      billing: billingInfo ? billingInfo.manDays : null,
-      billingDays: days.filter((d) => d.billing != null).length,
-      status: billingInfo ? billingInfo.status : saved?.status || "unconfirmed",
-      statusLabel: labelOf(BILLING_STATUSES, billingInfo ? billingInfo.status : saved?.status || "unconfirmed")
-    }
-  };
+  return days;
 }

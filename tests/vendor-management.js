@@ -67,7 +67,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   // ---- 2〜8 業者別稼働（8月）----
   await selectMonth("2026-08");
   const act = await tableRows(".vm-activity");
-  const actMap = Object.fromEntries(act.map((r) => [r[0].replace(/(塗装|外壁下地補修|防水|足場|・)+$/, ""), r.slice(1).join("|")]));
+  const actMap = Object.fromEntries(act.map((r) => [r[0].replace(/(塗装|外壁下地補修|防水|足場|・)+$/, ""), r.slice(1, 5).join("|")]));
   check("2〜6 8月の業者別稼働: ナダカ工業 5日・16人・16・48時間30分（8/1・8/5・8/10・8/15・8/31）、協栄工業 1日・3人・3・9時間、野本建装工業 1日・3人・3・9時間", actMap["ナダカ工業"] === "5日|16人|16|48時間30分" && actMap["協栄工業"] === "1日|3人|3|9時間" && actMap["野本建装工業"] === "1日|3人|3|9時間", JSON.stringify(actMap));
   check("8 稼働人数0の日（8/12）・雨天作業不可日（8/20）は稼働日にしない（ナダカ工業は5日）", actMap["ナダカ工業"]?.startsWith("5日|16人"));
   await page.click(`#vendorMgmtBody [data-vm-vendor="ナダカ工業"]`); await page.waitForTimeout(300);
@@ -135,7 +135,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   await tab("activity");
   const act2 = await tableRows(".vm-activity");
   check("請求人工を 4.0→2.0 に変えると請求人工の合計だけ変わる（18.5→16.5）", aug4[0][1] === "16.5人工");
-  check("21 請求人工を変えても業者別稼働（ナダカ工業 5日・16人・16・48時間30分）は変わらない", act2.find((r) => r[0].startsWith("ナダカ工業"))?.slice(1).join("|") === "5日|16人|16|48時間30分");
+  check("21 請求人工を変えても業者別稼働（ナダカ工業 5日・16人・16・48時間30分）は変わらない", act2.find((r) => r[0].startsWith("ナダカ工業"))?.slice(1, 5).join("|") === "5日|16人|16|48時間30分");
   check("22 請求人工を変えても03-2（1日分のExcel）は変わらない", (await sheetOf(ids.aug10, "x1.xlsx")) === x0);
   const a31 = await a3Of("2026-08-10");
   check("23 請求人工を変えてもA3は変わらない・A3に請求の情報は無い", a31 === a30 && !a31.includes("請求"));

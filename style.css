@@ -2101,3 +2101,11 @@ body.has-restore-banner .report-quick-bar { top: 64px; }
 /* 会社指定様式の1日報1ページのPDF（印刷ダイアログの中） */
 .report-onepage { border: 1px solid #c9d6e8; border-radius: 8px; padding: 8px 12px; margin: 8px 0; background: #f8fbff; }
 .report-onepage button { min-height: 44px; }
+/* 業者別稼働: この月に稼働していない業者（累計だけを表示）の行 */
+.vm-activity tr.vm-row-idle td { color: #777; }
+/* 業者別稼働: 期間を指定した集計 */
+.vm-period { margin-top: 20px; padding-top: 12px; border-top: 2px solid #e2e8f0; }
+.vm-period h3 { margin: 0 0 6px; }
+.vm-period-head span { font-size: 18px; }
+.vm-period-table tr.vm-row-idle td { color: #777; }
+.vm-period-months { margin: 6px 0; font-size: 15px; }
