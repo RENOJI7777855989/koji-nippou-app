@@ -30,12 +30,19 @@ import { ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING } from "./mappings/anzenEiseiUchia
 import { getLayoutProfile } from "../layoutProfiles.js";
 import "../layouts/index.js";
 import { cropSignatureToInk } from "../signatureCrop.js";
+import { findDirectorSealCell, sealPlacement, sealPngDataUrl } from "../directorSeal.js";
 
 /**
  * 会社様式の印刷のレイアウトの版（印刷ダイアログに表示する。iPad で新しい版が読み込まれているかを、印刷の前に確かめるため）。
  * 印刷の縮小・紙面の大きさの決め方を変えたら上げる
  */
-export const PRINT_LAYOUT_VERSION = "v69";
+export const PRINT_LAYOUT_VERSION = "v71";
+
+/**
+ * 紙面の高さ÷幅の上限（iPad の Safari は内容を余白の内側の幅いっぱいに合わせて縮めるため、高さが 幅×この値 以下なら1ページに収まる。
+ * Safari の 1ページの高さ÷幅 ≈ 259/391.8 ≈ 0.66 より小さく、余裕を見て 0.63。v66）
+ */
+const PRINT_HEIGHT_RATIO = 0.63;
 
 const EMU_PER_PX = 9525;
 export const PAPER_SIZE_MM = {
@@ -184,12 +191,13 @@ export function overlayImageHtml(img) {
   return `<img class="xlsx-overlay-img${img.cls ? ` ${img.cls}` : ""}" style="${box}" src="${img.dataUrl}" alt="">`;
 }
 
-export function cellStyleToCss(style) {
+/** @param {number} [fontScale] 文字の大きさの倍率（印刷用HTMLを最初から縮めた大きさで作るとき。2026-10-24） */
+export function cellStyleToCss(style, fontScale = 1) {
   const parts = [];
   if (style.font.bold) parts.push("font-weight:bold");
   if (style.font.italic) parts.push("font-style:italic");
   if (style.font.underline) parts.push("text-decoration:underline");
-  parts.push(`font-size:${Math.round((style.font.sizePt || 11) * (96 / 72))}px`);
+  parts.push(`font-size:${fontScale === 1 ? Math.round((style.font.sizePt || 11) * (96 / 72)) : Math.round((style.font.sizePt || 11) * (96 / 72) * fontScale * 10) / 10}px`);
   parts.push(`font-family:'${(style.font.name || "sans-serif").replace(/'/g, "")}',sans-serif`);
   if (style.font.color) parts.push(`color:${style.font.color}`);
   if (style.fill) parts.push(`background-color:${style.fill}`);
@@ -255,13 +263,82 @@ function signatureBoxOf(layout, styles, row, col) {
   return { width, height, top: r1, left: c1 };
 }
 
-function buildTableHtml(layout, styles) {
+/**
+ * 折り返さないセルの文字が、隣の空いたセルへはみ出せる幅（画素）。Excelと同じく左寄せは右へ・右寄せは左へ・中央は左右へ。
+ * 文字のあるセル・文字のある結合セル、または縦の罫線（セルの境目の左右どちらかに罫線）で止まる（2026-10-24。
+ * 以前は罫線を越えて隣の欄の上まではみ出しており、iPad の Safari では文字が罫線・隣の欄の文字に重なっていた）。
+ */
+function borderlessSpillWidth(layout, styles, r, c1, c2, horizontal) {
+  const textAt = (rr, cc) => String(layout.cells.get(`${colIndexToLetters(cc)}${rr}`)?.text || "").length > 0;
+  const styleAt = (rr, cc) => styles.resolveStyle(layout.cells.get(`${colIndexToLetters(cc)}${rr}`)?.styleIndex || 0);
+  const anchorOf = (rr, cc) => { const m = layout.merges.find((g) => rr >= g.r1 && rr <= g.r2 && cc >= g.c1 && cc <= g.c2); return m ? [m.r1, m.c1] : null; };
+  const free = (from, step) => {
+    let w = 0;
+    for (let k = from; k >= 1 && k <= layout.maxCol; k += step) {
+      const prev = k - step; // 隣のセル（はみ出す元の側）
+      const border = step > 0 ? styleAt(r, prev).border.right || styleAt(r, k).border.left : styleAt(r, prev).border.left || styleAt(r, k).border.right;
+      if (border) break;
+      const anchor = anchorOf(r, k);
+      if (anchor ? textAt(anchor[0], anchor[1]) : textAt(r, k)) break;
+      w += layout.colWidthPx[k] || 0;
+    }
+    return w;
+  };
+  if (horizontal === "right") return free(c1 - 1, -1);
+  if (horizontal === "center") return 2 * Math.min(free(c1 - 1, -1), free(c2 + 1, 1));
+  return free(c2 + 1, 1);
+}
+
+/** 文字の幅の見積もり（画素）。全角は1文字＝文字の大きさ、半角英数は0.6、半角カナは0.55（どの端末の字形でも足りるよう広めに見る） */
+export function estimateTextWidthPx(text, fontPx) {
+  const em = (ch) => { const c = ch.codePointAt(0); if (c <= 0x7e) return 0.6; if (c >= 0xff61 && c <= 0xff9f) return 0.55; return 1; };
+  return Math.max(0, ...String(text || "").split("\n").map((line) => [...line].reduce((sum, ch) => sum + em(ch), 0) * fontPx));
+}
+
+/**
+ * 印刷用の列の幅（画素）。用紙の幅を使い切るために増やせる幅（extraPx）を、まず「文字が自分の欄（＋罫線の無い隣の空欄）に
+ * 収まらない列」へ足りない分だけ配り、残りを全部の列へ元の幅の比で配る（2026-10-24）。
+ * 行の高さ・表の高さは変えないので、紙面の高さ÷幅は PRINT_HEIGHT_RATIO のまま（Safari が幅いっぱいに合わせても1ページ）。
+ * 様式（Excel）の列の幅は変えない。印刷用HTMLの表示だけ。
+ */
+export function widenColumnsToFill(layout, styles, extraPx) {
+  const widths = layout.colWidthPx.slice();
+  if (!(extraPx > 0)) return widths;
+  const deficit = new Array(widths.length).fill(0);
+  for (const [ref, cell] of layout.cells) {
+    const text = String(cell?.text || "");
+    if (!text) continue;
+    const m = /^([A-Z]+)(\d+)$/.exec(ref);
+    if (!m) continue;
+    const r = Number(m[2]), c = colLettersToIndex(m[1]);
+    const merge = layout.merges.find((g) => r >= g.r1 && r <= g.r2 && c >= g.c1 && c <= g.c2);
+    if (merge && (merge.r1 !== r || merge.c1 !== c)) continue;
+    const style = styles.resolveStyle(cell.styleIndex || 0);
+    if (style.alignment.wrapText || style.alignment.textRotation === 255) continue;
+    const c2 = merge ? merge.c2 : c;
+    const fontPx = Math.round((style.font.sizePt || 11) * (96 / 72));
+    const need = estimateTextWidthPx(text, fontPx) * 1.04 + 6; // セルの左右の余白（2px ずつ）と少しの余裕
+    let own = 0;
+    for (let k = c; k <= c2; k++) own += widths[k] || 0;
+    const room = own + borderlessSpillWidth(layout, styles, r, c, c2, style.alignment.horizontal);
+    const d = need - room;
+    // 欄の幅を大きく超える長い見出し（もともと隣の空欄へ流している文字）は、列の幅では直さない
+    if (d <= 0 || d > room * 0.6) continue;
+    for (let k = c; k <= c2; k++) deficit[k] = Math.max(deficit[k], (d * (widths[k] || 0)) / (own || 1));
+  }
+  const inTable = (k) => k >= 1 && k <= layout.maxCol;
+  const total = deficit.reduce((a, b, k) => a + (inTable(k) ? b : 0), 0);
+  const first = Math.min(total, extraPx);
+  const rest = extraPx - first;
+  const base = widths.reduce((a, b, k) => a + (inTable(k) ? b || 0 : 0), 0) || 1;
+  return widths.map((w, k) => (!inTable(k) ? w : (w || 0) + (total ? (deficit[k] * first) / total : 0) + (rest * (w || 0)) / base));
+}
+
+function buildTableHtml(layout, styles, fontScale = 1) {
   const covered = new Set(); // "r,c" 形式で、結合セルに覆われて描画をスキップする位置
   const spanAt = new Map(); // "r,c" -> {rowspan, colspan}（結合の左上セルのみ）
-  const mergeAnchorOf = new Map(); // "r,c" -> 結合の左上セルの "r,c"（結合に含まれる全セル）
   layout.merges.forEach((m) => {
     spanAt.set(`${m.r1},${m.c1}`, { rowspan: m.r2 - m.r1 + 1, colspan: m.c2 - m.c1 + 1 });
-    for (let r = m.r1; r <= m.r2; r++) for (let c = m.c1; c <= m.c2; c++) mergeAnchorOf.set(`${r},${c}`, [m.r1, m.c1]);
     for (let r = m.r1; r <= m.r2; r++) {
       for (let c = m.c1; c <= m.c2; c++) {
         if (r === m.r1 && c === m.c1) continue;
@@ -287,22 +364,8 @@ function buildTableHtml(layout, styles) {
     }
     return h;
   };
-  // 折り返さないセルが、隣の空いたセルへはみ出せる幅（Excelと同じく、左寄せは右へ・右寄せは左へ・中央は左右へ。
-  // 文字のあるセル・文字のある結合セルで止まる。中が空欄の結合セル（例: 03-2の印鑑欄）へは、従来の表示どおりはみ出してよい）
-  const freeWidth = (r, from, step) => {
-    let w = 0;
-    for (let k = from; k >= 1 && k <= layout.maxCol; k += step) {
-      const anchor = mergeAnchorOf.get(`${r},${k}`);
-      if (anchor ? hasText(anchor[0], anchor[1]) : hasText(r, k)) break;
-      w += layout.colWidthPx[k] || 0;
-    }
-    return w;
-  };
-  const spillWidth = (r, cFirst, cLast, ownWidth, horizontal) => {
-    if (horizontal === "right") return ownWidth + freeWidth(r, cFirst - 1, -1);
-    if (horizontal === "center") return ownWidth + 2 * Math.min(freeWidth(r, cFirst - 1, -1), freeWidth(r, cLast + 1, 1));
-    return ownWidth + freeWidth(r, cLast + 1, 1);
-  };
+  // 折り返さないセルが、隣の空いたセルへはみ出せる幅（罫線・文字のあるセルで止まる。borderlessSpillWidth）
+  const spillWidth = (r, cFirst, cLast, ownWidth, horizontal) => ownWidth + borderlessSpillWidth(layout, styles, r, cFirst, cLast, horizontal);
   const totalWidthPx = colWidths.reduce((a, b) => a + b, 0);
   const colGroup = colWidths.map((w) => `<col style="width:${w}px">`).join("");
 
@@ -337,7 +400,7 @@ function buildTableHtml(layout, styles) {
         ? `<div class="xc${vertical ? " xc-vert" : ""}" data-w="${Math.round(boxW)}" data-spill="${Math.round(spill)}" data-wrap="${wrap ? 1 : 0}" style="width:${Math.max(1, Math.round(boxW) - 4)}px;height:${Math.max(0, boxH - 1)}px;justify-content:${valign};align-items:${halign}"><span>${text}</span></div>`
         : "";
       // styles.xmlの色・フォント名は外部提供の.xlsxテンプレート由来のためHTML属性値として無害化する
-      cellsHtml.push(`<td${spanAttrs} style="${escapeHtml(cellStyleToCss(style))}">${inner}</td>`);
+      cellsHtml.push(`<td${spanAttrs} style="${escapeHtml(cellStyleToCss(style, fontScale))}">${inner}</td>`);
     }
     rowsHtml.push(`<tr style="height:${layout.rowHeightPx[r]}px">${cellsHtml.join("")}</tr>`);
   }
@@ -403,12 +466,65 @@ async function render(model, mapping, companyProfile, template) {
   const sharedStringsXml = await readZipEntryText(zip, "xl/sharedStrings.xml");
   const styles = parseXlsxStyles(stylesXml);
   const sharedStrings = parseSharedStrings(sharedStringsXml);
-  const layout = readSheetLayout(sheetXml, sharedStrings);
+  const sheetLayout = readSheetLayout(sheetXml, sharedStrings);
+  // 1ページに収める様式は、紙面の高さ÷幅が PRINT_HEIGHT_RATIO になるまで列を広げる（以前は表の右に空白を足していたため、
+  // 用紙の右に約4cmの空白ができ、表は左に寄っていた。2026-10-24）。行の高さは変えない
+  const fitToPage = !!plan.fitToPage;
+  const sumOf = (arr, n) => arr.slice(1, n + 1).reduce((a, b) => a + (b || 0), 0); // 表に描く範囲（1〜最後の行・列）だけ
+  const extraPx = fitToPage ? sumOf(sheetLayout.rowHeightPx, sheetLayout.maxRow) / PRINT_HEIGHT_RATIO - sumOf(sheetLayout.colWidthPx, sheetLayout.maxCol) : 0;
+  const layout = extraPx > 0 ? { ...sheetLayout, colWidthPx: widenColumnsToFill(sheetLayout, styles, extraPx) } : sheetLayout;
+
+  const [paperW, paperH] = PAPER_SIZE_MM[layout.pageSetup.paperSize] || [297, 420];
+  const isLandscape = layout.pageSetup.orientation === "landscape";
+  const pageSizeMm = isLandscape ? [Math.max(paperW, paperH), Math.min(paperW, paperH)] : [Math.min(paperW, paperH), Math.max(paperW, paperH)];
+  const marginTopMm = layout.pageMarginsIn.top * 25.4;
+  const marginBottomMm = layout.pageMarginsIn.bottom * 25.4;
+  // 左右の余白は同じにする（様式の 03-2 は左30・右0mm で、右0mm は多くのプリンターで印刷できず、表も左に寄っていた。2026-10-24）。
+  // 左右の合計は様式のまま（印刷に使える幅は変わらない）。Excel出力の印刷設定は変えない
+  const marginSideMm = ((layout.pageMarginsIn.left + layout.pageMarginsIn.right) * 25.4) / 2;
+  const marginLeftMm = marginSideMm;
+  const marginRightMm = marginSideMm;
+
+  // 会社様式が「1ページに収める」印刷設定（mappingのfitToPage、Excel出力にも同じ設定を適用）の場合、
+  // 印刷用HTMLも用紙の印刷可能領域に収まる倍率で縮小する。縮小しないと、A3横でも下部が2ページ目にはみ出す。
+  // 2026-10-24 からは最初から縮めた大きさで作る（下の scale）。下の script は、描画された表が計算より大きかったときだけ zoom で縮める安全策。
+  const mmToPx = (mm) => (mm / 25.4) * 96;
+  // 収める範囲は「様式の余白（@page の margin）の内側」と「iPad の Safari が実際に使う範囲」の小さい方（2026-10-18）。
+  // iOS の Safari（iOS 27・A3横で「PDFに保存」した実物で確認）は @page の用紙の大きさは守るが、余白（03-2 は上15・右0・下10・左30mm）は
+  // 使わず、自分の余白（左右約14mm・上約16.5mm）と下にアドレス・日時のフッターの分を取り、1ページに使える高さは約259mm
+  // （様式の余白で計算した 272mm より約13mm少ない）。さらに表を約1.4%大きく描く。このため表の下の2〜3行が2ページ目に出ていた。
+  // 余白を左右15mm・上17mm・下22mmとした範囲と、様式の余白の範囲の小さい方に、拡大の分（下の script の 0.97）を見込んで収める。
+  const SAFE_MARGIN_MM = { left: 15, right: 15, top: 17, bottom: 22 };
+  // さらに iPad の Safari は、印刷する内容を余白の内側の幅いっぱいに合わせて縮める（2枚目の実物の PDF で確認: 表をいくら縮めても、
+  // 表の幅は余白の内側の幅（約391.8mm）になり、高さも同じ割合で戻って下が2ページ目に出た）。このため、全体の縮小では高さを抑えられない。
+  // そこで紙面（.xlsx-sheet-wrap）の幅を「表の高さ ÷ PRINT_HEIGHT_RATIO」以上にして、幅いっぱいに合わせられても
+  // 高さが 幅×PRINT_HEIGHT_RATIO 以下になるようにする。2026-10-24 からは、その幅を空白ではなく列の幅に配る（上の widenColumnsToFill）ので、
+  // 紙面の幅は表の幅とほぼ同じになる（表示の誤差で表が少し高くなった分だけ、右にわずかな空白が足される）。
+  const availWpx = mmToPx(Math.min(pageSizeMm[0] - marginLeftMm - marginRightMm, pageSizeMm[0] - SAFE_MARGIN_MM.left - SAFE_MARGIN_MM.right));
+  const availHpx = mmToPx(Math.min(pageSizeMm[1] - marginTopMm - marginBottomMm, pageSizeMm[1] - SAFE_MARGIN_MM.top - SAFE_MARGIN_MM.bottom));
+
+  // 印刷用HTMLは、最初から縮めた大きさ（列の幅・行の高さ・文字・図・サイン・印に同じ倍率）で作る（2026-10-24）。
+  // 以前は原寸で作って CSS の zoom で縮めていたが、iPad の Safari の印刷では zoom が文字に効かず、文字だけが 1/zoom 倍
+  // （0.824 のとき約1.21倍）の大きさで描かれ、多くの欄で文字が罫線・隣の欄にはみ出していた（利用者の実物の PDF で、題名・工事名など
+  // どの文字も表に対して 1.213 倍だったことで確認）。倍率は下の script と同じ決まり（表の高さは行の高さの合計＋罫線の分 1px）。
+  const tableHpx = sumOf(layout.rowHeightPx, layout.maxRow) + 1;
+  const tableWpx = Math.max(sumOf(layout.colWidthPx, layout.maxCol), tableHpx / PRINT_HEIGHT_RATIO);
+  // 幅の余裕は 0.995（高さの 0.97 は Safari が表を少し大きく描く分の余裕。幅は Safari が用紙の幅いっぱいに合わせ直すので要らず、
+  // 0.97 にすると Safari 以外の印刷で右の余白だけが約12mm大きくなる）
+  const scale = fitToPage ? Math.min(1, (availWpx / tableWpx) * 0.995, (availHpx / tableHpx) * 0.97) : 1;
+  const scaleBox = (b) => (scale === 1 ? b : { ...b, left: b.left * scale, top: b.top * scale, width: b.width * scale, height: b.height * scale });
 
   const colOffsetPx = buildOffsets(layout.colWidthPx);
   const rowOffsetPx = buildOffsets(layout.rowHeightPx);
 
-  const { images: templateImages, textShapes } = await collectTemplateShapes(zip, sheetPath, colOffsetPx, rowOffsetPx);
+  // 様式の図（測量機器の表など）は、列を広げても形を変えない（元の大きさのまま、広がった範囲の中央に置く）
+  const shapes = await collectTemplateShapes(zip, sheetPath, colOffsetPx, rowOffsetPx);
+  const original = layout === sheetLayout ? shapes : await collectTemplateShapes(zip, sheetPath, buildOffsets(sheetLayout.colWidthPx), rowOffsetPx);
+  const templateImages = shapes.images.map((img, i) => {
+    const o = original.images[i];
+    return o ? { ...img, left: img.left + (img.width - o.width) / 2, width: o.width } : img;
+  });
+  const textShapes = shapes.textShapes.map((t) => ({ ...scaleBox(t), fontSizePx: Math.round(t.fontSizePx * scale * 10) / 10 }));
 
   // 職長サイン画像は、Excel出力(excelXlsxTemplate.js)と同じくplan.imagesのセル位置に貼る。
   // 保存されているサインは日報画面の欄全体（書いていない余白を含む横長の画像）なので、線のある範囲だけを切り出してから
@@ -430,41 +546,23 @@ async function render(model, mapping, companyProfile, template) {
     })
   );
 
-  const tableHtml = buildTableHtml(layout, styles);
+  // 所長欄の電子印（日報の directorSeal。職長サインとは別）。様式の「所長」の見出しの真下の欄に、欄からはみ出さない大きさで置く
+  const sealImages = [];
+  const seal = model.report?.directorSeal;
+  const sealCell = seal?.name ? findDirectorSealCell(layout) : null;
+  if (sealCell) {
+    const box = signatureBoxOf(layout, styles, sealCell.row, sealCell.col);
+    const p = sealPlacement({ left: colOffsetPx[box.left] || 0, top: rowOffsetPx[box.top] || 0, width: box.width, height: box.height }, seal);
+    sealImages.push({ left: p.left, top: p.top, width: p.size, height: p.size, dataUrl: sealPngDataUrl(seal.name, 240), cls: "xlsx-overlay-seal" });
+  }
 
-  const [paperW, paperH] = PAPER_SIZE_MM[layout.pageSetup.paperSize] || [297, 420];
-  const isLandscape = layout.pageSetup.orientation === "landscape";
-  const pageSizeMm = isLandscape ? [Math.max(paperW, paperH), Math.min(paperW, paperH)] : [Math.min(paperW, paperH), Math.max(paperW, paperH)];
-  const marginTopMm = layout.pageMarginsIn.top * 25.4;
-  const marginBottomMm = layout.pageMarginsIn.bottom * 25.4;
-  const marginLeftMm = layout.pageMarginsIn.left * 25.4;
-  const marginRightMm = layout.pageMarginsIn.right * 25.4;
+  const tableHtml = buildTableHtml(scale === 1 ? layout : { ...layout, colWidthPx: layout.colWidthPx.map((w) => (w || 0) * scale), rowHeightPx: layout.rowHeightPx.map((h) => (h || 0) * scale) }, styles, scale);
 
-  // 会社様式が「1ページに収める」印刷設定（mappingのfitToPage、Excel出力にも同じ設定を適用）の場合、
-  // 印刷用HTMLも用紙の印刷可能領域に収まる倍率で縮小する。縮小しないと、A3横でも下部が2ページ目にはみ出す。
-  // HTMLの表は、セルの余白・文字の高さ分だけExcelの行高より大きく描画されるため、倍率は「実際に描画された
-  // 表の大きさ」から表示時・印刷時に計算する（下のscript）。
-  const mmToPx = (mm) => (mm / 25.4) * 96;
-  const fitToPage = !!plan.fitToPage;
-  // 収める範囲は「様式の余白（@page の margin）の内側」と「iPad の Safari が実際に使う範囲」の小さい方（2026-10-18）。
-  // iOS の Safari（iOS 27・A3横で「PDFに保存」した実物で確認）は @page の用紙の大きさは守るが、余白（03-2 は上15・右0・下10・左30mm）は
-  // 使わず、自分の余白（左右約14mm・上約16.5mm）と下にアドレス・日時のフッターの分を取り、1ページに使える高さは約259mm
-  // （様式の余白で計算した 272mm より約13mm少ない）。さらに表を約1.4%大きく描く。このため表の下の2〜3行が2ページ目に出ていた。
-  // 余白を左右15mm・上17mm・下22mmとした範囲と、様式の余白の範囲の小さい方に、拡大の分（下の script の 0.97）を見込んで収める。
-  const SAFE_MARGIN_MM = { left: 15, right: 15, top: 17, bottom: 22 };
-  // さらに iPad の Safari は、印刷する内容を余白の内側の幅いっぱいに合わせて縮める（2枚目の実物の PDF で確認: 表をいくら縮めても、
-  // 表の幅は余白の内側の幅（約391.8mm）になり、高さも同じ割合で戻って下が2ページ目に出た）。このため、全体の縮小では高さを抑えられない。
-  // そこで紙面（.xlsx-sheet-wrap）の幅を「表の高さ ÷ PRINT_HEIGHT_RATIO」以上にして（表の右に空白を足す）、幅いっぱいに合わせられても
-  // 高さが 幅×PRINT_HEIGHT_RATIO 以下になるようにする（Safari の 1ページの高さ÷幅 ≈ 259/391.8 ≈ 0.66 より小さく、余裕を見て 0.63）。
-  // 表・図形・サインの位置は紙面の左上からのまま（右に空白が増えるだけ）。
-  const PRINT_HEIGHT_RATIO = 0.63;
-  const availWpx = mmToPx(Math.min(pageSizeMm[0] - marginLeftMm - marginRightMm, pageSizeMm[0] - SAFE_MARGIN_MM.left - SAFE_MARGIN_MM.right));
-  const availHpx = mmToPx(Math.min(pageSizeMm[1] - marginTopMm - marginBottomMm, pageSizeMm[1] - SAFE_MARGIN_MM.top - SAFE_MARGIN_MM.bottom));
   const fitScript = fitToPage
-    ? `<script>(function(){var AW=${availWpx.toFixed(1)},AH=${availHpx.toFixed(1)},RATIO=${PRINT_HEIGHT_RATIO};function fit(){var ws=document.querySelectorAll(".xlsx-sheet-wrap");for(var i=0;i<ws.length;i++){var w=ws[i];var t=w.querySelector("table.xlsx-sheet");if(!t)continue;w.style.zoom="1";w.style.width="";var r=t.getBoundingClientRect();if(!r.width||!r.height)continue;var WW=Math.max(r.width,r.height/RATIO);w.style.width=WW+"px";w.style.zoom=String(Math.min(1,AW/WW*0.97,AH/r.height*0.97));}}fit();window.addEventListener("load",fit);window.addEventListener("beforeprint",fit);})();</script>`
+    ? `<script>(function(){var AW=${availWpx.toFixed(1)},AH=${availHpx.toFixed(1)},RATIO=${PRINT_HEIGHT_RATIO};function fit(){var ws=document.querySelectorAll(".xlsx-sheet-wrap");for(var i=0;i<ws.length;i++){var w=ws[i];var t=w.querySelector("table.xlsx-sheet");if(!t)continue;w.style.zoom="1";w.style.width="";var r=t.getBoundingClientRect();if(!r.width||!r.height)continue;var WW=Math.max(r.width,r.height/RATIO);w.style.width=WW+"px";var z=Math.min(1,AW/WW*0.995,AH/r.height*0.97);w.style.zoom=z<0.99?String(z):"1";}}fit();window.addEventListener("load",fit);window.addEventListener("beforeprint",fit);})();</script>`
     : "";
 
-  const imagesHtml = [...templateImages, ...signatureImages].map(overlayImageHtml).join("");
+  const imagesHtml = [...templateImages, ...signatureImages, ...sealImages].map(scaleBox).map(overlayImageHtml).join("");
   const cellFitScript = `<script>${PDF_CELL_FIT_SCRIPT}</script>`;
   const textShapesHtml = textShapes
     .map((s) => `<div class="xlsx-overlay-text" style="left:${s.left}px;top:${s.top}px;width:${s.width}px;height:${s.height}px;font-size:${s.fontSizePx}px">${escapeHtml(s.text)}</div>`)
@@ -474,11 +572,13 @@ async function render(model, mapping, companyProfile, template) {
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(model.site.name || "工事日報")}（会社指定様式）</title>
 <meta name="print-layout-version" content="${PRINT_LAYOUT_VERSION}">
 <style>
   @page { size: ${pageSizeMm[0]}mm ${pageSizeMm[1]}mm; margin: ${marginTopMm}mm ${marginRightMm}mm ${marginBottomMm}mm ${marginLeftMm}mm; }
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body { margin: 0; }
   .xlsx-sheet-wrap { position: relative; }
   table.xlsx-sheet { border-collapse: collapse; table-layout: fixed; }
@@ -491,7 +591,8 @@ async function render(model, mapping, companyProfile, template) {
   table.xlsx-sheet td .xc.xc-vert, table.xlsx-sheet td .xc.xc-vert.xc-fit { align-items: center; justify-content: center; }
   .xlsx-overlay-img { position: absolute; object-fit: contain; }
   .xlsx-overlay-crop { position: absolute; overflow: hidden; }
-  .xlsx-overlay-text { position: absolute; display: flex; align-items: center; justify-content: center; text-align: center; }
+  /* 様式の図形の文字（「点検方法は当社の点検手順書による」など）: 折り返すと下の罫線に重なるため1行で表示する */
+  .xlsx-overlay-text { position: absolute; display: flex; align-items: center; justify-content: center; text-align: center; white-space: nowrap; }
 </style>
 </head>
 <body>

@@ -108,7 +108,7 @@ function render(model) {
     <div class="dash-big">${s.today}<small>人</small></div>
     <p class="dash-sub">本日の実績人数${s.plannedToday ? `（予定 ${s.plannedToday}人）` : ""}</p>
     <dl class="dash-dl dash-dl-row">
-      ${s.byOccupation.map((o) => `<dt>${escapeHtml(o.occupation)}</dt><dd>${o.count}人<small class="dash-sub">（累計${o.cumulative}人）</small></dd>`).join("")}
+      ${s.byOccupation.map((o) => `<dt>${escapeHtml(o.occupation)}</dt><dd>${o.count}人<small class="dash-sub">（累計${o.cumulative}人）</small>${(o.vendors || []).length ? `<small class="dash-sub dash-trade-vendors">${o.vendors.map((v) => `${escapeHtml(v.vendor)} ${v.today}人${v.buildings?.length ? `（${escapeHtml(v.buildings.join("・"))}）` : ""}`).join("・")}</small>` : ""}</dd>`).join("")}
       <dt>職長</dt><dd>${s.foremen}人</dd><dt>業者</dt><dd>${s.vendors}社</dd><dt>工種</dt><dd>${s.trades}種</dd>
       ${s.supervisors ? `<dt>監督・職員</dt><dd>${s.supervisors}人</dd>` : ""}
       ${s.supervisors ? `<dt>計（監督・職員を含む）</dt><dd>${s.totalToday}人</dd>` : ""}

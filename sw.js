@@ -16,7 +16,7 @@
    そのパスを追加すること（ビルド工程が無い方針のため手動管理）。
    ========================================================== */
 
-const CACHE_NAME = "koji-nippou-v70";
+const CACHE_NAME = "koji-nippou-v71";
 
 const PRECACHE_URLS = [
   "./assets/templates/manifest.json",
@@ -45,6 +45,7 @@ const PRECACHE_URLS = [
   "./js/patrolChecklist.js",
   "./js/photos.js",
   "./js/reports.js",
+  "./js/directorSealBulk.js",
   "./js/signature-pad.js",
   "./js/signatures.js",
   "./js/sites.js",
@@ -63,10 +64,12 @@ const PRECACHE_URLS = [
   "./js/ui/board-pdf.js",
   "./js/ui/company-pdf.js",
   "./js/ui/chorei-dialog.js",
+  "./js/ui/seal-bulk-dialog.js",
   "./js/ui/billing-input-dialog.js",
   "./js/ui/delivery-quick-dialog.js",
   "./js/report-output/imagePdf.js",
   "./js/report-output/signatureCrop.js",
+  "./js/report-output/directorSeal.js",
   "./js/ui/progress-slider.js",
   "./js/ui/site-form-view.js",
   "./js/ui/site-list-view.js",
@@ -323,6 +326,7 @@ const PRECACHE_URLS = [
   "./js/reportPrint.js",
   "./js/dashboard/dailyFlow.js",
   "./js/dashboard/siteDashboardModel.js",
+  "./js/dashboard/attendanceBreakdown.js",
   "./js/dashboard/todaySheetHtml.js",
   "./js/dashboard/boardContent.js",
   "./js/report-output/xlsxDiagonal.js",

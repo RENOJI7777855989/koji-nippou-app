@@ -2109,3 +2109,43 @@ body.has-restore-banner .report-quick-bar { top: 64px; }
 .vm-period-head span { font-size: 18px; }
 .vm-period-table tr.vm-row-idle td { color: #777; }
 .vm-period-months { margin: 6px 0; font-size: 15px; }
+
+/* 所長欄の電子印（日報画面。2026-10-24） */
+.seal-editor { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.seal-preview { border: 1px solid #333; width: 122px; background: #fff; flex: none; }
+.seal-preview-head { border-bottom: 1px solid #333; text-align: center; font-size: 13px; padding: 2px 0; color: #222; }
+.seal-preview-box { position: relative; width: 120px; height: 104px; }
+.seal-preview-box img { position: absolute; }
+.seal-controls { flex: 1 1 220px; min-width: 0; }
+.seal-buttons, .seal-move { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.seal-move button { min-width: 44px; min-height: 44px; }
+
+/* 所長印の一括押印（日報カレンダー。2026-10-25） */
+.cal-seal { display: block; font-size: 11px; font-weight: bold; color: #d7000f; }
+.cal-head .cal-seal-bulk { margin-left: auto; }
+.seal-bulk-setting { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 8px 0; }
+.seal-bulk-setting label { flex: 1 1 160px; }
+.seal-bulk-preview { display: block; }
+.seal-bulk-preview-empty { display: inline-block; width: 64px; font-size: 11px; color: #a00; }
+.seal-bulk-mode { border: 1px solid #ccc; border-radius: 6px; padding: 4px 10px; flex: 1 1 240px; }
+.seal-bulk-mode label { display: flex; flex-direction: row; align-items: center; gap: 6px; font-weight: normal; margin: 4px 0; }
+.seal-bulk-mode input[type="radio"] { width: 20px; height: 20px; flex: none; margin: 0; }
+.seal-bulk-month { display: flex; gap: 12px; align-items: center; margin: 8px 0; }
+.seal-bulk-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.seal-bulk-list { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; }
+.seal-bulk-list li { border-bottom: 1px solid #eee; }
+.seal-bulk-list label { display: flex; gap: 10px; align-items: center; padding: 8px 10px; min-height: 44px; font-weight: normal; }
+.seal-bulk-list label.is-locked { color: #999; }
+.seal-bulk-list input[type="checkbox"] { width: 22px; height: 22px; flex: none; }
+.seal-bulk-date { min-width: 5.5em; font-weight: bold; }
+.seal-bulk-day { min-width: 6em; color: #555; }
+.seal-bulk-state { margin-left: auto; color: #555; }
+.seal-bulk-state.is-sealed { color: #d7000f; }
+.seal-bulk-count, .seal-bulk-last { margin: 8px 0; }
+.seal-bulk-summary dt { font-weight: bold; margin-top: 6px; }
+.seal-bulk-summary dd { margin: 0 0 0 1em; }
+.seal-bulk-res { margin: 4px 0 8px; padding-left: 1.4em; }
+.seal-bulk-res.is-failed { color: #b00; }
+.seal-bulk-result-head .warn { color: #b00; }
+/* 職種別の人数の業者ごとの内訳（2026-10-25） */
+.dash-trade-vendors { display: block; }

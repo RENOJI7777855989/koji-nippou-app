@@ -85,7 +85,7 @@ export function combinePrintHtml(htmls, title = "工事日報（まとめて出�
   const pages = bodies
     .map((b, i) => `<section class="bulk-report-page"${i < bodies.length - 1 ? ' style="break-after: page; page-break-after: always;"' : ""}>${b}</section>`)
     .join("\n");
-  return `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>${title.replace(/[<>&]/g, "")}</title><style>${styles}</style></head><body>${pages}</body></html>`;
+  return `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title.replace(/[<>&]/g, "")}</title><style>${styles}</style></head><body>${pages}</body></html>`;
 }
 
 /**

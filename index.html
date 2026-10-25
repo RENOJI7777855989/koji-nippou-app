@@ -379,6 +379,34 @@
         </label>
         </div>
 
+        <div class="rf-sec" data-qsec="seal" id="directorSealSection">
+        <h3>所長印（電子印）</h3>
+        <p class="hint">会社様式（03-2）の印刷・PDFの所長欄に、赤い丸印を押します。職長サインとは別のものです。押印・取り消し・位置は［保存］で記録されます。</p>
+        <div class="seal-editor">
+          <div class="seal-preview" aria-label="所長欄の見本">
+            <div class="seal-preview-head">所　長</div>
+            <div class="seal-preview-box" id="directorSealBox"><img id="directorSealImg" alt="所長印" hidden></div>
+          </div>
+          <div class="seal-controls">
+            <label>印の名前（4文字まで）
+              <input type="text" id="directorSealName" maxlength="8" autocomplete="off" placeholder="例）山田">
+            </label>
+            <div class="seal-buttons">
+              <button type="button" id="directorSealStampBtn">押印する</button>
+              <button type="button" id="directorSealClearBtn" class="secondary-btn">押印を取り消す</button>
+            </div>
+            <div class="seal-move" role="group" aria-label="印の位置">
+              <button type="button" class="secondary-btn" data-seal-move="-1,0" aria-label="左へ">◀</button>
+              <button type="button" class="secondary-btn" data-seal-move="0,-1" aria-label="上へ">▲</button>
+              <button type="button" class="secondary-btn" data-seal-move="0,1" aria-label="下へ">▼</button>
+              <button type="button" class="secondary-btn" data-seal-move="1,0" aria-label="右へ">▶</button>
+              <button type="button" class="secondary-btn" data-seal-move="center">中央</button>
+            </div>
+            <p class="hint" id="directorSealStatus">未押印</p>
+          </div>
+        </div>
+        </div>
+
         <div class="rf-sec" data-qsec="photos">
         <h3>写真</h3>
         <label class="full-width" id="photoInputLabel">写真を追加（複数選択可）
@@ -1187,6 +1215,12 @@
         <button type="button" id="choreiSaveBtn">保存</button>
       </div>
     </div>
+  </dialog>
+
+  <!-- 所長印の一括押印（日報カレンダーから保存済みの日報を選んで押す。js/ui/seal-bulk-dialog.js） -->
+  <dialog id="sealBulkDialog" class="chorei-dialog seal-bulk-dialog">
+    <h3>所長印を一括押印</h3>
+    <div id="sealBulkBody" class="chorei-body"></div>
   </dialog>
 
   <!-- 請求人工入力（日ごとに業者の行の請求人工を入れる。js/ui/billing-input-dialog.js） -->

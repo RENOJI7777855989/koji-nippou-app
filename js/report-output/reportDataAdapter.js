@@ -53,6 +53,7 @@ function mapCompanyProfile(profile) {
   };
 }
 
+import { normalizeDirectorSeal } from "./directorSeal.js";
 import { staffHeadcountForDay } from "../dashboard/dailyFlow.js";
 
 /**
@@ -92,6 +93,8 @@ export function buildReportOutputModel({ site, report, photos = [], signatures =
       dayStatus: ["nowork", "office", "holiday", "rain"].includes(report?.dayStatus) ? report.dayStatus : "work",
       focusInstructions: report?.focusInstructions || "",
       workCoordination: report?.workCoordination || "",
+      // 所長欄の電子印（{ name, offsetX, offsetY } または null。会社様式の印刷用HTMLで所長欄に描く。Excel出力には書かない）
+      directorSeal: normalizeDirectorSeal(report?.directorSeal),
       // 搬入・搬出（03-2の「資材・機材搬入（ＡＭ／ＰＭ）」へ、ダッシュボードと同じく搬入・搬出の両方を書く。direction の無い行は搬入）
       deliveries: (report?.deliveries || []).map((d) => ({ direction: d.direction === "out" ? "out" : "in", time: d.time || "", item: d.item || "", quantity: d.quantity || "", vendor: d.vendor || "", status: d.status || "" })),
       patrolInspectorName: report?.patrolInspectorName || "",

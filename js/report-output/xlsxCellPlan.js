@@ -8,7 +8,7 @@
    ========================================================== */
 
 import { renderTemplateString } from "./xlsxTemplateEngine.js";
-import { assignTradeRows, buildTradeAttendanceWrites } from "./tradeAttendance.js";
+import { assignTradeRowsForDay, buildTradeAttendanceWrites } from "./tradeAttendance.js";
 import { patrolSlashApplies } from "../patrolChecklist.js";
 
 /**
@@ -79,11 +79,13 @@ export function buildXlsxCellPlan(model, cfg) {
   // 稼動人数表の業種別の人数・累計・計・延労働時間（tradeAttendance.js）。台帳シートは累計等が数式なので人数と業種名だけ
   const trade = cfg.tradeAttendance;
   if (trade && model.attendance) {
-    const assignment = model.attendance.assignment || assignTradeRows(trade, model.attendance.siteReports || []);
+    // 作業なし・休工日の日報は、その日の人数に数えない（累計はそれまでの通常作業の日の合計）
+    const todayCompanies = (model.report.dayStatus || "work") === "work" ? model.companies || [] : [];
+    // 台帳は頁をまたいで同じ行にする割り当てを渡す。1日分は、その日に稼働した業種を先に空き行へ（assignTradeRowsForDay）
+    const assignment = model.attendance.assignment || assignTradeRowsForDay(trade, { todayCompanies, historyReports: model.attendance.historyReports || [] });
     const r = buildTradeAttendanceWrites(trade, {
       assignment,
-      // 作業なし・休工日の日報は、その日の人数に数えない（累計はそれまでの通常作業の日の合計）
-      todayCompanies: (model.report.dayStatus || "work") === "work" ? model.companies || [] : [],
+      todayCompanies,
       historyReports: model.attendance.historyReports || [],
       supervisorsToday: model.report.siteSupervisorCount || 0,
       supervisorsCumulative: model.report.cumulativeSiteSupervisorCount || 0,

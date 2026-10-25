@@ -15,7 +15,14 @@
    ・台帳シートは累計・計・延労働時間が様式の数式なので、その日の人数だけを書く（cumulative: false）。
      空き行の業種名も、2頁目以降は「前の頁の業種名を映す数式」なので、台帳の最初の頁にだけ書く
      （freeLabelWrites。renderLedgerWorkbook.js が先頭シートの1頁目に書く）。
+   ・2026-10-25: 人数は現場ダッシュボードと同じ集計（js/dashboard/attendanceBreakdown.js）から書く。
+     1日分（Excel・PDF）は、空き行をまず「その日に稼働した業種」に割り当て、残りを累計のある業種に初めて出てきた順で割り当てる
+     （assignTradeRowsForDay。以前は現場全体で初めて出てきた順だけで割り当てていたため、空き行6行を前の業種が使い切ると、
+     その日に稼働した業種（例: 洗浄）の行が無く、人数が計にしか入らなかった）。台帳は、頁をまたいで同じ業種を同じ行に
+     置く必要があるので従来どおり（assignTradeRows）。計・延労働時間には、工種が未入力の行の人数も入れる（ダッシュボードの合計と同じ）。
    ========================================================== */
+
+import { attendanceBreakdown } from "../dashboard/attendanceBreakdown.js";
 
 /** 空き行の業種名の書き込み（台帳の最初の頁用。行は頁の中の位置） */
 export function freeLabelWrites(cfg, assignment) {
@@ -56,6 +63,26 @@ export function assignTradeRows(cfg, reports) {
   return { byTrade, overflow };
 }
 
+/**
+ * 1日分の出力用の行の割り当て。様式に業種名のある行はその行、無い業種は空き行へ。空き行は、その日に稼働した業種を先に、
+ * 次に累計のある業種を初めて出てきた順に割り当てる。入りきらない業種は overflow（書けない。計には入る）
+ */
+export function assignTradeRowsForDay(cfg, { todayCompanies = [], historyReports = [] }) {
+  const byTrade = new Map();
+  const overflow = [];
+  const fixed = new Map(cfg.rows.map((r) => [normalizeTrade(r.label), r]));
+  const free = [...(cfg.freeRows || [])];
+  const b = attendanceBreakdown({ todayCompanies, historyReports });
+  const ordered = [...b.trades.filter((t) => t.today > 0), ...b.trades.filter((t) => !t.today)];
+  for (const t of ordered) {
+    const hit = fixed.get(t.tradeKey);
+    if (hit) byTrade.set(t.tradeKey, { row: hit.row, label: hit.label, free: false });
+    else if (free.length) byTrade.set(t.tradeKey, { row: free.shift(), label: t.label, free: true });
+    else overflow.push(t.label);
+  }
+  return { byTrade, overflow };
+}
+
 const num = (v) => {
   const n = Number(String(v ?? "").trim());
   return Number.isFinite(n) && n > 0 ? n : 0;
@@ -88,17 +115,14 @@ export function countByTrade(companies) {
 export function buildTradeAttendanceWrites(cfg, { assignment, todayCompanies, historyReports = [], supervisorsToday = 0, supervisorsCumulative = 0, cumulative = true, writeLabels = true }) {
   const writes = [];
   const warnings = [];
-  const today = countByTrade(todayCompanies);
-  const total = new Map();
-  for (const r of historyReports) for (const [k, n] of countByTrade(r.companies)) total.set(k, (total.get(k) || 0) + n);
+  // 人数はダッシュボードと同じ集計（業者×工種の行を工種ごとに合計）
+  const b = attendanceBreakdown({ todayCompanies, historyReports });
+  const today = new Map(b.trades.map((t) => [t.tradeKey, t.today]));
+  const total = new Map(b.trades.map((t) => [t.tradeKey, t.cumulative]));
   const col = (c, row) => `${c}${row}`;
-  let todaySum = supervisorsToday || 0;
-  let cumulativeSum = supervisorsCumulative || 0;
   for (const [key, slot] of assignment.byTrade) {
     const t = today.get(key) || 0;
     const sum = total.get(key) || 0;
-    todaySum += t;
-    cumulativeSum += sum;
     const show = t > 0 || (cumulative && sum > 0);
     if (!show) continue;
     if (slot.free && writeLabels) writes.push({ cell: col(cfg.labelColumn, slot.row), value: slot.label });
@@ -106,14 +130,16 @@ export function buildTradeAttendanceWrites(cfg, { assignment, todayCompanies, hi
     if (cumulative && sum > 0) writes.push({ cell: col(cfg.cumulativeColumn, slot.row), value: sum, numeric: true });
   }
   for (const label of assignment.overflow) {
-    if (today.get(normalizeTrade(label))) warnings.push(`業種「${label}」は稼動人数表の空き行が足りないため書き込めませんでした（計には含めています）`);
-  }
-  // 空き行が足りず行の無い業種も、計・延労働時間には含める
-  for (const label of assignment.overflow) {
     const key = normalizeTrade(label);
-    todaySum += today.get(key) || 0;
-    cumulativeSum += total.get(key) || 0;
+    const t = today.get(key) || 0, sum = total.get(key) || 0;
+    // 行が足りないのは「業種の行に出せない」だけで、人数は計・累計・延労働時間に入っている（1日分・台帳とも）
+    if (t) warnings.push(`業種「${label}」（本日${t}人）は稼動人数表に書ける行が足りないため業種の行には出していません（人数は計・累計に含めています）`);
+    else if (cumulative && sum) warnings.push(`業種「${label}」（累計${sum}人）は稼動人数表に書ける行が足りないため業種の行には出していません（人数は累計に含めています）`);
   }
+  if (b.noTrade.today) warnings.push(`工種が未入力の業者の人数（本日${b.noTrade.today}人）は、稼動人数表の業種の行には出せません（人数は計・累計に含めています）`);
+  // 計・延労働時間: 全員（行の無い業種・工種未入力を含む）＋社員。ダッシュボードの合計と同じ
+  const todaySum = (supervisorsToday || 0) + b.totals.today;
+  const cumulativeSum = (supervisorsCumulative || 0) + b.totals.cumulative;
   if (cumulative) {
     const hours = cfg.hoursPerPerson || 8;
     if (todaySum > 0) writes.push({ cell: col(cfg.countColumn, cfg.totalRow), value: todaySum, numeric: true }, { cell: col(cfg.countColumn, cfg.laborHoursRow), value: todaySum * hours, numeric: true });

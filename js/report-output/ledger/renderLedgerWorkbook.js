@@ -27,6 +27,7 @@ import { WorkbookCalculator } from "./formulaCache.js";
 import { buildXlsxCellPlan } from "../xlsxCellPlan.js";
 import { applyDiagonalBorders } from "../xlsxDiagonal.js";
 import { assignTradeRows, freeLabelWrites } from "../tradeAttendance.js";
+import { attendanceBreakdown } from "../../dashboard/attendanceBreakdown.js";
 import {
   renderTemplateString,
   setCellInSheetXml,
@@ -156,7 +157,7 @@ function applyLedgerPrintLayout(sheetXml, { pageRows, pageCount, lastCol }) {
 
 /**
  * セルへの一括書き込み（1回の走査で置換。存在しないセルだけ個別に挿入）。
- * 数式セルには書き込まず、skippedFormulaCellsとして返す。
+ * 数式セルには書き込まず、skippedFormulaCellsとして返す（replaceFormula を付けた書き込みだけは、数式を外して値にする）。
  */
 function writeCells(sheetXml, sharedStrings, writes) {
   const pending = new Map(writes.map((w) => [w.cell, w]));
@@ -166,7 +167,7 @@ function writeCells(sheetXml, sharedStrings, writes) {
     const w = pending.get(ref);
     if (!w) return undefined;
     pending.delete(ref);
-    if (cell.formula) {
+    if (cell.formula && !w.replaceFormula) {
       skippedFormulaCells.push(ref);
       return undefined;
     }
@@ -389,6 +390,38 @@ export async function renderLedgerWorkbook({ templateBuffer, mapping, site, entr
       if (!sheetName) continue;
       const list = writesBySheet.get(sheetName) || [];
       list.push({ cell: shiftRef(staffCumCell, (d % profile.pagesPerSheet) * profile.pageRows), value: cum, numeric: true });
+      writesBySheet.set(sheetName, list);
+    }
+  }
+
+  // 稼動人数表の計・延労働時間（各頁の O51・O52・P51・P52）: 現場ダッシュボード・1日分の03-2と同じ集計（attendanceBreakdown.js）の
+  // 全体の人数＋社員を値で書く（2026-10-25）。様式の数式（計＝SUM(O7:O50)・SUM(P7:P50)、延労働時間＝計×8）は業種の行だけを足すので、
+  // 空き行に入りきらない業種・工種が未入力の行の人数が計・累計・延労働時間から漏れていた。この4つのセルは同じ頁の延労働時間の数式
+  // 以外から参照されていない（原本で確認）ので、数式を値に置き換える。業種の行・列・印刷範囲は変えない。日報の無い日（休工日の頁など）も、
+  // その日までの累計を書く（その日は0人）。
+  const tradeCfg = pageCfgBase.tradeAttendance;
+  if (tradeCfg?.totalRow && tradeCfg?.laborHoursRow) {
+    const hours = tradeCfg.hoursPerPerson || 8;
+    const byDay = new Map(placements.map((p) => [p.dayIndex, p.entry]));
+    let cumWorkers = 0, cumStaff = 0;
+    for (let d = 0; d <= lastDayIndex; d++) {
+      const entry = byDay.get(d);
+      const isWork = entry && (entry.model.report?.dayStatus || "work") === "work";
+      const workers = isWork ? attendanceBreakdown({ todayCompanies: entry.model.companies || [], historyReports: [] }).totals.today : 0;
+      const staff = entry ? Number(entry.model.report?.siteSupervisorCount) || 0 : 0;
+      cumWorkers += workers;
+      cumStaff += staff;
+      const sheetName = sheetNames[Math.floor(d / profile.pagesPerSheet)];
+      if (!sheetName) continue;
+      const off = (d % profile.pagesPerSheet) * profile.pageRows;
+      const today = workers + staff, cum = cumWorkers + cumStaff;
+      const list = writesBySheet.get(sheetName) || [];
+      list.push(
+        { cell: shiftRef(`${tradeCfg.countColumn}${tradeCfg.totalRow}`, off), value: today, numeric: true, replaceFormula: true },
+        { cell: shiftRef(`${tradeCfg.countColumn}${tradeCfg.laborHoursRow}`, off), value: today * hours, numeric: true, replaceFormula: true },
+        { cell: shiftRef(`${tradeCfg.cumulativeColumn}${tradeCfg.totalRow}`, off), value: cum, numeric: true, replaceFormula: true },
+        { cell: shiftRef(`${tradeCfg.cumulativeColumn}${tradeCfg.laborHoursRow}`, off), value: cum * hours, numeric: true, replaceFormula: true }
+      );
       writesBySheet.set(sheetName, list);
     }
   }

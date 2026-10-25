@@ -19,6 +19,7 @@ import { escapeHtml } from "../utils.js";
 import { showView, showMessage } from "./common.js";
 import { navigate } from "../router.js";
 import { hasPermission, canAccessSite } from "../auth.js";
+import { openSealBulkDialog } from "./seal-bulk-dialog.js";
 
 const nameEl = document.getElementById("siteDetailName");
 const statusBadgeEl = document.getElementById("siteDetailStatusBadge");
@@ -187,13 +188,17 @@ async function renderReportCalendar(reports) {
     const dlvHtml = showDlv ? `<span class="cal-dlv${dIn ? " has-in" : ""}" data-dlv-in="${dIn}">搬入 ${dIn ? `${dIn}件` : "なし"}</span><span class="cal-dlv${dOut ? " has-out" : ""}" data-dlv-out="${dOut}">搬出 ${dOut ? `${dOut}件` : "なし"}</span>` : "";
     const title = (state === "partial" ? `一部未記入（${missing.join("・")}）` : CAL_LABEL[state] || (state === "out" ? "工期外" : "")) + (multi > 1 ? `・日報${multi}件` : "") + (showDlv ? `・${dlvText}` : "");
     const clickable = report || state === "none";
-    cells.push(`<button type="button" class="cal-cell cal-${state}${iso === today ? " cal-today" : ""}${iso === calendarFocusDate ? " cal-just-saved" : ""}" data-date="${iso}"${report ? ` data-report-id="${report.id}"` : ""}${clickable ? "" : " disabled"} title="${escapeHtml(title)}"><span class="cal-day">${d}</span><span class="cal-label">${escapeHtml(CAL_LABEL[state] || "")}</span>${multi > 1 ? `<span class="cal-multi">日報${multi}件</span>` : ""}${dlvHtml}</button>`);
+    // 所長印（日報の directorSeal）のある日。同じ日に日報が複数あれば、押印した日報の件数
+    const sealedN = report ? reports.filter((r) => r.date === iso && r.directorSeal?.name).length : 0;
+    const sealHtml = sealedN ? `<span class="cal-seal" title="所長印 押印済み${multi > 1 ? `（${sealedN}/${multi}件）` : ""}">印${multi > 1 ? ` ${sealedN}/${multi}` : ""}</span>` : "";
+    cells.push(`<button type="button" class="cal-cell cal-${state}${iso === today ? " cal-today" : ""}${iso === calendarFocusDate ? " cal-just-saved" : ""}" data-date="${iso}"${report ? ` data-report-id="${report.id}"` : ""}${clickable ? "" : " disabled"} title="${escapeHtml(title)}"><span class="cal-day">${d}</span><span class="cal-label">${escapeHtml(CAL_LABEL[state] || "")}</span>${multi > 1 ? `<span class="cal-multi">日報${multi}件</span>` : ""}${dlvHtml}${sealHtml}</button>`);
   }
   reportCalendarEl.innerHTML = `
     <div class="cal-head">
       <button type="button" class="secondary-btn cal-nav" data-shift="-1" aria-label="前の月">◀</button>
       <b>${y}年${m}月の日報</b>
       <button type="button" class="secondary-btn cal-nav" data-shift="1" aria-label="次の月">▶</button>
+      ${!site.completedAt && hasPermission("editReports") && reports.length ? `<button type="button" class="secondary-btn cal-seal-bulk" id="calSealBulkBtn">所長印を一括押印</button>` : ""}
     </div>
     <p class="cal-summary">日報あり ${counts.ok}・一部未記入 ${counts.partial}・<b>日報なし ${counts.none}</b>・現場作業なし ${counts.nowork}・休工日 ${counts.holiday}・雨天作業不可日 ${counts.rain}・事務作業日 ${counts.office}</p>
     <div class="cal-grid">${["日", "月", "火", "水", "木", "金", "土"].map((w) => `<div class="cal-week">${w}</div>`).join("")}${cells.join("")}</div>
@@ -202,6 +207,10 @@ async function renderReportCalendar(reports) {
 }
 
 reportCalendarEl?.addEventListener("click", async (e) => {
+  if (e.target.closest("#calSealBulkBtn")) {
+    await openSealBulkDialog({ site: currentSite, month: calendarMonth, onDone: async () => renderReportCalendar(await listReportsBySite(currentSite.id)) });
+    return;
+  }
   const nav = e.target.closest(".cal-nav");
   if (nav) {
     const [y, m] = calendarMonth.split("-").map(Number);

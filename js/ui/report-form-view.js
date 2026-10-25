@@ -23,6 +23,7 @@ import { FLOW_KINDS, FLOW_STATUSES, DELIVERY_DIRECTIONS, DELIVERY_STATUSES, WORK
 import { reportMissingDetails } from "../dashboard/siteDashboardModel.js";
 import { parseBillingInput, BILLING_INPUT_RULE } from "../billing/billingValue.js";
 import { attachProgressSlider } from "./progress-slider.js";
+import { normalizeDirectorSeal, normalizeSealName, sealPlacement, sealPngDataUrl, SEAL_OFFSET_STEP, SEAL_OFFSET_LIMIT } from "../report-output/directorSeal.js";
 
 const reportSaveBtn = document.getElementById("reportSaveBtn");
 
@@ -93,6 +94,11 @@ const photoGrid = document.getElementById("photoGrid");
 const cancelBtn = document.getElementById("reportCancelBtn");
 const deleteBtn = document.getElementById("deleteReportBtn");
 const deleteArea = document.getElementById("deleteReportArea");
+const sealSection = document.getElementById("directorSealSection");
+const sealNameInput = document.getElementById("directorSealName");
+const sealBox = document.getElementById("directorSealBox");
+const sealImg = document.getElementById("directorSealImg");
+const sealStatus = document.getElementById("directorSealStatus");
 const backBtn = document.getElementById("backToSiteDetailBtn");
 const goToReportOutputBtn = document.getElementById("goToReportOutputFromReportBtn");
 const outputPanel = document.getElementById("reportOutputPanel");
@@ -626,6 +632,73 @@ dateInput.addEventListener("change", () => loadPreviousProgress(currentSiteId, d
 
 const labelOfDayStatus = () => dayStatusSelect.selectedOptions[0]?.textContent || "";
 
+/* ---------- 所長欄の電子印（日報の directorSeal。2026-10-24）----------
+   1件の日報に印は1つだけ（押し直しても増えない）。押印・取り消し・位置の変更は画面の中だけで、［保存］で日報に記録する。
+   印の名前は、この端末で前に使った名前か、この現場の前の日報の印の名前を初期値にする（推測で押印はしない）。
+   職長サイン（業者の行ごとの署名）とは関係しない。 */
+const SEAL_NAME_KEY = "kojiNippou.directorSealName";
+let sealState = null; // { name, offsetX, offsetY, stampedAt } | null
+let sealSaved = null; // 開いたときの値（変更があるかの表示用）
+
+function renderSeal() {
+  const W = sealBox.clientWidth || 120, H = sealBox.clientHeight || 104;
+  if (sealState) {
+    const p = sealPlacement({ left: 0, top: 0, width: W, height: H }, sealState);
+    sealImg.src = sealPngDataUrl(sealState.name, 240);
+    sealImg.style.cssText = `left:${p.left}px;top:${p.top}px;width:${p.size}px;height:${p.size}px`;
+    sealImg.hidden = false;
+  } else {
+    sealImg.hidden = true;
+    sealImg.removeAttribute("src");
+  }
+  const changed = JSON.stringify(sealState) !== JSON.stringify(sealSaved);
+  const at = sealState?.stampedAt ? new Date(sealState.stampedAt) : null;
+  const when = at && !Number.isNaN(at.getTime()) ? `（${at.getMonth() + 1}/${at.getDate()} ${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}）` : "";
+  sealStatus.textContent = (sealState ? `押印済み：${sealState.name}${when}` : "未押印") + (changed ? "　※まだ保存していません（［保存］で記録されます）" : "");
+  const readOnly = form.classList.contains("read-only-form");
+  sealSection.querySelectorAll("button").forEach((b) => { b.disabled = readOnly || (!sealState && (b.id === "directorSealClearBtn" || b.dataset.sealMove)); });
+}
+
+async function loadSeal(seal, siteId) {
+  sealState = normalizeDirectorSeal(seal);
+  sealSaved = sealState ? { ...sealState } : null;
+  let name = sealState?.name || "";
+  if (!name) {
+    try { name = localStorage.getItem(SEAL_NAME_KEY) || ""; } catch { /* 保存できない端末でも動く */ }
+  }
+  if (!name && siteId) {
+    const prev = (await listReportsBySite(siteId)).filter((r) => !r.isDeleted && r.directorSeal?.name).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+    name = prev?.directorSeal.name || "";
+  }
+  sealNameInput.value = name;
+  renderSeal();
+}
+
+document.getElementById("directorSealStampBtn").addEventListener("click", () => {
+  const name = normalizeSealName(sealNameInput.value);
+  if (!name) { showMessage("印の名前を入力してください。", true); sealNameInput.focus(); return; }
+  sealNameInput.value = name;
+  // 押し直しは同じ1つの印の名前を変えるだけ（位置はそのまま。増えない）
+  sealState = { name, offsetX: sealState?.offsetX || 0, offsetY: sealState?.offsetY || 0, stampedAt: new Date().toISOString() };
+  try { localStorage.setItem(SEAL_NAME_KEY, name); } catch { /* 保存できない端末でも動く */ }
+  renderSeal();
+});
+document.getElementById("directorSealClearBtn").addEventListener("click", () => {
+  if (!sealState) return;
+  if (!confirm("所長印を取り消しますか？（［保存］で記録されます）")) return;
+  sealState = null;
+  renderSeal();
+});
+sealSection.querySelector(".seal-move").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-seal-move]");
+  if (!b || !sealState) return;
+  if (b.dataset.sealMove === "center") { sealState = { ...sealState, offsetX: 0, offsetY: 0 }; renderSeal(); return; }
+  const [dx, dy] = b.dataset.sealMove.split(",").map(Number);
+  const clamp = (v) => Math.max(-SEAL_OFFSET_LIMIT, Math.min(SEAL_OFFSET_LIMIT, v));
+  sealState = { ...sealState, offsetX: clamp(sealState.offsetX + dx * SEAL_OFFSET_STEP), offsetY: clamp(sealState.offsetY + dy * SEAL_OFFSET_STEP) };
+  renderSeal();
+});
+
 function resetForm() {
   form.reset();
   weatherSelect.querySelectorAll("option[data-extra]").forEach((o) => o.remove());
@@ -636,6 +709,7 @@ function resetForm() {
   resetPatrolChecklist();
   photoGrid.innerHTML = "";
   recalcWorkerCountTotal();
+  loadSeal(null, currentSiteId);
 }
 
 /** 閲覧のみロール（および担当外の監督が直接URL遷移した場合）向けに、
@@ -651,6 +725,7 @@ function applyReadOnlyMode(readOnly) {
   if (readOnly) deleteArea.hidden = true;
   cancelBtn.textContent = readOnly ? "一覧に戻る" : "キャンセル";
   progressSlider?.sync();
+  renderSeal();
 }
 
 /* ---------- 日報カレンダーから開いたとき（簡単に修正・未記入を入力）----------
@@ -790,7 +865,7 @@ const nextMissingBtn = document.getElementById("reportNextMissingBtn");
 const showAllBtn = document.getElementById("reportShowAllBtn");
 let formMode = { mode: "", from: "", focus: "", cid: "" };
 let nextMissingIndex = 0;
-const QUICK_HIDDEN_SECTIONS = ["supervisors", "focus", "coordination", "photos"];
+const QUICK_HIDDEN_SECTIONS = ["supervisors", "focus", "coordination", "photos", "seal"];
 // 現場作業なし・雨天作業不可日などでも搬入・搬出はありうるので、簡単修正でも搬入・搬出の欄は隠さない（業者・流れだけ隠す）
 const WORK_ONLY_SECTIONS = ["companies", "timeline"];
 const shortDate = (iso) => { const [, m, d] = String(iso || "").split("-").map(Number); return m ? `${m}月${d}日` : ""; };
@@ -1157,6 +1232,7 @@ export async function initReportFormViewEdit(params) {
   patrolCommentInput.value = report.patrolComment || "";
   loadPatrolChecklist(report.patrolChecklist);
   loadFlowAndDeliveries(report);
+  await loadSeal(report.directorSeal, report.siteId);
   await loadPreviousProgress(report.siteId, report.date, report.id);
   await loadCompanySuggestions(report.siteId);
 
@@ -1395,7 +1471,8 @@ form.addEventListener("submit", async (e) => {
     patrolComment: patrolCommentInput.value.trim(),
     timeline: collectTimeline(),
     supervisorSchedule: collectSchedule(),
-    deliveries: collectDeliveries()
+    deliveries: collectDeliveries(),
+    directorSeal: sealState
   };
 
   let report;

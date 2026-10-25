@@ -5,6 +5,7 @@
    消さないという運用上の利点もある。
    ========================================================== */
 
+import { normalizeDirectorSeal } from "./report-output/directorSeal.js";
 import { dbGetAll, dbGet, dbPut, dbPutMany } from "./db.js";
 import { parseBillingInput, BILLING_INPUT_RULE } from "./billing/billingValue.js";
 import { stampNew, stampUpdate } from "./utils.js";
@@ -77,7 +78,9 @@ export async function createReport(fields, { trustBilling = false } = {}) {
     staffWork: fields.staffWork || "",
     // 雨天作業不可日（dayStatus "rain"）の記録: 中止となった予定作業・雨天による中止理由・状況
     rainCancelledWork: fields.rainCancelledWork || "",
-    rainReason: fields.rainReason || ""
+    rainReason: fields.rainReason || "",
+    // 所長欄の電子印（{ name, offsetX, offsetY, stampedAt } または null。2026-10-24。職長サインとは別。現場のコピーでは写さない）
+    directorSeal: normalizeDirectorSeal(fields.directorSeal)
   };
   if (fields.id) base.id = fields.id; // 新規作成前に写真/署名を紐付けるため、事前発行IDを許容する
   const report = stampNew(base);
@@ -98,6 +101,7 @@ export async function updateReport(id, patch) {
   const existing = await dbGet("reports", id);
   if (existing?.finalizedAt) throw new Error("この日報は工事完了により確定済みのため修正できません（現場の「工事完了を取り消す」で確定を解除してください）");
   if (patch && "companies" in patch) assertBillingValues(patch.companies, existing?.companies || []);
+  if (patch && "directorSeal" in patch) patch = { ...patch, directorSeal: normalizeDirectorSeal(patch.directorSeal) };
   // 内容を修正した日時（印刷状態の管理用: 印刷後に修正された日報を見分ける）
   const updated = await applyPatch(id, { ...patch, lastEditedAt: new Date().toISOString() });
   await recordChange({ entityType: "report", entityId: id, action: "update", summary: `日報（${updated.date || "日付未設定"}）を更新` });
