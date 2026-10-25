@@ -31,6 +31,7 @@ import {
 import { cellRefToRowCol, rowColToCellRef } from "../cellGrid.js";
 import { buildXlsxCellPlan } from "../xlsxCellPlan.js";
 import { applyDiagonalBorders } from "../xlsxDiagonal.js";
+import { applyCenterAlignment } from "../xlsxAlign.js";
 import { ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING } from "./mappings/anzenEiseiUchiawaseNisshi.js";
 import { getLayoutProfile } from "../layoutProfiles.js";
 import "../layouts/index.js";
@@ -86,6 +87,12 @@ async function render(model, mapping, companyProfile, template) {
     sheetXml = d.sheetXml;
     modifications.set("xl/styles.xml", new TextEncoder().encode(d.stylesXml));
     if (d.missing.length) plan.warnings.push(`斜線を付けるセルが様式に見つかりませんでした: ${d.missing.join("・")}`);
+  }
+  // 稼動人数表・点検項目の中央揃え（出力の複製の書式だけ。値を書いた後に行う）
+  if (plan.centerCells?.length) {
+    const c = applyCenterAlignment({ sheetXml, stylesXml: modifications.has("xl/styles.xml") ? new TextDecoder().decode(modifications.get("xl/styles.xml")) : await readZipEntryText(zip, "xl/styles.xml"), cells: plan.centerCells });
+    sheetXml = c.sheetXml;
+    modifications.set("xl/styles.xml", new TextEncoder().encode(c.stylesXml));
   }
 
   if (plan.images.length) {

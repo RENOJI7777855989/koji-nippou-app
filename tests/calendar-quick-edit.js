@@ -31,8 +31,8 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
   await page.goto(BASE); await page.waitForSelector("#view-site-list:not([hidden])");
 
   // 工期 9/1〜9/30（過去の月）。
-  //   9/1 一部未記入: 進捗率なし・ナダカ工業（外壁下地補修）と野本建装工業の作業時間なし。署名・写真・請求人工・流れ（既存1行）あり
-  //   9/2 日報あり: 協栄工業（足場4人）・進捗40%・曇り・巡回点検○・署名あり
+  //   9/1 一部未記入: 進捗率なし・アオバ塗装工業（外壁下地補修）とエノキ建装工業の作業時間なし。署名・写真・請求人工・流れ（既存1行）あり
+  //   9/2 日報あり: イズミ足場工業（足場4人）・進捗40%・曇り・巡回点検○・署名あり
   const ids = await page.evaluate(async () => {
     const { createSite } = await import("/js/sites.js"); const { dbPut } = await import("/js/db.js"); const { stampNew } = await import("/js/utils.js");
     const { saveSignature } = await import("/js/signatures.js"); const { addPhoto } = await import("/js/photos.js");
@@ -40,12 +40,12 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
     const png = await new Promise((res) => { const c = document.createElement("canvas"); c.width = 20; c.height = 10; c.getContext("2d").fillRect(2, 2, 8, 4); c.toBlob(res, "image/png"); });
     const r1 = stampNew({ siteId: site.id, date: "2026-09-01", dayStatus: "work", weather: "晴れ", progressPercent: null, siteSupervisorNames: [],
       companies: [
-        { companyId: "n1", companyName: "ナダカ工業", occupation: "外壁下地補修", actualWorkerCount: "3", workHours: "", billingManDays: "5", workContent: "クラック補修" },
-        { companyId: "n2", companyName: "ナダカ工業", occupation: "塗装", actualWorkerCount: "2", workHours: "08:00～17:00", workContent: "下塗り" },
-        { companyId: "m1", companyName: "野本建装工業", occupation: "塗装", actualWorkerCount: "2", workHours: "", workContent: "中塗り" }],
+        { companyId: "n1", companyName: "アオバ塗装工業", occupation: "外壁下地補修", actualWorkerCount: "3", workHours: "", billingManDays: "5", workContent: "クラック補修" },
+        { companyId: "n2", companyName: "アオバ塗装工業", occupation: "塗装", actualWorkerCount: "2", workHours: "08:00～17:00", workContent: "下塗り" },
+        { companyId: "m1", companyName: "エノキ建装工業", occupation: "塗装", actualWorkerCount: "2", workHours: "", workContent: "中塗り" }],
       patrolChecklist: { morningMeeting: "good" }, timeline: [{ id: "old1", time: "09:00", kind: "uchiawase", title: "既存の打ち合わせ", status: "done", note: "" }], remarks: "" });
     const r2 = stampNew({ siteId: site.id, date: "2026-09-02", dayStatus: "work", weather: "曇り", progressPercent: 40, siteSupervisorNames: [],
-      companies: [{ companyId: "k1", companyName: "協栄工業", occupation: "足場", actualWorkerCount: "4", workHours: "08:00～17:00", billingManDays: "4.5", workContent: "足場組立" }],
+      companies: [{ companyId: "k1", companyName: "イズミ足場工業", occupation: "足場", actualWorkerCount: "4", workHours: "08:00～17:00", billingManDays: "4.5", workContent: "足場組立" }],
       patrolChecklist: { morningMeeting: "good" }, remarks: "既存の連絡事項", tomorrowPlan: "足場点検" });
     await dbPut("reports", r1); await dbPut("reports", r2);
     for (const cid of ["n1", "n2", "m1"]) await saveSignature({ reportId: r1.id, companyId: cid, blob: png });
@@ -107,7 +107,7 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
   await page.click("#addTimelineBtn");
   const added = page.locator("#timelineContainer .timeline-row").last();
   await added.locator(".flowTime").fill("09:30"); await added.locator(".flowKind").selectOption("uchiawase"); await added.locator(".flowTitle").fill("打ち合わせ");
-  await page.locator(".company-row").nth(0).locator(".companyName").fill("ナダカ工業");
+  await page.locator(".company-row").nth(0).locator(".companyName").fill("アオバ塗装工業");
   await page.locator(".company-row").nth(0).locator(".occupation").fill("防水");
   await page.locator(".company-row").nth(0).locator(".actualWorkerCount").fill("2");
   await page.click("#reportSaveBtn");
@@ -162,8 +162,8 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
   // ===== 7・8・19・20 一部未記入 → 未記入項目 → 未記入を入力 =====
   await tapDay("01"); await page.waitForFunction(() => document.getElementById("dayPanelDialog").open);
   const panel1 = await page.evaluate(() => ({ text: document.getElementById("dayPanelDialog").textContent.replace(/\s+/g, " "), items: [...document.querySelectorAll(".day-panel-missing li")].map((li) => li.textContent), btns: [...document.querySelectorAll("#dayPanelActions button")].map((b) => b.textContent) }));
-  check("7 一部未記入の日をタップ → 「日報：一部未記入」と未記入項目（進捗率・ナダカ工業（外壁下地補修）：作業時間・野本建装工業：作業時間）", panel1.text.includes("日報：一部未記入") && panel1.items.join("|") === "進捗率|ナダカ工業（外壁下地補修）：作業時間|野本建装工業：作業時間" && panel1.btns.join("|") === "未記入を入力|日報を全部見る", `${panel1.items.join("|")} / ${panel1.btns.join("|")}`);
-  check("21（一部未記入の判定）連絡事項が空でも未記入にしない・記入済みのナダカ工業（塗装）は出ない", !panel1.items.some((x) => x.includes("連絡事項") || x.includes("（塗装）")));
+  check("7 一部未記入の日をタップ → 「日報：一部未記入」と未記入項目（進捗率・アオバ塗装工業（外壁下地補修）：作業時間・エノキ建装工業：作業時間）", panel1.text.includes("日報：一部未記入") && panel1.items.join("|") === "進捗率|アオバ塗装工業（外壁下地補修）：作業時間|エノキ建装工業：作業時間" && panel1.btns.join("|") === "未記入を入力|日報を全部見る", `${panel1.items.join("|")} / ${panel1.btns.join("|")}`);
+  check("21（一部未記入の判定）連絡事項が空でも未記入にしない・記入済みのアオバ塗装工業（塗装）は出ない", !panel1.items.some((x) => x.includes("連絡事項") || x.includes("（塗装）")));
   await page.click('#dayPanelActions [data-day-go="missing"]');
   await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(400);
   const vis = await page.evaluate(() => {
@@ -175,7 +175,7 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
       sliderText: document.querySelector("#reportForm .progress-slider-value").textContent
     };
   });
-  check("8 未記入を入力: 未記入の項目の一覧・未記入の業者の行だけ表示（記入済みのナダカ工業（塗装）・流れ・写真は隠す）", vis.guide.join("|") === "進捗率|ナダカ工業（外壁下地補修）：作業時間|野本建装工業：作業時間" && vis.rows.join(",") === "ナダカ工業/外壁下地補修:表示,ナダカ工業/塗装:非表示,野本建装工業/塗装:表示" && !vis.timeline && !vis.photos && vis.progress, JSON.stringify(vis));
+  check("8 未記入を入力: 未記入の項目の一覧・未記入の業者の行だけ表示（記入済みのアオバ塗装工業（塗装）・流れ・写真は隠す）", vis.guide.join("|") === "進捗率|アオバ塗装工業（外壁下地補修）：作業時間|エノキ建装工業：作業時間" && vis.rows.join(",") === "アオバ塗装工業/外壁下地補修:表示,アオバ塗装工業/塗装:非表示,エノキ建装工業/塗装:表示" && !vis.timeline && !vis.photos && vis.progress, JSON.stringify(vis));
   check("6 進捗率が未入力なら「未入力」と大きく表示（0%にしない）", vis.sliderText === "未入力");
   // まず進捗率だけ入れて保存 → まだ一部未記入（19）
   await page.click(".report-missing-item >> nth=0"); await page.waitForTimeout(200);
@@ -186,13 +186,13 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
   // 残りの作業時間を入れて保存 → 日報あり（20）
   await tapDay("01"); await page.waitForFunction(() => document.getElementById("dayPanelDialog").open);
   await page.click('#dayPanelActions [data-day-go="missing"]'); await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(400);
-  await page.click(".report-missing-item >> nth=1"); // 野本建装工業：作業時間 へ移動
+  await page.click(".report-missing-item >> nth=1"); // エノキ建装工業：作業時間 へ移動
   const target = await page.evaluate(() => [...document.querySelectorAll(".is-target")].map((el) => el.closest(".company-row")?.querySelector(".companyName").value || el.className).join(","));
   for (const cid of ["n1", "m1"]) await page.selectOption(`.company-row[data-company-id="${cid}"] .workStart`, "08:00"); // 終了は自動で17:00
   const doneText = await page.textContent("#reportMissingGuide");
   await page.click("#reportSaveBtn"); await backAtCalendar();
   const r1 = await getReport(ids.r1);
-  check("8 未記入の項目を押すとその業者の欄へ移動する（野本建装工業）", target === "野本建装工業", target);
+  check("8 未記入の項目を押すとその業者の欄へ移動する（エノキ建装工業）", target === "エノキ建装工業", target);
   check("20 全て完了すれば「日報あり」（作業時間 08:00～17:00）", (await calState("01")) === "ok" && r1.companies.find((c) => c.companyId === "n1").workHours === "08:00～17:00" && r1.companies.find((c) => c.companyId === "m1").workHours === "08:00～17:00" && doneText.includes("未記入の項目はありません"), doneText);
   const sig1 = await db(async (id) => (await (await import("/js/signatures.js")).listSignaturesByReport(id)).length, ids.r1);
   const ph1 = await db(async (id) => (await (await import("/js/photos.js")).listPhotosByReport(id)).length, ids.r1);
@@ -210,7 +210,7 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
     title: document.getElementById("reportQuickTitle").textContent, photosHidden: document.querySelector('[data-qsec="photos"]').offsetParent === null, flowShown: document.querySelector('[data-qsec="timeline"]').offsetParent !== null,
     flows: document.querySelectorAll("#timelineContainer .timeline-row").length
   }));
-  check("10 簡単に修正: 既存の値（進捗率40%・曇り・協栄工業・08:00・連絡事項・明日の予定）を表示", q.progress === "40" && q.slider === "40%" && q.weather === "曇り" && q.vendor === "協栄工業" && q.start === "08:00" && q.remarks === "既存の連絡事項" && q.tomorrow === "足場点検", JSON.stringify(q));
+  check("10 簡単に修正: 既存の値（進捗率40%・曇り・イズミ足場工業・08:00・連絡事項・明日の予定）を表示", q.progress === "40" && q.slider === "40%" && q.weather === "曇り" && q.vendor === "イズミ足場工業" && q.start === "08:00" && q.remarks === "既存の連絡事項" && q.tomorrow === "足場点検", JSON.stringify(q));
   check("簡単に修正: よく変更する項目だけ（写真は隠す・流れは表示）・既存の日報に流れの初期値を足さない", q.title.includes("簡単に修正") && q.photosHidden && q.flowShown && q.flows === 0);
   await setSlider("#reportForm .progress-range", 65);
   await page.selectOption("#weather", "晴れ");
@@ -219,7 +219,7 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
   await page.fill(".company-row .occupation", "足場・仮設"); // 15 工種の変更
   await page.click("#addCompanyBtn");
   const nr = page.locator(".company-row").last();
-  await nr.locator(".companyName").fill("西原建設"); await nr.locator(".occupation").fill("足場"); await nr.locator(".actualWorkerCount").fill("2"); // 15 業者の追加（同じ工種を別の業者）
+  await nr.locator(".companyName").fill("ウエノ建設"); await nr.locator(".occupation").fill("足場"); await nr.locator(".actualWorkerCount").fill("2"); // 15 業者の追加（同じ工種を別の業者）
   await page.selectOption('.patrol-item-row[data-key="morningMeeting"] select', "bad"); // 16 巡回点検の変更
   await page.click("#reportSaveBtn"); const back2 = await backAtCalendar();
   const r2 = await getReport(ids.r2);
@@ -227,13 +227,13 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
   check("12 天気の変更（曇り→晴れ）", r2.weather === "晴れ");
   check("13 作業時間の変更（07:30～17:30）", r2.companies[0].workHours === "07:30～17:30");
   check("14 連絡事項の変更", r2.remarks === "足場の盛替えあり");
-  check("15 業者・工種の変更（協栄工業＝足場・仮設、西原建設＝足場を追加。業者名から工種を推測しない）", r2.companies[0].companyName === "協栄工業" && r2.companies[0].occupation === "足場・仮設" && r2.companies[1].companyName === "西原建設" && r2.companies[1].occupation === "足場");
+  check("15 業者・工種の変更（イズミ足場工業＝足場・仮設、ウエノ建設＝足場を追加。業者名から工種を推測しない）", r2.companies[0].companyName === "イズミ足場工業" && r2.companies[0].occupation === "足場・仮設" && r2.companies[1].companyName === "ウエノ建設" && r2.companies[1].occupation === "足場");
   check("16 巡回点検の変更（朝礼 ○→×）", r2.patrolChecklist.morningMeeting === "bad");
   check("21 過去日（9/2）を編集でき、カレンダーへ戻る", back2.saved === "2026-09-02" && back2.manage);
   check("27 請求人工は勝手に変わらない（4.5のまま・追加業者は未入力）", r2.companies[0].billingManDays === "4.5" && r2.companies[1].billingManDays === "");
-  check("18 状態更新: 西原建設の署名・作業時間が無いので一部未記入", (await calState("02")) === "partial");
+  check("18 状態更新: ウエノ建設の署名・作業時間が無いので一部未記入", (await calState("02")) === "partial");
   const sig2 = await db(async (id) => (await (await import("/js/signatures.js")).listSignaturesByReport(id)).length, ids.r2);
-  check("26 署名が消えない（9/2 の協栄工業）", sig2 === 1);
+  check("26 署名が消えない（9/2 のイズミ足場工業）", sig2 === 1);
   void before2;
 
   // ===== 今日の確認事項: 何が・誰の・どの日付か を表示し、押すと日報の該当箇所へ =====
@@ -241,11 +241,11 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
   await page.$eval("#siteDashboard .dash-date-input", (el) => { el.value = "2026-09-02"; el.dispatchEvent(new Event("change", { bubbles: true })); }); await page.waitForTimeout(600);
   const att = await page.$$eval(".dash-att-go", (b) => b.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
   const head = await page.textContent(".dash-attention h4");
-  check("15（今日の確認事項）日付と、誰の何が未入力かを表示（9/2・西原建設 作業時間・署名）", head.includes("9/2") && att.some((x) => x.includes("作業時間") && x.includes("西原建設")) && att.some((x) => x.includes("西原建設 署名未入力")), `${head} / ${att.join(" / ")}`);
-  await page.locator(".dash-att-go", { hasText: "西原建設 署名未入力" }).click();
+  check("15（今日の確認事項）日付と、誰の何が未入力かを表示（9/2・ウエノ建設 作業時間・署名）", head.includes("9/2") && att.some((x) => x.includes("作業時間") && x.includes("ウエノ建設")) && att.some((x) => x.includes("ウエノ建設 署名未入力")), `${head} / ${att.join(" / ")}`);
+  await page.locator(".dash-att-go", { hasText: "ウエノ建設 署名未入力" }).click();
   await page.waitForSelector("#view-report-form:not([hidden])"); await page.waitForTimeout(500);
   const tgt = await page.evaluate(() => ({ row: document.querySelector(".is-target")?.closest(".company-row")?.querySelector(".companyName").value || "", isSig: !!document.querySelector(".foreman-signature-block.is-target") }));
-  check("15（今日の確認事項）項目を押すとその日の日報の該当箇所（西原建設の職長サイン）へ移動", tgt.row === "西原建設" && tgt.isSig, JSON.stringify(tgt));
+  check("15（今日の確認事項）項目を押すとその日の日報の該当箇所（ウエノ建設の職長サイン）へ移動", tgt.row === "ウエノ建設" && tgt.isSig, JSON.stringify(tgt));
   await page.click("#reportCancelBtn"); await page.waitForSelector("#view-site-detail:not([hidden])");
 
   // ===== 34〜38 A3・PDF（同じ日報データから）=====
@@ -285,7 +285,7 @@ const DEFAULTS = ["08:00|chorei|朝礼", "08:20|work|作業", "10:00|break|休�
     const { buildReportPrintHtml } = await import("/js/reportPrint.js");
     const x = await generateReportOutput({ reportId: id, format: "excel" });
     const pdfHtml = await buildReportPrintHtml(id);
-    return { excel: x.filename, size: x.blob.size, pdfLen: pdfHtml.html.length, hasVendor: pdfHtml.html.includes("協栄工業") };
+    return { excel: x.filename, size: x.blob.size, pdfLen: pdfHtml.html.length, hasVendor: pdfHtml.html.includes("イズミ足場工業") };
   }, ids.r2);
   check("29・43 Excel出力（修正した9/2の日報）が作れる", /\.(xlsx|csv)$/.test(out.excel) && out.size > 0, out.excel);
   check("30・44 PDF（印刷用）出力に修正後の内容が載る", out.pdfLen > 1000 && out.hasVendor);

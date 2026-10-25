@@ -1,0 +1,36 @@
+# 本番のGitHub Pagesへ、公開してよいファイルだけを配信する（tools/build-site.js の許可リスト）。
+# tests/・tools/・CLAUDE.md などの開発用ファイルは配信しない。
+# 有効にするには、リポジトリの Settings → Pages → Build and deployment の Source を
+# 「GitHub Actions」に切り替える（切り替えるまでは、従来どおりブランチの全ファイルが配信される）。
+# 鍵・セットアップリンクはこのワークフローでは一切扱わない（リポジトリの外にあり、配信用フォルダの検査で混入を拒否する）。
+name: Deploy GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 配信用フォルダを作る（許可リスト・検査つき）
+        run: node tools/build-site.js --out dist
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4

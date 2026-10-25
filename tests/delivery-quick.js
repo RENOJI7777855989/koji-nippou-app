@@ -26,7 +26,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
     const site = await createSite({ name: "搬入簡単登録の確認現場", startDate: "2026-09-01", endDate: "2026-12-20" });
     const base = { siteId: site.id, siteSupervisorNames: [], companies: [] };
     const work = stampNew({ ...base, date: "2026-09-09", dayStatus: "work", progressPercent: 30,
-      companies: [{ companyId: "a", companyName: "ナダカ工業", occupation: "塗装", actualWorkerCount: "3", workHours: "08:00～17:00", billingManDays: "3.5" }],
+      companies: [{ companyId: "a", companyName: "アオバ塗装工業", occupation: "塗装", actualWorkerCount: "3", workHours: "08:00～17:00", billingManDays: "3.5" }],
       deliveries: [{ id: "old1", direction: "in", time: "09:00", item: "既存の塗料", vendor: "既存商事", status: "done" }], patrolChecklist: { morningMeeting: "good" } });
     const nowork = stampNew({ ...base, date: "2026-09-10", dayStatus: "nowork", remarks: "資材待ち", staffCount: 1, staffWork: "書類" });
     const rain = stampNew({ ...base, date: "2026-09-12", dayStatus: "rain", weather: "雨", rainCancelledWork: "外壁塗装", rainReason: "朝から降雨", staffCount: 2, staffWork: "役所協議", remarks: "明日再開" });

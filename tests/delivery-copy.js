@@ -35,7 +35,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
     return {
       siteId: site.id, otherSiteId: other.id,
       old: await mk(site.id, "2026-08-20", { deliveries: [d("o1", "in", "08:30", "八月の足場材", { quantity: "20本", vendor: "足場リース", vehicle: "4t車" })] }),
-      prev: await mk(site.id, "2026-09-01", { deliveries: [d("p1", "in", "09:00", "シーリング材", { quantity: "10ケース", vendor: "ナダカ工業", origin: "倉庫", destination: "北側ゲート", vehicle: "2t車", note: "誘導員1名" }), d("p2", "in", "13:00", "塗料", { quantity: "5缶", vendor: "○○塗料" }), d("p3", "out", "16:00", "残材", { quantity: "1台分", vendor: "産廃運搬", origin: "現場", destination: "処分場", vehicle: "4tダンプ" })] }),
+      prev: await mk(site.id, "2026-09-01", { deliveries: [d("p1", "in", "09:00", "シーリング材", { quantity: "10ケース", vendor: "アオバ塗装工業", origin: "倉庫", destination: "北側ゲート", vehicle: "2t車", note: "誘導員1名" }), d("p2", "in", "13:00", "塗料", { quantity: "5缶", vendor: "○○塗料" }), d("p3", "out", "16:00", "残材", { quantity: "1台分", vendor: "産廃運搬", origin: "現場", destination: "処分場", vehicle: "4tダンプ" })] }),
       sameA: await mk(site.id, "2026-09-02", { deliveries: [d("a1", "in", "10:00", "同日A日報の資材")] }),
       sameB: await mk(site.id, "2026-09-02", { deliveries: [d("b1", "in", "11:00", "同日B日報の資材"), d("b2", "in", "14:00", "同日B日報の追加資材")] }),
       target: await mk(site.id, "2026-09-03", { deliveries: [d("t1", "in", "07:30", "当日の既存の搬入", { vendor: "既存運送" })], progressPercent: 40, patrolChecklist: { morningMeeting: "good" } }),
@@ -66,7 +66,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   // ===== 1・4・5・6・7 前日（9/1）の搬入を2件選んで追加 =====
   await page.click(`#dlvPickPanel [data-dlv-report="${ids.prev}"]`); await page.waitForTimeout(200);
   const rowText = await page.textContent("#dlvPickPanel .dlv-pick-list");
-  check("その日の搬入だけを一覧（搬出は出ない）・保存されている項目（数量・業者・元・先・車両・備考）を表示", rowText.includes("シーリング材") && rowText.includes("10ケース") && rowText.includes("ナダカ工業") && rowText.includes("倉庫") && rowText.includes("北側ゲート") && rowText.includes("2t車") && rowText.includes("誘導員1名") && rowText.includes("塗料") && !rowText.includes("残材"));
+  check("その日の搬入だけを一覧（搬出は出ない）・保存されている項目（数量・業者・元・先・車両・備考）を表示", rowText.includes("シーリング材") && rowText.includes("10ケース") && rowText.includes("アオバ塗装工業") && rowText.includes("倉庫") && rowText.includes("北側ゲート") && rowText.includes("2t車") && rowText.includes("誘導員1名") && rowText.includes("塗料") && !rowText.includes("残材"));
   await page.check('#dlvPickPanel [data-dlv-row="0"]'); await page.check('#dlvPickPanel [data-dlv-row="1"]');
   check("4 選んだ件数を表示（選択 2件）・追加ボタンに件数", (await page.textContent("#dlvPickPanel .dlv-pick-count")).includes("選択 2件") && (await page.textContent("#dlvPickPanel [data-dlv-add]")).includes("選択した搬入を追加（2件）"));
   dialogs.length = 0;
@@ -119,7 +119,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   // 日報の保存では項目の並びがそろえられるので、項目ごとに比べる
   const sorted = (o) => JSON.stringify(Object.fromEntries(Object.entries(o).sort()));
   check("5 保存後: 当日の既存の搬入（id・内容）はそのまま", sorted(t.deliveries[0]) === sorted(targetBefore.deliveries[0]), `${sorted(t.deliveries[0])} / ${sorted(targetBefore.deliveries[0])}`);
-  check("7 追加した行は新しいid（元の id とも互いにも違う）・状況は「予定」・項目は元のまま（時刻・数量は直した値）", added.length === 4 && new Set(added.map((x) => x.id)).size === 4 && !added.some((x) => ["p1", "p2", "p3", "o1"].includes(x.id)) && added.every((x) => x.status === "plan") && added[0].item === "シーリング材" && added[0].vendor === "ナダカ工業" && added[0].note === "誘導員1名" && added[3].time === "10:15" && added[3].quantity === "15本" && added[3].vendor === "足場リース", JSON.stringify(added.map((x) => [x.id, x.time, x.item, x.status])));
+  check("7 追加した行は新しいid（元の id とも互いにも違う）・状況は「予定」・項目は元のまま（時刻・数量は直した値）", added.length === 4 && new Set(added.map((x) => x.id)).size === 4 && !added.some((x) => ["p1", "p2", "p3", "o1"].includes(x.id)) && added.every((x) => x.status === "plan") && added[0].item === "シーリング材" && added[0].vendor === "アオバ塗装工業" && added[0].note === "誘導員1名" && added[3].time === "10:15" && added[3].quantity === "15本" && added[3].vendor === "足場リース", JSON.stringify(added.map((x) => [x.id, x.time, x.item, x.status])));
   check("6・11 コピー元の日報・ほかの日報・別の現場の日報は1文字も変わらない", (await dumpOthers()) === othersBefore);
   check("搬入・搬出を足しただけで、人数・請求人工・進捗率・巡回点検は変わらない", t.companies.length === 1 && ["companyName", "occupation", "actualWorkerCount", "billingManDays"].every((k) => t.companies[0][k] === targetBefore.companies[0][k]) && t.progressPercent === 40 && JSON.stringify(t.patrolChecklist) === JSON.stringify(targetBefore.patrolChecklist) && t.dayStatus === "work");
 

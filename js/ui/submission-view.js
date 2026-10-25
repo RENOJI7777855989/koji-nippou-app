@@ -108,7 +108,7 @@ function renderTemplates() {
   els.templateInfo.textContent = t
     ? `様式解析結果: 1頁${t.mapping.pageRows}行／原本の頁数${t.mapping.templatePageCount}頁／明細行位置は${t.mapping.lineParity === 1 ? "奇数" : "偶数"}行（上限${t.mapping.positions.lastLine}行目）／原本の会社名「${t.mapping.defaults.companyName}」`
     : state.templates.length === 0
-      ? "会社指定の様式（例: 七里 提出金額.xlsx）を登録してください。登録した様式は複製して使い、原本は変更されません。"
+      ? "会社指定の様式（例: ○○団地 提出金額.xlsx）を登録してください。登録した様式は複製して使い、原本は変更されません。"
       : "";
 }
 

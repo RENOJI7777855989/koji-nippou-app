@@ -6,6 +6,9 @@
      その月に請求人工を入力した業者だけを出す。請求状況（未確認／請求あり／請求なし）と月の締めは別に保存
      （site.billingMonths。js/billing/billingMonthly.js）。稼働人数・人工・作業時間から請求人工を作らない。
    ・現場ダッシュボード・現場掲示（A3）・03-2には出さない。日報は書き換えない（日付を押すと既存の日報画面を開く）。
+   ・業者×職種の明細（2026-10-25）: 業者の行の下に、日報に保存された職種の名前ごとの明細（似た名前はまとめない。
+     billingMonthly.js の vendorTradeLines）と業者合計。明細の［日報］で根拠の日付を並べ、押すとその日の日報を開いて
+     該当の業者の行を目立たせる（?hl=業者の行の companyId）。保存・キャンセルするとこの画面に戻り、集計し直す（?from=vendors）。
    ========================================================== */
 
 import { getSite } from "../sites.js";
@@ -25,7 +28,7 @@ const viewEl = document.getElementById("view-vendor-management");
 
 // period: 期間を指定した集計の開始・終了年月（利用者が選ぶまでは表示している月の1か月）。periodTouched: 利用者が期間を選んだか。
 // vendorPeriod: 期間の日別の詳細を表示しているか
-let state = { site: null, reports: [], month: "", tab: "activity", vendor: null, period: null, periodTouched: false, vendorPeriod: false };
+let state = { site: null, reports: [], month: "", tab: "activity", vendor: null, period: null, periodTouched: false, vendorPeriod: false, openLine: null };
 
 const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const monthLabel = (m) => { const [y, mm] = m.split("-").map(Number); return `${y}年${mm}月`; };
@@ -55,6 +58,21 @@ function render() {
   bodyEl.innerHTML = state.vendor ? (state.vendorPeriod ? periodDetailHtml() : detailHtml()) : state.tab === "activity" ? activityHtml() + periodHtml() : billingHtml();
 }
 
+/**
+ * 業者×職種の明細の行（業者の行の下に置く）。cells(line) は2列目以降のセルのHTML。
+ * key ごとに［日報］で根拠の日付（日報）を開く行を出す（openLine）
+ */
+function lineRows(kind, vendor, lines, cells, colCount, entriesOf = (l) => l.entries) {
+  return lines.map((l) => {
+    const key = `${kind}|${vendor}|${l.trade}`; // HTML の属性に入れるので、見えない制御文字は使わない
+    const entries = entriesOf(l);
+    const open = state.openLine === key;
+    const btn = entries.length ? `<button type="button" class="link-btn vm-line-toggle" data-vm-line="${escapeHtml(key)}" aria-expanded="${open}">日報（${new Set(entries.map((e) => e.date)).size}日）${open ? "▲" : "▼"}</button>` : "";
+    const list = open ? `<tr class="vm-line-dates"><td colspan="${colCount}"><span class="empty-message">${escapeHtml(vendor)}／${escapeHtml(l.trade)} の日報: </span>${entries.map((e) => `<button type="button" class="secondary-btn vm-line-report" data-report-id="${escapeHtml(e.reportId)}" data-cids="${escapeHtml(e.companyIds.join(","))}">${md(e.date)}（${e.value}）</button>`).join(" ")}</td></tr>` : "";
+    return `<tr class="vm-line" data-vm-line-row="${escapeHtml(key)}"><td class="vm-line-name">└ ${escapeHtml(l.trade)}<br>${btn}</td>${cells(l)}</tr>${list}`;
+  }).join("");
+}
+
 function activityHtml() {
   const a = buildVendorActivity({ reports: state.reports, month: state.month, today: todayIso(), startDate: state.site.startDate || null });
   if (!a.rows.length) return `<p class="empty-message">${monthLabel(state.month)}までに現場で稼働した業者はありません（通常作業の日報で稼働人数が1人以上の業者）。</p>`;
@@ -62,10 +80,10 @@ function activityHtml() {
   return `<p class="vm-lead">${monthLabel(state.month)}の業者別の現場稼働（${md(a.cutoff)}までの日報）。請求人工とは別の、実際の稼働実績です。業者を押すと日別の稼働を表示します。</p>${none}
     <div class="dash-table-wrap"><table class="dash-table vm-table vm-activity">
       <thead><tr><th>業者</th><th class="num">稼働日数</th><th class="num">稼働人数</th><th class="num">実績人工</th><th class="num">作業時間</th><th class="num">累計実績人工<br><small>（${md(a.cutoff)}まで）</small></th></tr></thead>
-      <tbody>${a.rows.map((r) => `<tr${r.days ? "" : ' class="vm-row-idle"'}><td><button type="button" class="link-btn vm-vendor" data-vm-vendor="${escapeHtml(r.vendor)}">${escapeHtml(r.vendor)}</button>${r.trades.length ? `<br><small class="empty-message">${escapeHtml(r.trades.join("・"))}</small>` : ""}${r.days ? "" : `<br><small class="empty-message">この月の稼働なし</small>`}</td><td class="num">${r.days}日</td><td class="num">${r.workers}人</td><td class="num">${r.manDays}</td><td class="num">${hoursText(r.minutes)}${r.hoursMissing ? `<br><small class="empty-message">作業時間未入力 ${r.hoursMissing}件</small>` : ""}</td><td class="num"><b>${r.cumManDays}</b></td></tr>`).join("")}</tbody>
+      <tbody>${a.rows.map((r) => `<tr class="vm-vendor-row${r.days ? "" : " vm-row-idle"}"><td><button type="button" class="link-btn vm-vendor" data-vm-vendor="${escapeHtml(r.vendor)}">${escapeHtml(r.vendor)}</button><br><small class="vm-total-label">業者合計</small>${r.days ? "" : `<br><small class="empty-message">この月の稼働なし</small>`}</td><td class="num">${r.days}日</td><td class="num">${r.workers}人</td><td class="num">${r.manDays}</td><td class="num">${hoursText(r.minutes)}${r.hoursMissing ? `<br><small class="empty-message">作業時間未入力 ${r.hoursMissing}件</small>` : ""}</td><td class="num"><b>${r.cumManDays}</b></td></tr>${lineRows("activity", r.vendor, r.lines, (l) => `<td class="num">${l.days}日</td><td class="num">${l.workers}人</td><td class="num">${l.manDays}</td><td class="num">${hoursText(l.minutes)}</td><td class="num">${l.cumManDays}</td>`, 6, (l) => (l.entries.length ? l.entries : l.cumEntries))}`).join("")}</tbody>
       <tfoot><tr><th>合計（${a.totals.vendors}社${a.totals.listed > a.totals.vendors ? `・累計 ${a.totals.listed}社` : ""}）</th><td class="num">${a.totals.days}日</td><td class="num">${a.totals.workers}人</td><td class="num">${a.totals.workers}</td><td class="num">${hoursText(a.totals.minutes)}</td><td class="num"><b>${a.totals.cumManDays}</b></td></tr></tfoot>
     </table></div>
-    <p class="empty-message">稼働日＝通常作業の日報で、その業者の稼働人数が1人以上の日（現場作業なし・休工日・雨天作業不可日・事務作業日は数えません）。実績人工は1人＝1人工、作業時間は業者の作業時間（開始～終了）の合計です。累計実績人工は、工期開始日${state.site.startDate ? `（${md(state.site.startDate)}）` : ""}から${md(a.cutoff)}（この月の末日。今月は今日）までの日報の実績人工の合計で（同じ決まりで数えます。請求人工は使いません）、この月に稼働していない業者も、それより前に稼働していれば表示します（この月の欄は0）。</p>`;
+    <p class="empty-message">業者の行の下は、日報に保存された職種の名前ごとの明細です（名前が似ていてもまとめません。名前を直すときは［日報］から日報を開いて修正してください）。業者の行は業者合計（明細の合計）です。稼働日＝通常作業の日報で、その業者の稼働人数が1人以上の日（現場作業なし・休工日・雨天作業不可日・事務作業日は数えません）。実績人工は1人＝1人工、作業時間は業者の作業時間（開始～終了）の合計です。累計実績人工は、工期開始日${state.site.startDate ? `（${md(state.site.startDate)}）` : ""}から${md(a.cutoff)}（この月の末日。今月は今日）までの日報の実績人工の合計で（同じ決まりで数えます。請求人工は使いません）、この月に稼働していない業者も、それより前に稼働していれば表示します（この月の欄は0）。</p>`;
 }
 
 /** 期間を指定した集計（業者別稼働の表の下）。開始年月の1日〜終了年月の末日（今月を含めば今日まで） */
@@ -85,7 +103,7 @@ function periodHtml() {
   return `${head}<p class="vm-lead vm-period-label">集計期間: <b>${label}</b>（${md(`${r.from}-01`)}～${md(r.cutoff)}の日報。期間合計は月ごとの実績人工の合計です）。業者を押すと、この期間の日別の稼働を表示します。</p>
     <div class="dash-table-wrap"><table class="dash-table vm-table vm-period-table">
       <thead><tr><th>業者</th><th class="num vm-period-total">期間合計<br><small>（実績人工）</small></th><th class="num">稼働日数</th>${r.months.map((m) => `<th class="num">${mLabel(m)}</th>`).join("")}</tr></thead>
-      <tbody>${r.rows.map((x) => `<tr${x.days ? "" : ' class="vm-row-idle"'}><td><button type="button" class="link-btn vm-vendor" data-vm-period-vendor="${escapeHtml(x.vendor)}">${escapeHtml(x.vendor)}</button>${x.days ? "" : `<br><small class="empty-message">この期間の稼働なし</small>`}</td><td class="num vm-period-total"><b>${x.total}</b></td><td class="num">${x.days}日</td>${r.months.map((m) => `<td class="num">${x.byMonth[m]}</td>`).join("")}</tr>`).join("")}</tbody>
+      <tbody>${r.rows.map((x) => `<tr class="vm-vendor-row${x.days ? "" : " vm-row-idle"}"><td><button type="button" class="link-btn vm-vendor" data-vm-period-vendor="${escapeHtml(x.vendor)}">${escapeHtml(x.vendor)}</button><br><small class="vm-total-label">業者合計</small>${x.days ? "" : `<br><small class="empty-message">この期間の稼働なし</small>`}</td><td class="num vm-period-total"><b>${x.total}</b></td><td class="num">${x.days}日</td>${r.months.map((m) => `<td class="num">${x.byMonth[m]}</td>`).join("")}</tr>${lineRows("period", x.vendor, x.lines, (l) => `<td class="num vm-period-total">${l.total}</td><td class="num">${l.days}日</td>${r.months.map((m) => `<td class="num">${l.byMonth[m]}</td>`).join("")}`, 3 + r.months.length)}`).join("")}</tbody>
       <tfoot><tr><th>合計（${r.totals.vendors}社）</th><td class="num vm-period-total"><b>${r.totals.total}</b></td><td class="num">${r.totals.days}日</td>${r.months.map((m) => `<td class="num">${r.monthTotals[m]}</td>`).join("")}</tr></tfoot>
     </table></div>
     <p class="empty-message">数え方は上の表と同じです（通常作業の日だけ・1人＝1人工・請求人工は使いません）。期間内に稼働していない業者も、それより前に稼働していれば表示します（期間内の欄は0）。</p></section>`;
@@ -119,13 +137,13 @@ function billingHtml() {
     ${b.rows.length
       ? `<div class="dash-table-wrap"><table class="dash-table vm-table billing-table">
           <thead><tr><th>業者</th><th class="num">月間請求人工</th><th class="num">入力日数</th><th>請求状況</th></tr></thead>
-          <tbody>${b.rows.map((r) => `<tr class="billing-${r.status}" data-billing-row="${escapeHtml(r.vendor)}"><td><button type="button" class="link-btn vm-vendor" data-vm-vendor="${escapeHtml(r.vendor)}">${escapeHtml(r.vendor)}</button></td><td class="num">${r.manDays}人工${r.multiReportDates.length ? `<br><small class="billing-multi">⚠ 同じ日に日報が複数（${r.multiReportDates.map(md).join("・")}）の分も合算</small>` : ""}</td><td class="num">${r.enteredDays}日</td><td>${statusSelect(r)}</td></tr>`).join("")}</tbody>
+          <tbody>${b.rows.map((r) => `<tr class="vm-vendor-row billing-${r.status}" data-billing-row="${escapeHtml(r.vendor)}"><td><button type="button" class="link-btn vm-vendor" data-vm-vendor="${escapeHtml(r.vendor)}">${escapeHtml(r.vendor)}</button><br><small class="vm-total-label">業者合計</small></td><td class="num"><b>${r.manDays}人工</b>${r.multiReportDates.length ? `<br><small class="billing-multi">⚠ 同じ日に日報が複数（${r.multiReportDates.map(md).join("・")}）の分も合算</small>` : ""}</td><td class="num">${r.enteredDays}日</td><td>${statusSelect(r)}</td></tr>${lineRows("billing", r.vendor, r.lines, (l) => `<td class="num">${l.manDays}人工</td><td class="num">${l.enteredDays}日</td><td></td>`, 4)}`).join("")}</tbody>
         </table></div>`
       : `<p class="empty-message">${monthLabel(state.month)}に請求人工を入力した業者はありません。</p>`}
     ${b.sameDayReportDates.length ? `<p class="billing-warn">⚠ 同じ日に日報が複数ある日があります（${b.sameDayReportDates.map(md).join("・")}）。月間請求人工は、その日のすべての日報の請求人工を合算しています。同じ内容の重複登録なら、日報カレンダーから不要な日報を確認してください（自動では削除・0にしません）。</p>` : ""}
     ${b.billedWithoutManDays.length ? `<p class="billing-warn">請求あり・請求人工未入力：${escapeHtml(b.billedWithoutManDays.join("・"))}（請求状況は「請求あり」ですが、この月の請求人工が入力されていません）</p>` : ""}
     <label class="billing-close">月の締め <select class="billing-close-status"${canEdit ? "" : " disabled"}>${BILLING_CLOSE_STATUSES.map((s) => `<option value="${s.value}"${s.value === b.closeStatus ? " selected" : ""}>${s.label}</option>`).join("")}</select></label>
-    <p class="empty-message">請求人工は入力された値だけを使います（稼働人数・実績人工・作業時間からは作りません。未入力は0にしません）。請求状況は請求書を確認して選びます（請求人工が入っていても自動で「請求あり」にはしません。「請求なし」でも請求人工は0にしません）。月を切り替えると、その月に入力された値だけで集計します。</p>`;
+    <p class="empty-message">業者の行の下は、日報に保存された職種の名前ごとの明細で、業者の行は業者合計（明細の合計）です（名前が似ていてもまとめません。名前を直すときは［日報］から日報を開いて修正してください）。請求人工は入力された値だけを使います（稼働人数・実績人工・作業時間からは作りません。未入力は0にしません）。請求状況は請求書を確認して選びます（請求人工が入っていても自動で「請求あり」にはしません。「請求なし」でも請求人工は0にしません）。月を切り替えると、その月に入力された値だけで集計します。</p>`;
 }
 
 function detailHtml() {
@@ -162,7 +180,7 @@ export async function initVendorManagementView(params) {
   if (!site) { showMessage("現場が見つかりませんでした。", true); navigate("/sites"); return; }
   if (!canAccessSite(site)) { showMessage("この現場を閲覧する権限がありません。", true); navigate("/sites"); return; }
   const sameSite = state.site?.id === site.id;
-  state = { site, reports: (await listReportsBySite(site.id)).filter((r) => !r.isDeleted), month: sameSite && state.month ? state.month : todayIso().slice(0, 7), tab: sameSite ? state.tab : "activity", vendor: sameSite ? state.vendor : null, period: sameSite ? state.period : null, periodTouched: sameSite ? state.periodTouched : false, vendorPeriod: sameSite ? state.vendorPeriod : false };
+  state = { site, reports: (await listReportsBySite(site.id)).filter((r) => !r.isDeleted), month: sameSite && state.month ? state.month : todayIso().slice(0, 7), tab: sameSite ? state.tab : "activity", vendor: sameSite ? state.vendor : null, period: sameSite ? state.period : null, periodTouched: sameSite ? state.periodTouched : false, vendorPeriod: sameSite ? state.vendorPeriod : false, openLine: sameSite ? state.openLine : null };
   siteNameEl.textContent = `（${site.name}）`;
   document.getElementById("vendorMgmtBillingInputBtn").hidden = !hasPermission("editReports");
   renderMonthSelect();
@@ -184,12 +202,17 @@ viewEl?.addEventListener("click", async (e) => {
   const nav = e.target.closest(".vm-month-nav");
   if (nav) { state.month = shiftMonth(state.month, Number(nav.dataset.shift)); renderMonthSelect(); await reload(); return; }
   const tab = e.target.closest("[data-vm-tab]");
-  if (tab) { state.tab = tab.dataset.vmTab; state.vendor = null; state.vendorPeriod = false; await reload(); return; }
+  if (tab) { state.tab = tab.dataset.vmTab; state.vendor = null; state.vendorPeriod = false; state.openLine = null; await reload(); return; }
   const vendor = e.target.closest("[data-vm-vendor]");
   if (vendor) { state.vendor = vendor.dataset.vmVendor; state.vendorPeriod = false; render(); window.scrollTo(0, 0); return; }
   const pvendor = e.target.closest("[data-vm-period-vendor]");
   if (pvendor) { state.vendor = pvendor.dataset.vmPeriodVendor; state.vendorPeriod = true; render(); window.scrollTo(0, 0); return; }
   if (e.target.closest(".vm-back")) { state.vendor = null; state.vendorPeriod = false; render(); return; }
+  const lt = e.target.closest(".vm-line-toggle");
+  if (lt) { state.openLine = state.openLine === lt.dataset.vmLine ? null : lt.dataset.vmLine; render(); return; }
+  // 明細の日付: その日の日報を開き、該当の業者の行を目立たせる。保存・キャンセルするとこの画面に戻る（集計し直す）
+  const lr = e.target.closest(".vm-line-report");
+  if (lr) { navigate(`/sites/${state.site.id}/report/${lr.dataset.reportId}?from=vendors${lr.dataset.cids ? `&hl=${encodeURIComponent(lr.dataset.cids)}` : ""}`); return; }
   const rep = e.target.closest(".vm-report");
   if (rep) navigate(`/sites/${state.site.id}/report/${rep.dataset.reportId}`);
 });

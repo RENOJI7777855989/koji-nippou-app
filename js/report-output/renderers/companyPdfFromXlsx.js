@@ -24,6 +24,7 @@ import { loadZip, readZipEntryText, readZipEntryBytes } from "../../zipUtil.js";
 import { setCellInSheetXml, resolveSheetPartPath } from "../xlsxTemplateEngine.js";
 import { buildXlsxCellPlan } from "../xlsxCellPlan.js";
 import { applyDiagonalBorders } from "../xlsxDiagonal.js";
+import { applyCenterAlignment } from "../xlsxAlign.js";
 import { parseXlsxStyles, parseSharedStrings, readSheetLayout, colLettersToIndex } from "../xlsxSheetReader.js";
 import { escapeHtml } from "../../utils.js";
 import { ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING } from "./mappings/anzenEiseiUchiawaseNisshi.js";
@@ -36,13 +37,15 @@ import { findDirectorSealCell, sealPlacement, sealPngDataUrl } from "../director
  * 会社様式の印刷のレイアウトの版（印刷ダイアログに表示する。iPad で新しい版が読み込まれているかを、印刷の前に確かめるため）。
  * 印刷の縮小・紙面の大きさの決め方を変えたら上げる
  */
-export const PRINT_LAYOUT_VERSION = "v71";
+export const PRINT_LAYOUT_VERSION = "v72";
 
 /**
  * 紙面の高さ÷幅の上限（iPad の Safari は内容を余白の内側の幅いっぱいに合わせて縮めるため、高さが 幅×この値 以下なら1ページに収まる。
  * Safari の 1ページの高さ÷幅 ≈ 259/391.8 ≈ 0.66 より小さく、余裕を見て 0.63。v66）
  */
-const PRINT_HEIGHT_RATIO = 0.63;
+export const PRINT_HEIGHT_RATIO = 0.63;
+/** iPad の Safari が印刷で実際に使う範囲の目安（左右15・上17・下22mm の内側。v65）。台帳の印刷でも使う */
+export const PRINT_SAFE_MARGIN_MM = { left: 15, right: 15, top: 17, bottom: 22 };
 
 const EMU_PER_PX = 9525;
 export const PAPER_SIZE_MM = {
@@ -202,7 +205,9 @@ export function cellStyleToCss(style, fontScale = 1) {
   if (style.font.color) parts.push(`color:${style.font.color}`);
   if (style.fill) parts.push(`background-color:${style.fill}`);
   const align = style.alignment;
-  if (align.horizontal) parts.push(`text-align:${align.horizontal === "center" ? "center" : align.horizontal === "right" ? "right" : "left"}`);
+  // 均等割付（distributed）・両端揃え（justify）は、文字を枠の幅いっぱいに均等に並べる（Excel と同じ。2026-10-25。以前は左詰めだった）
+  if (align.horizontal === "distributed" || align.horizontal === "justify") parts.push("text-align:justify;text-align-last:justify");
+  else if (align.horizontal) parts.push(`text-align:${align.horizontal === "center" ? "center" : align.horizontal === "right" ? "right" : "left"}`);
   parts.push(`vertical-align:${align.vertical === "center" ? "middle" : align.vertical === "top" ? "top" : "bottom"}`);
   // wrapText指定のセルは折り返して自セル内に収める。それ以外はExcelと同じく
   // クリップせず、隣接する空白セルへ視覚的にはみ出すことを許容する
@@ -268,7 +273,7 @@ function signatureBoxOf(layout, styles, row, col) {
  * 文字のあるセル・文字のある結合セル、または縦の罫線（セルの境目の左右どちらかに罫線）で止まる（2026-10-24。
  * 以前は罫線を越えて隣の欄の上まではみ出しており、iPad の Safari では文字が罫線・隣の欄の文字に重なっていた）。
  */
-function borderlessSpillWidth(layout, styles, r, c1, c2, horizontal) {
+export function borderlessSpillWidth(layout, styles, r, c1, c2, horizontal) {
   const textAt = (rr, cc) => String(layout.cells.get(`${colIndexToLetters(cc)}${rr}`)?.text || "").length > 0;
   const styleAt = (rr, cc) => styles.resolveStyle(layout.cells.get(`${colIndexToLetters(cc)}${rr}`)?.styleIndex || 0);
   const anchorOf = (rr, cc) => { const m = layout.merges.find((g) => rr >= g.r1 && rr <= g.r2 && cc >= g.c1 && cc <= g.c2); return m ? [m.r1, m.c1] : null; };
@@ -392,12 +397,17 @@ function buildTableHtml(layout, styles, fontScale = 1) {
       // 縦書き（textRotation=255）のセルは縦書きで表示し、箱に収まるよう縮める（横書きだと細い枠からはみ出していた）
       const vertical = style.alignment.textRotation === 255;
       const wrap = !!style.alignment.wrapText || vertical;
-      const spill = !wrap && text ? spillWidth(r, c, c + cols - 1, boxW, style.alignment.horizontal) : boxW;
+      // 配置が「標準」の数値は右寄せ（Excel と同じ。2026-10-25）。均等割付・両端揃えは枠の幅いっぱいに均等に並べる（はみ出さない）
+      const hz = style.alignment.horizontal || (cellData?.numeric ? "right" : "");
+      const distributed = hz === "distributed" || hz === "justify";
+      const spill = !wrap && text && !distributed ? spillWidth(r, c, c + cols - 1, boxW, hz) : boxW;
       const valign = vertical || style.alignment.vertical === "center" ? "center" : style.alignment.vertical === "top" ? "flex-start" : "flex-end";
       // 文字の幅を測れるよう、中身は伸ばさず文字の幅にする（左右の寄せはここで指定）
-      const halign = vertical ? "center" : style.alignment.horizontal === "center" ? "center" : style.alignment.horizontal === "right" ? "flex-end" : "flex-start";
+      const halign = vertical ? "center" : distributed ? "stretch" : hz === "center" ? "center" : hz === "right" ? "flex-end" : "flex-start";
+      // 下線（Excel の文字の下線）: 文字の箱は絶対配置で、セルの text-decoration が届かないので、文字に直接付ける（2026-10-25）
+      const spanStyle = [distributed && !vertical ? "display:block;text-align:justify;text-align-last:justify" : "", style.font.underline ? "text-decoration:underline" : ""].filter(Boolean).join(";");
       const inner = text
-        ? `<div class="xc${vertical ? " xc-vert" : ""}" data-w="${Math.round(boxW)}" data-spill="${Math.round(spill)}" data-wrap="${wrap ? 1 : 0}" style="width:${Math.max(1, Math.round(boxW) - 4)}px;height:${Math.max(0, boxH - 1)}px;justify-content:${valign};align-items:${halign}"><span>${text}</span></div>`
+        ? `<div class="xc${vertical ? " xc-vert" : ""}" data-w="${Math.round(boxW)}" data-spill="${Math.round(spill)}" data-wrap="${wrap ? 1 : 0}" style="width:${Math.max(1, Math.round(boxW) - 4)}px;height:${Math.max(0, boxH - 1)}px;justify-content:${valign};align-items:${halign}"><span${spanStyle ? ` style="${spanStyle}"` : ""}>${text}</span></div>`
         : "";
       // styles.xmlの色・フォント名は外部提供の.xlsxテンプレート由来のためHTML属性値として無害化する
       cellsHtml.push(`<td${spanAttrs} style="${escapeHtml(cellStyleToCss(style, fontScale))}">${inner}</td>`);
@@ -463,6 +473,8 @@ async function render(model, mapping, companyProfile, template) {
   let stylesXml = await readZipEntryText(zip, "xl/styles.xml");
   // 巡回点検の欄の斜線（Excel出力と同じ処理。休工日・作業なし・事務作業日で点検記録が無い日）
   if (plan.diagonalCells?.length) ({ sheetXml, stylesXml } = applyDiagonalBorders({ sheetXml, stylesXml, cells: plan.diagonalCells }));
+  // 稼動人数表・点検項目の中央揃え（Excel出力と同じ処理）
+  if (plan.centerCells?.length) ({ sheetXml, stylesXml } = applyCenterAlignment({ sheetXml, stylesXml, cells: plan.centerCells }));
   const sharedStringsXml = await readZipEntryText(zip, "xl/sharedStrings.xml");
   const styles = parseXlsxStyles(stylesXml);
   const sharedStrings = parseSharedStrings(sharedStringsXml);
@@ -494,7 +506,7 @@ async function render(model, mapping, companyProfile, template) {
   // 使わず、自分の余白（左右約14mm・上約16.5mm）と下にアドレス・日時のフッターの分を取り、1ページに使える高さは約259mm
   // （様式の余白で計算した 272mm より約13mm少ない）。さらに表を約1.4%大きく描く。このため表の下の2〜3行が2ページ目に出ていた。
   // 余白を左右15mm・上17mm・下22mmとした範囲と、様式の余白の範囲の小さい方に、拡大の分（下の script の 0.97）を見込んで収める。
-  const SAFE_MARGIN_MM = { left: 15, right: 15, top: 17, bottom: 22 };
+  const SAFE_MARGIN_MM = PRINT_SAFE_MARGIN_MM;
   // さらに iPad の Safari は、印刷する内容を余白の内側の幅いっぱいに合わせて縮める（2枚目の実物の PDF で確認: 表をいくら縮めても、
   // 表の幅は余白の内側の幅（約391.8mm）になり、高さも同じ割合で戻って下が2ページ目に出た）。このため、全体の縮小では高さを抑えられない。
   // そこで紙面（.xlsx-sheet-wrap）の幅を「表の高さ ÷ PRINT_HEIGHT_RATIO」以上にして、幅いっぱいに合わせられても

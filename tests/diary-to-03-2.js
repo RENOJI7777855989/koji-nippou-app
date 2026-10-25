@@ -116,7 +116,8 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   check("台帳: 累計・計・延労働時間は様式の数式で計算される（2日目の塗装累計5・植栽累計6）", lg.P85 === "5" && lg.P78 === "6" && Number(lg.O103) === todayTotal && Number(lg.O104) === todayTotal * 8, JSON.stringify({ P85: lg.P85, P78: lg.P78, O103: lg.O103, O104: lg.O104 }));
   check("台帳: 2日目の頁に資材・機材搬入・重点指示・連絡調整", lg.A89?.startsWith("07:30 搬入 鋼管") && lg.A93 === "開口部の養生確認を徹底" && lg.A99 === "午後は塗装と足場解体が同じ区画");
   const lhtml = await page.evaluate(async (sid) => (await (await import("/js/reportPrint.js")).buildSiteLedgerPrintHtml(sid)).html, ids.siteId);
-  check("台帳の印刷: 縦書きのセルに縦書きの指定が入る", /writing-mode:vertical-rl/.test(lhtml) && lhtml.includes('<span class="tx">管理</span>'));
+  // 2026-10-26: 台帳の印刷は日報のPDFと同じく、文字を行の高さに固定した箱（div.xc。縦書きは xc-vert）に入れる
+  check("台帳の印刷: 縦書きのセルに縦書きの指定が入る", /\.xc\.xc-vert > span \{ writing-mode: vertical-rl/.test(lhtml) && /<div class="xc xc-vert"[^>]*><span>管理<\/span>/.test(lhtml));
 
   // ---- ダッシュボード（2日目）----
   await page.goto(`${BASE}#/sites/${ids.siteId}`); await page.waitForSelector("#siteDashboard:not([hidden])");

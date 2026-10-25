@@ -976,7 +976,10 @@ function setupFormMode(params) {
 }
 
 /** 保存・キャンセル後に戻る（カレンダー・今日の確認事項から開いたときは、現場詳細の監督管理タブのカレンダーのその日へ） */
+let returnToVendors = false; // 業者管理の明細から開いた日報（保存・キャンセルで業者管理へ戻り、集計し直す）
+
 function returnAfterForm(date, saved = false) {
+  if (returnToVendors && currentSiteId) { navigate(`/sites/${currentSiteId}/vendors`); return; }
   if (formMode.from && currentSiteId) window.__returnToCalendar = { siteId: currentSiteId, date, scroll: formMode.from === "calendar" };
   // 現場ダッシュボード（現場掲示・A3印刷の元）を、保存した日報（カレンダー等から開いた日報）の日付で表示する。
   // 以前は今日の日付のままで、今日以外の日の日報を保存しても、その日の流れなどがダッシュボード・A3に出なかった
@@ -986,6 +989,7 @@ function returnAfterForm(date, saved = false) {
 
 export async function initReportFormViewNew(params) {
   currentSiteId = params.id;
+  returnToVendors = false;
   const site = await getSite(currentSiteId);
   if (!site || !canAccessSite(site)) {
     showMessage("この現場の日報を作成する権限がありません。", true);
@@ -1260,6 +1264,18 @@ export async function initReportFormViewEdit(params) {
   renderOutputPanel(report);
   setupFormMode(params);
   focusRequestedSection();
+  returnToVendors = params.from === "vendors";
+  highlightCompanyRows(params.hl);
+}
+
+/** 業者管理の明細から開いたとき、該当の業者の行（companyId）を目立たせ、最初の行へ移動する */
+function highlightCompanyRows(hl) {
+  companiesContainer.querySelectorAll(".company-row.is-line-highlight").forEach((r) => r.classList.remove("is-line-highlight"));
+  const ids = String(hl || "").split(",").filter(Boolean);
+  if (!ids.length) return;
+  const rows = [...companiesContainer.querySelectorAll(".company-row")].filter((r) => ids.includes(r.dataset.companyId));
+  rows.forEach((r) => r.classList.add("is-line-highlight"));
+  rows[0]?.scrollIntoView({ block: "center" });
 }
 
 /** 現場ダッシュボードの「🚚搬入」「👷業者」から開いたときは、その欄まで移動する（搬入は空なら1行追加） */
@@ -1356,7 +1372,7 @@ function addSiteSupervisorRow(name = "") {
   const row = document.createElement("div");
   row.className = "site-supervisor-row";
   row.innerHTML = `
-    <input type="text" class="siteSupervisorNameInput" placeholder="例）鈴木一郎">
+    <input type="text" class="siteSupervisorNameInput" placeholder="例）山田太郎">
     <button type="button" class="removeSiteSupervisorBtn">削除</button>
   `;
   row.querySelector(".siteSupervisorNameInput").value = name;

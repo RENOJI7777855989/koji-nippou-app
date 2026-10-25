@@ -38,6 +38,57 @@ export function billingValueOf(company) {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+/* ----------------------------------------------------------
+   業者×職種の明細（請求人工・業者別稼働で共通。2026-10-25）
+   ・明細の単位は「業者名＋日報に保存された職種（工種）の名前」。名前は前後の空白だけを除き、そのまま比べる
+     （似た名前（洗浄と屋根洗浄、外壁補修と外壁下地補修など）を部分一致・類似度・語尾の削除でまとめない。
+     ダッシュボード・03-2の稼動人数表は様式の業種の行に当てはめるため表記ゆれをそろえるが、ここではそろえない）。
+   ・業者は業者名（前後の空白を除く）で見分ける。どの業者にも同じ決まり（特定の業者名による例外は無い）。
+   ・明細ごとに、根拠の日報（日付・日報id・その業者×職種の行の companyId・値）を持つ（元の日報を開くため）。
+   ・業者の合計は明細の合計（請求人工は小数2桁で丸める）。
+   ---------------------------------------------------------- */
+export const NO_TRADE_LINE = "（職種未入力）";
+const tradeNameOf = (c) => String(c?.occupation ?? "").trim() || NO_TRADE_LINE;
+const round2 = (n) => Math.round(n * 100) / 100;
+
+/**
+ * @param {object} p
+ * @param {object[]} p.reports 日報
+ * @param {(r: object) => boolean} p.include 数える日報
+ * @param {(c: object) => (number|null)} p.valueOf 業者の行の値（null＝数えない行）
+ * @returns {Map<string, {trade: string, value: number, entries: {date: string, reportId: string, companyIds: string[], value: number}[]}[]>} 業者名 → 明細（職種名の順）
+ */
+export function vendorTradeLines({ reports = [], include, valueOf }) {
+  const byVendor = new Map();
+  for (const r of [...reports].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))) {
+    if (r.isDeleted || !r.date || !include(r)) continue;
+    const perReport = new Map(); // 業者\0職種 → この日報の明細の値
+    for (const c of r.companies || []) {
+      const vendor = String(c.companyName || "").trim();
+      if (!vendor) continue;
+      const v = valueOf(c);
+      if (v == null) continue;
+      const trade = tradeNameOf(c);
+      const k = `${vendor}\u0000${trade}`;
+      const e = perReport.get(k) || { vendor, trade, value: 0, companyIds: [] };
+      e.value += v;
+      if (c.companyId) e.companyIds.push(c.companyId);
+      perReport.set(k, e);
+    }
+    for (const e of perReport.values()) {
+      if (!byVendor.has(e.vendor)) byVendor.set(e.vendor, new Map());
+      const lines = byVendor.get(e.vendor);
+      if (!lines.has(e.trade)) lines.set(e.trade, { trade: e.trade, value: 0, entries: [] });
+      const line = lines.get(e.trade);
+      line.value += e.value;
+      line.entries.push({ date: r.date, reportId: r.id, companyIds: e.companyIds, value: round2(e.value) });
+    }
+  }
+  const out = new Map();
+  for (const [vendor, lines] of byVendor) out.set(vendor, [...lines.values()].map((l) => ({ ...l, value: round2(l.value) })).sort((a, b) => a.trade.localeCompare(b.trade, "ja")));
+  return out;
+}
+
 const monthEnd = (month) => { const [y, m] = month.split("-").map(Number); return `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`; };
 
 /**
@@ -71,6 +122,8 @@ export function buildMonthlyBilling({ reports = [], site = null, month, today })
       }
     }
   }
+  // 業者×職種の明細（請求人工が入力された行だけ。業者別稼働と同じ決まり vendorTradeLines）
+  const billingLines = vendorTradeLines({ reports, include: (r) => r.date.slice(0, 7) === month && r.date <= cutoff, valueOf: billingValueOf });
   // 一覧・集計の対象は、この月に請求人工が1件以上入力されている業者だけ
   const rows = [...byVendor.values()].filter((v) => v.entered > 0).map((v) => {
     const st = savedVendors[v.vendor] || {};
@@ -84,6 +137,8 @@ export function buildMonthlyBilling({ reports = [], site = null, month, today })
       missingRows: v.missing,
       days: v.days.size,
       trades: [...v.trades],
+      // 職種ごとの明細（月間請求人工・入力日数・根拠の日報）。明細の合計＝月間請求人工
+      lines: (billingLines.get(v.vendor) || []).map((l) => ({ trade: l.trade, manDays: l.value, enteredDays: new Set(l.entries.map((e) => e.date)).size, entries: l.entries })),
       lastDate: v.lastDate,
       status,
       statusLabel: labelOf(BILLING_STATUSES, status),
@@ -193,7 +248,18 @@ export function buildVendorActivity({ reports = [], month, today, startDate = nu
       byVendor.set(name, v);
     }
   }
-  const rows = [...byVendor.values()].map((v) => ({ vendor: v.vendor, days: v.days, workers: v.workers, manDays: v.workers, minutes: v.minutes, hoursMissing: v.missingHours, trades: [...v.trades], cumManDays: v.cumManDays })).sort((a, b) => a.vendor.localeCompare(b.vendor, "ja"));
+  // 業者×職種の明細（その月の実績人工・稼働日数・作業時間と、累計。請求人工管理と同じ決まり vendorTradeLines）
+  const workDay = (r) => r.date <= cutoff && !(startDate && r.date < startDate) && isWorkDay(r);
+  const actualOrNull = (c) => (actualOf(c) > 0 ? actualOf(c) : null);
+  const monthLines = vendorTradeLines({ reports, include: (r) => workDay(r) && r.date.slice(0, 7) === month, valueOf: actualOrNull });
+  const cumLines = vendorTradeLines({ reports, include: workDay, valueOf: actualOrNull });
+  const minutesLines = vendorTradeLines({ reports, include: (r) => workDay(r) && r.date.slice(0, 7) === month, valueOf: (c) => (actualOf(c) > 0 ? minutesOf(c) : null) });
+  const linesOf = (vendor) => (cumLines.get(vendor) || []).map((cl) => {
+    const ml = (monthLines.get(vendor) || []).find((l) => l.trade === cl.trade);
+    const mins = (minutesLines.get(vendor) || []).find((l) => l.trade === cl.trade);
+    return { trade: cl.trade, manDays: ml ? ml.value : 0, workers: ml ? ml.value : 0, days: ml ? new Set(ml.entries.map((e) => e.date)).size : 0, minutes: mins ? mins.value : 0, cumManDays: cl.value, entries: ml ? ml.entries : [], cumEntries: cl.entries };
+  });
+  const rows = [...byVendor.values()].map((v) => ({ vendor: v.vendor, days: v.days, workers: v.workers, manDays: v.workers, minutes: v.minutes, hoursMissing: v.missingHours, trades: [...v.trades], cumManDays: v.cumManDays, lines: linesOf(v.vendor) })).sort((a, b) => a.vendor.localeCompare(b.vendor, "ja"));
   const active = rows.filter((r) => r.days > 0);
   return { month, cutoff, rows, totals: { vendors: active.length, listed: rows.length, days: rows.reduce((s, r) => s + r.days, 0), workers: rows.reduce((s, r) => s + r.workers, 0), minutes: rows.reduce((s, r) => s + r.minutes, 0), cumManDays: rows.reduce((s, r) => s + r.cumManDays, 0) } };
 }
@@ -233,7 +299,10 @@ export function buildVendorPeriodActivity({ reports = [], fromMonth, toMonth, to
       byVendor.set(name, v);
     }
   }
-  const rows = [...byVendor.values()].map((v) => ({ vendor: v.vendor, byMonth: v.byMonth, total: months.reduce((s, m) => s + v.byMonth[m], 0), days: v.days, workers: v.workers, minutes: v.minutes, hoursMissing: v.missingHours, trades: [...v.trades] })).sort((a, b) => a.vendor.localeCompare(b.vendor, "ja"));
+  // 業者×職種の明細（期間合計・月ごと・稼働日数。vendorTradeLines）
+  const periodLines = vendorTradeLines({ reports, include: (r) => r.date >= start && r.date <= cutoff && !(startDate && r.date < startDate) && isWorkDay(r), valueOf: (c) => (actualOf(c) > 0 ? actualOf(c) : null) });
+  const linesOf = (vendor) => (periodLines.get(vendor) || []).map((l) => ({ trade: l.trade, total: l.value, days: new Set(l.entries.map((e) => e.date)).size, byMonth: Object.fromEntries(months.map((m) => [m, l.entries.filter((e) => e.date.slice(0, 7) === m).reduce((s, e) => s + e.value, 0)])), entries: l.entries }));
+  const rows = [...byVendor.values()].map((v) => ({ vendor: v.vendor, byMonth: v.byMonth, total: months.reduce((s, m) => s + v.byMonth[m], 0), days: v.days, workers: v.workers, minutes: v.minutes, hoursMissing: v.missingHours, trades: [...v.trades], lines: linesOf(v.vendor) })).sort((a, b) => a.vendor.localeCompare(b.vendor, "ja"));
   const monthTotals = Object.fromEntries(months.map((m) => [m, rows.reduce((s, r) => s + r.byMonth[m], 0)]));
   return { from: fromMonth, to: toMonth, cutoff, months, rows, monthTotals, totals: { vendors: rows.filter((r) => r.days > 0).length, listed: rows.length, total: months.reduce((s, m) => s + monthTotals[m], 0), days: rows.reduce((s, r) => s + r.days, 0), workers: rows.reduce((s, r) => s + r.workers, 0), minutes: rows.reduce((s, r) => s + r.minutes, 0) } };
 }

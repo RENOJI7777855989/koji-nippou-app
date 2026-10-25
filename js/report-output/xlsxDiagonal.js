@@ -9,7 +9,7 @@
 
 const DIAGONAL_XML = '<diagonal style="thin"><color indexed="64"/></diagonal>';
 
-function sectionOf(xml, tag) {
+export function sectionOf(xml, tag) {
   const open = new RegExp(`<${tag}\\b[^>]*>`).exec(xml);
   if (!open) return null;
   const close = xml.indexOf(`</${tag}>`, open.index);
@@ -17,7 +17,7 @@ function sectionOf(xml, tag) {
   return { start: open.index, openEnd: open.index + open[0].length, close, end: close + tag.length + 3, openTag: open[0] };
 }
 
-function childElements(inner, tag) {
+export function childElements(inner, tag) {
   const re = new RegExp(`<${tag}\\b[^>]*\\/>|<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}>`, "g");
   return inner.match(re) || [];
 }
@@ -35,14 +35,14 @@ export function addDiagonalDown(borderXml) {
 }
 
 /** シートのセルの s 属性（書式番号）。セルが無ければ null */
-function cellStyleIndex(sheetXml, ref) {
+export function cellStyleIndex(sheetXml, ref) {
   const m = new RegExp(`<c r="${ref}"(\\s[^>]*)?\\/?>`).exec(sheetXml);
   if (!m) return null;
   const s = /\ss="(\d+)"/.exec(m[1] || "");
   return s ? Number(s[1]) : 0;
 }
 
-function setCellStyleIndex(sheetXml, ref, index) {
+export function setCellStyleIndex(sheetXml, ref, index) {
   return sheetXml.replace(new RegExp(`<c r="${ref}"((?:\\s[^>]*?)?)(\\/?)>`), (m, attrs, slash) => {
     const a = /\ss="\d+"/.test(attrs) ? attrs.replace(/\ss="\d+"/, ` s="${index}"`) : `${attrs} s="${index}"`;
     return `<c r="${ref}"${a}${slash}>`;

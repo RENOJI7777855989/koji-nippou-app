@@ -2149,3 +2149,11 @@ body.has-restore-banner .report-quick-bar { top: 64px; }
 .seal-bulk-result-head .warn { color: #b00; }
 /* 職種別の人数の業者ごとの内訳（2026-10-25） */
 .dash-trade-vendors { display: block; }
+
+/* 業者管理: 業者×職種の明細（2026-10-25） */
+.vm-table tr.vm-line td { background: #fafbfc; font-size: 13px; }
+.vm-table tr.vm-line td.vm-line-name { padding-left: 1.4em; }
+.vm-table tr.vm-line-dates td { background: #f3f7fc; }
+.vm-table tr.vm-line-dates .vm-line-report { margin: 3px 4px 3px 0; min-height: 36px; }
+.vm-total-label { color: #5b6573; }
+.company-row.is-line-highlight { outline: 3px solid #f0a020; outline-offset: 2px; background: #fff8e6; }

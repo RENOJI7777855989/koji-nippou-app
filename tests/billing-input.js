@@ -33,10 +33,10 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
     const mk = async (siteId, date, dayStatus, companies) => { const r = stampNew({ siteId, date, dayStatus, siteSupervisorNames: [], companies }); await dbPut("reports", r); await new Promise((x) => setTimeout(x, 15)); return r.id; };
     return {
       siteId: site.id, otherSiteId: other.id,
-      d28: await mk(site.id, "2026-09-28", "work", [c("a", "ナダカ工業", "外壁下地補修", "3", ""), c("a2", "ナダカ工業", "防水", "2", ""), c("b", "野本建装工業", "塗装", "2", "1.5"), c("c", "協栄工業", "足場", "4", "")]),
-      d29: await mk(site.id, "2026-09-29", "work", [c("a", "ナダカ工業", "外壁下地補修", "3", "")]),
-      d30: await mk(site.id, "2026-09-30", "rain", [c("b", "野本建装工業", "塗装", "", "")]),
-      o01a: await mk(site.id, "2026-10-01", "work", [c("a", "ナダカ工業", "外壁下地補修", "2", "")]),
+      d28: await mk(site.id, "2026-09-28", "work", [c("a", "アオバ塗装工業", "外壁下地補修", "3", ""), c("a2", "アオバ塗装工業", "防水", "2", ""), c("b", "エノキ建装工業", "塗装", "2", "1.5"), c("c", "イズミ足場工業", "足場", "4", "")]),
+      d29: await mk(site.id, "2026-09-29", "work", [c("a", "アオバ塗装工業", "外壁下地補修", "3", "")]),
+      d30: await mk(site.id, "2026-09-30", "rain", [c("b", "エノキ建装工業", "塗装", "", "")]),
+      o01a: await mk(site.id, "2026-10-01", "work", [c("a", "アオバ塗装工業", "外壁下地補修", "2", "")]),
       o01b: await mk(site.id, "2026-10-01", "work", [c("x", "同日別日報工業", "内装", "1", "")]),
       otherSite: await mk(other.id, "2026-09-28", "work", [c("z", "別現場工業", "塗装", "5", "9")])
     };
@@ -58,7 +58,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   // ===== 2 日付を選ぶ（9/28）=====
   await page.fill("#billingDate", "2026-09-28"); await page.dispatchEvent("#billingDate", "change"); await page.waitForTimeout(300);
   const rows28 = await page.$$eval("#billingDay .billing-row", (rs) => rs.map((r) => `${r.querySelector(".chorei-vendor").textContent}/${r.querySelector(".chorei-trade").textContent}/${r.querySelector(".billing-value").value}/${r.querySelector(".billing-state").textContent}`));
-  check("2・10 日付を選ぶとその日の業者の行（業者＋工種）が出る・保存済み（1.5）と未入力を区別して表示", rows28.join("|") === "ナダカ工業/外壁下地補修//未入力|ナダカ工業/防水//未入力|野本建装工業/塗装/1.5/1.5人工・保存済み|協栄工業/足場//未入力", rows28.join("|"));
+  check("2・10 日付を選ぶとその日の業者の行（業者＋工種）が出る・保存済み（1.5）と未入力を区別して表示", rows28.join("|") === "アオバ塗装工業/外壁下地補修//未入力|アオバ塗装工業/防水//未入力|エノキ建装工業/塗装/1.5/1.5人工・保存済み|イズミ足場工業/足場//未入力", rows28.join("|"));
   check("参考として稼働人数・稼働人工を出す（請求人工の計算には使わない）", (await page.textContent("#billingDay")).includes("稼働人数 3人・稼働人工 3"));
 
   // ===== 3・4・9 整数・小数を続けて入力（Enterで次の行へ）=====
@@ -68,7 +68,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   await page.keyboard.type("3.75"); await page.keyboard.press("Enter");
   const focused = await page.evaluate(() => [...document.querySelectorAll("#billingDay .billing-value")].indexOf(document.activeElement));
   check("9 Enter で次の業者の行へ移り、続けて入力できる", focused === 3);
-  // 協栄工業は空欄のまま（未入力）
+  // イズミ足場工業は空欄のまま（未入力）
   check("未保存の変更がわかる（入力済み 3／4行・未保存の変更あり）", (await page.textContent("#billingProgress")).includes("入力済み 3／4行") && (await page.textContent("#billingProgress")).includes("未保存"));
   // 不正な値は保存しない
   await inputs.nth(3).fill("-1");
@@ -78,10 +78,10 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   await page.click("#billingSaveBtn"); await page.waitForTimeout(500);
   let r28 = await get(ids.d28);
   check("3・4・5・7 保存: 整数3・0・小数3.75（既存の1.5を編集）が日報の請求人工に入る", r28.companies.map((c) => c.billingManDays).join(",") === "3,0,3.75,", r28.companies.map((c) => c.billingManDays).join(","));
-  check("8 未入力（空欄）と0を区別して保存（協栄工業は空のまま・ナダカ工業の防水は「0」）", r28.companies[1].billingManDays === "0" && r28.companies[3].billingManDays === "");
+  check("8 未入力（空欄）と0を区別して保存（イズミ足場工業は空のまま・アオバ塗装工業の防水は「0」）", r28.companies[1].billingManDays === "0" && r28.companies[3].billingManDays === "");
   check("14 実績人数・予定人数・作業時間・作業内容など請求人工以外は変わらない", nonBilling(r28) === nonBilling(before28));
   const month = await page.textContent("#billingMonth");
-  check("保存すると同じ画面の月の集計が更新される（ナダカ工業 3（3+0）・野本建装工業 3.75。協栄工業は未入力なので出ない）", /ナダカ工業\s*3\s*1日/.test(month) && /野本建装工業\s*3\.75\s*1日/.test(month) && !month.includes("協栄工業") && dialogs.length === 0, month.replace(/\s+/g, " ").slice(0, 160));
+  check("保存すると同じ画面の月の集計が更新される（アオバ塗装工業 3（3+0）・エノキ建装工業 3.75。イズミ足場工業は未入力なので出ない）", /アオバ塗装工業\s*3\s*1日/.test(month) && /エノキ建装工業\s*3\.75\s*1日/.test(month) && !month.includes("イズミ足場工業") && dialogs.length === 0, month.replace(/\s+/g, " ").slice(0, 160));
   // 小数2桁まで
   await inputs.nth(3).fill("1.255");
   check("小数は2桁まで（1.255 は誤りとして表示）", (await page.textContent("#billingDay .billing-row:nth-child(4) .billing-state")).includes("2桁"));
@@ -89,7 +89,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
 
   // ===== 未入力の日へ移る =====
   const missingDays = await page.$$eval("#billingMonth [data-billing-date]", (bs) => bs.map((b) => b.dataset.billingDate));
-  check("その月で請求人工が未入力の行がある日を出す（9/28 協栄工業・9/29・9/30）", missingDays.join() === "2026-09-28,2026-09-29,2026-09-30", missingDays.join());
+  check("その月で請求人工が未入力の行がある日を出す（9/28 イズミ足場工業・9/29・9/30）", missingDays.join() === "2026-09-28,2026-09-29,2026-09-30", missingDays.join());
   await page.click('#billingMonth [data-billing-date="2026-09-29"]'); await page.waitForTimeout(300);
   check("未入力の日を押すとその日へ移る", (await page.inputValue("#billingDate")) === "2026-09-29");
   // 未保存の変更があるときの確認
@@ -100,10 +100,10 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   await page.click("#billingSaveBtn"); await page.waitForTimeout(400);
 
   // ===== 11 請求状況は請求人工と別 =====
-  await page.selectOption('#billingMonth .billing-month-status[data-vendor="野本建装工業"]', "none"); await page.waitForTimeout(400);
+  await page.selectOption('#billingMonth .billing-month-status[data-vendor="エノキ建装工業"]', "none"); await page.waitForTimeout(400);
   const siteAfter = await page.evaluate(async (id) => (await import("/js/db.js")).dbGet("sites", id), ids.siteId);
   r28 = await get(ids.d28);
-  check("11 請求状況（野本建装工業＝請求なし）を保存しても、請求人工（3.75）は0にならない", siteAfter.billingMonths["2026-09"].vendors["野本建装工業"].status === "none" && r28.companies[2].billingManDays === "3.75");
+  check("11 請求状況（エノキ建装工業＝請求なし）を保存しても、請求人工（3.75）は0にならない", siteAfter.billingMonths["2026-09"].vendors["エノキ建装工業"].status === "none" && r28.companies[2].billingManDays === "3.75");
 
   // ===== 12・13 翌月（10/1。同じ日に日報2件）=====
   await page.click('[data-billing-shift="1"]'); await page.waitForTimeout(200);
@@ -114,13 +114,13 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   await page.locator("#billingDay .billing-value").first().fill("5");
   await page.click("#billingSaveBtn"); await page.waitForTimeout(400);
   const sep = await page.evaluate(async (sid) => { const { buildMonthlyBilling } = await import("/js/billing/billingMonthly.js"); const { listReportsBySite } = await import("/js/reports.js"); const { dbGet } = await import("/js/db.js"); return buildMonthlyBilling({ reports: await listReportsBySite(sid), site: await dbGet("sites", sid), month: "2026-09", today: "2026-10-17" }).rows.map((r) => `${r.vendor}:${r.manDays}:${r.status}`).join(","); }, ids.siteId);
-  check("12・13 翌月（10/1）に入力しても、9月の請求人工・請求状況は変わらない", sep === "ナダカ工業:5:unconfirmed,野本建装工業:3.75:none", sep);
+  check("12・13 翌月（10/1）に入力しても、9月の請求人工・請求状況は変わらない", sep === "アオバ塗装工業:5:unconfirmed,エノキ建装工業:3.75:none", sep);
   const oct = await page.textContent("#billingMonth");
-  check("10月の集計には10月の値だけ（月をまたいで足さない）", /ナダカ工業\s*5\s*1日/.test(oct) && !oct.includes("野本建装工業"), oct.replace(/\s+/g, " ").slice(0, 120));
+  check("10月の集計には10月の値だけ（月をまたいで足さない）", /アオバ塗装工業\s*5\s*1日/.test(oct) && !oct.includes("エノキ建装工業"), oct.replace(/\s+/g, " ").slice(0, 120));
   await page.click("#billingCloseBtn");
   await page.waitForTimeout(300);
   check("業者管理: 同じ日に日報が複数ある日（10/1）を警告する（合算していることを示す）", await (async () => { await page.click('[data-vm-tab="billing"]'); await page.waitForTimeout(300); await page.selectOption("#vendorMgmtMonth", "2026-10"); await page.waitForTimeout(300); return (await page.textContent("#vendorMgmtBody")).includes("同じ日に日報が複数ある日があります（10/1）"); })());
-  check("業者管理の請求人工管理に同じ値が出る（既存の集計とつながる）", await (async () => { await page.click('[data-vm-tab="billing"]'); await page.waitForTimeout(300); await page.selectOption("#vendorMgmtMonth", "2026-09"); await page.waitForTimeout(300); const t = await page.textContent("#vendorMgmtBody"); return t.includes("ナダカ工業") && t.includes("3.75"); })());
+  check("業者管理の請求人工管理に同じ値が出る（既存の集計とつながる）", await (async () => { await page.click('[data-vm-tab="billing"]'); await page.waitForTimeout(300); await page.selectOption("#vendorMgmtMonth", "2026-09"); await page.waitForTimeout(300); const t = await page.textContent("#vendorMgmtBody"); return t.includes("アオバ塗装工業") && t.includes("3.75"); })());
 
   // ===== 6 もう一度開くと保存した値が出る（業者管理から。2026-10-17: 現場ダッシュボードのボタンは外し、業者管理に集約）=====
   await page.goto(`${BASE}#/sites`); await page.waitForSelector("#view-site-list:not([hidden])");
@@ -163,7 +163,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   await p3.goto(BASE); await p3.waitForSelector("#view-site-list:not([hidden])");
   await p3.goto(`${BASE}#/backup`); await restoreViaUi(p3, zipPath); // 新しい復元の流れ（検査→復元前のバックアップ→一括適用）
   await waitForAsync(p3, async (id) => !!(await (await import("/js/db.js")).dbGet("reports", id)), ids.o01a, { timeout: 20000 });
-  const restored = await p3.evaluate(async ([a, b, s]) => { const { dbGet } = await import("/js/db.js"); return { a: (await dbGet("reports", a)).companies.map((c) => c.billingManDays).join(","), b: (await dbGet("reports", b)).companies[0].billingManDays, st: (await dbGet("sites", s)).billingMonths["2026-09"].vendors["野本建装工業"].status }; }, [ids.d28, ids.o01a, ids.siteId]);
+  const restored = await p3.evaluate(async ([a, b, s]) => { const { dbGet } = await import("/js/db.js"); return { a: (await dbGet("reports", a)).companies.map((c) => c.billingManDays).join(","), b: (await dbGet("reports", b)).companies[0].billingManDays, st: (await dbGet("sites", s)).billingMonths["2026-09"].vendors["エノキ建装工業"].status }; }, [ids.d28, ids.o01a, ids.siteId]);
   check("16 バックアップから別の端末に復元しても、請求人工（9月・10月）と請求状況はそのまま", restored.a === "3,0,3.75," && restored.b === "5" && restored.st === "none", JSON.stringify(restored));
   await ctx2.close();
 

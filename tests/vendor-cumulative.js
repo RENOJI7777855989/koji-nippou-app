@@ -60,7 +60,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   const table = () => page.evaluate(() => {
     const t = document.querySelector("#vendorMgmtBody .vm-activity"); if (!t) return null;
     const cell = (c) => c.textContent.replace(/\s+/g, "");
-    return { head: [...t.tHead.rows[0].cells].map(cell), rows: [...t.tBodies[0].rows].map((tr) => ({ idle: tr.classList.contains("vm-row-idle"), vendor: tr.querySelector(".vm-vendor").textContent.trim(), cells: [...tr.cells].map(cell) })), foot: [...t.tFoot.rows[0].cells].map(cell) };
+    return { head: [...t.tHead.rows[0].cells].map(cell), rows: [...t.tBodies[0].rows].filter((tr) => tr.classList.contains("vm-vendor-row")).map((tr) => ({ idle: tr.classList.contains("vm-row-idle"), vendor: tr.querySelector(".vm-vendor").textContent.trim(), cells: [...tr.cells].map(cell) })), foot: [...t.tFoot.rows[0].cells].map(cell) };
   });
   const map = (t) => Object.fromEntries(t.rows.map((r) => [r.vendor, { month: r.cells.slice(1, 5).join("|"), cum: r.cells[5], idle: r.idle }]));
 
@@ -96,7 +96,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
     const reorder = (xs) => [...xs.slice(2), xs[0], xs[1]];
     const headCells = t ? [...t.tHead.rows[0].cells].map(cell) : [];
     return { label: sec.querySelector(".vm-period-label")?.textContent.replace(/\s+/g, "") || "", error: sec.querySelector(".vm-period-error")?.textContent || "", displayHead: headCells, head: t ? [headCells[0], ...reorder(headCells.slice(1))] : [],
-      rows: t ? [...t.tBodies[0].rows].map((tr) => ({ vendor: tr.querySelector(".vm-vendor").textContent.trim(), idle: tr.classList.contains("vm-row-idle"), cells: reorder([...tr.cells].slice(1).map(cell)) })) : [], foot: t ? reorder([...t.tFoot.rows[0].cells].slice(1).map(cell)) : [] };
+      rows: t ? [...t.tBodies[0].rows].filter((tr) => tr.classList.contains("vm-vendor-row")).map((tr) => ({ vendor: tr.querySelector(".vm-vendor").textContent.trim(), idle: tr.classList.contains("vm-row-idle"), cells: reorder([...tr.cells].slice(1).map(cell)) })) : [], foot: t ? reorder([...t.tFoot.rows[0].cells].slice(1).map(cell)) : [] };
   });
   const pm = (p) => Object.fromEntries(p.rows.map((r) => [r.vendor, r]));
   await selectMonth("2026-08");

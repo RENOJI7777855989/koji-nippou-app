@@ -28,7 +28,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
     const dl = (time, item, vendor, dir = "in") => ({ id: item, direction: dir, time, item, quantity: "", vendor, status: "plan" });
     const base = { siteId: site.id, siteSupervisorNames: [], companies: [] };
     const work = stampNew({ ...base, date: "2026-09-09", dayStatus: "work", progressPercent: 30, weather: "晴れ",
-      companies: [{ companyId: "a", companyName: "ナダカ工業", occupation: "塗装", actualWorkerCount: "3", plannedWorkerCount: "3", workHours: "08:00～17:00", billingManDays: "3.5" }],
+      companies: [{ companyId: "a", companyName: "アオバ塗装工業", occupation: "塗装", actualWorkerCount: "3", plannedWorkerCount: "3", workHours: "08:00～17:00", billingManDays: "3.5" }],
       patrolChecklist: { morningMeeting: "good" }, deliveries: [dl("09:00", "塗料", "サンプル商事")] });
     const nowork = stampNew({ ...base, date: "2026-09-10", dayStatus: "nowork", deliveries: [dl("10:00", "外壁材", "○○運送"), dl("14:00", "足場材", "△△運輸")] });
     const noworkEmpty = stampNew({ ...base, date: "2026-09-11", dayStatus: "nowork" });

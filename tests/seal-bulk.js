@@ -13,7 +13,7 @@ const BASE = "http://localhost:8934/index.html";
 const results = [];
 const check = (name, pass, detail = "") => { results.push(pass); console.log(`[${pass ? "PASS" : "FAIL"}] ${name}${detail ? " - " + detail : ""}`); };
 const NAME = "山田"; // 架空の名前
-const OTHER = "佐藤";
+const OTHER = "森川";
 
 (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "seal-bulk-"));
@@ -99,7 +99,7 @@ const OTHER = "佐藤";
   check("月をまたいで選んだ件数と日付が出る（4件）", /選択中 4件（9\/29（火）・10\/1（木）・10\/2（金）・10\/3（土）/.test(await dlgText()), await dlgText());
   await page.click('[data-sb="toConfirm"]'); await page.waitForSelector('[data-sb="apply"]');
   const conf = await dlgText();
-  check("確認画面: 押印する3件の日付・押印済みの10/3は対象外（名前つき）・印の見本", /押印する ?3件（9\/29（火）・10\/1（木）・10\/2（金））/.test(conf) && /対象外 ?1件（10\/3（土） 押印済み（佐藤））/.test(conf) && await page.isVisible("#sealBulkDialog img.seal-bulk-preview"), conf.slice(0, 200));
+  check("確認画面: 押印する3件の日付・押印済みの10/3は対象外（名前つき）・印の見本", /押印する ?3件（9\/29（火）・10\/1（木）・10\/2（金））/.test(conf) && /対象外 ?1件（10\/3（土） 押印済み（森川））/.test(conf) && await page.isVisible("#sealBulkDialog img.seal-bulk-preview"), conf.slice(0, 200));
   check("確認画面ではまだ書き込まない", JSON.stringify((await SNAP()).seal) === JSON.stringify(before.seal));
   await page.click('[data-sb="apply"]'); await page.waitForSelector(".seal-bulk-result-head");
   check("結果: 押印した3件・対象外1件・失敗0件", /押印した 3件・対象外 1件・失敗 0件/.test(await dlgText()), (await dlgText()).slice(0, 120));
@@ -141,7 +141,7 @@ const OTHER = "佐藤";
   check("ダイアログに前回の一括押印（3件）と［前回の一括押印を元に戻す］", /前回の一括押印: .*山田・3件/.test(await dlgText()) && await page.isVisible('[data-sb="undo"]'));
   await page.click('[data-sb="undo"]'); await page.waitForTimeout(500);
   const u1 = await SNAP();
-  check("元に戻すと3件は印なしに戻り、10/3（佐藤）はそのまま", [ids.s29, ids.o01, ids.o02a].every((id) => u1.seal[id] === null) && JSON.stringify(u1.seal[ids.o03]) === JSON.stringify(before.seal[ids.o03]));
+  check("元に戻すと3件は印なしに戻り、10/3（森川）はそのまま", [ids.s29, ids.o01, ids.o02a].every((id) => u1.seal[id] === null) && JSON.stringify(u1.seal[ids.o03]) === JSON.stringify(before.seal[ids.o03]));
   check("元に戻しても印以外の項目・職長サイン・写真は変わらない", Object.keys(before.body).every((id) => before.body[id] === u1.body[id]) && u1.sig === before.sig && u1.photos === before.photos);
   check("元に戻した後は［前回の一括押印を元に戻す］が出ない", !(await page.isVisible('[data-sb="undo"]')));
 
@@ -155,10 +155,10 @@ const OTHER = "佐藤";
   const o1 = await SNAP();
   check("押し直すと10/3は名前だけ変わり、位置（右へ50）はそのまま", o1.seal[ids.o03]?.name === NAME && o1.seal[ids.o03].offsetX === 50 && o1.seal[ids.o01]?.name === NAME);
   // 押印の後に別の画面で印を変えた日報は、元に戻さない
-  await page.evaluate(async (id) => (await import("/js/reports.js")).updateReport(id, { directorSeal: { name: "鈴木" } }), ids.o01);
+  await page.evaluate(async (id) => (await import("/js/reports.js")).updateReport(id, { directorSeal: { name: "林田" } }), ids.o01);
   await page.click('[data-sb="undoThis"]'); await page.waitForTimeout(500);
   const o2 = await SNAP();
-  check("［元に戻す］: 10/3は佐藤（押す前）に戻り、後から印を変えた10/1は変えない（理由を表示）", JSON.stringify(o2.seal[ids.o03]) === JSON.stringify(before.seal[ids.o03]) && o2.seal[ids.o01]?.name === "鈴木" && /元に戻しました: 1件（戻さなかった日報: 10\/1（木） 一括押印の後に印が変更されている/.test(await dlgText()), (await dlgText()).slice(-160));
+  check("［元に戻す］: 10/3は森川（押す前）に戻り、後から印を変えた10/1は変えない（理由を表示）", JSON.stringify(o2.seal[ids.o03]) === JSON.stringify(before.seal[ids.o03]) && o2.seal[ids.o01]?.name === "林田" && /元に戻しました: 1件（戻さなかった日報: 10\/1（木） 一括押印の後に印が変更されている/.test(await dlgText()), (await dlgText()).slice(-160));
   await page.click('[data-sb="close"]');
 
   // 確認画面の後に変更された日報があれば、何も書かない

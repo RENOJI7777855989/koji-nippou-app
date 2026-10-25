@@ -1,7 +1,7 @@
 /* ==========================================================
    提出金額内訳書（会社様式.xlsx）の解析（純粋関数、DOM・DB非依存）
    出力側（js/submission-output/）が「積算→様式」へ書き出すのと逆向きに、
-   完成した内訳書（例: 七里 提出金額.xlsx）から
+   完成した内訳書（例: ○○団地 提出金額.xlsx）から
      区分（号棟等）→ 工種 → 種別 → 明細
    の階層つき明細を取り出す。頁の行数・見出し/小計/頁番号/会社名の位置・
    明細行の偶奇は、templateProfile.jsがそのファイル自身から導出したものを
@@ -21,7 +21,7 @@
 import { analyzeSubmissionTemplate, parseSheetRows, parseSharedStrings } from "../submission-output/templateProfile.js";
 import { normalizeItemText } from "../vendorQuote/itemNormalize.js";
 
-// 記号（頁先頭行のA列）の種類。七里様式の記号体系（区分=全角英大文字、工種=数字、種別=小文字英字）。
+// 記号（頁先頭行のA列）の種類。○○団地の様式の記号体系（区分=全角英大文字、工種=数字、種別=小文字英字）。
 // 別の記号体系の様式では解析できない旨を警告する（推測で分類しない）。
 const SYMBOL_CLASSES = [
   { level: "group", re: /^[Ａ-Ｚ]$/ },

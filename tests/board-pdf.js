@@ -27,8 +27,8 @@ const seed = async (page) => page.evaluate(async (date) => {
   const r = stampNew({ siteId: site.id, date, dayStatus: "work", weather: "曇り", temperature: "21", progressPercent: 55, siteSupervisorNames: [],
     timeline: defaultWorkdayTimeline().map((x, i) => ({ ...x, id: "t" + i })),
     companies: [
-      { companyId: "a", companyName: "ナダカ工業", occupation: "外壁塗装", plannedWorkerCount: "4", actualWorkerCount: "4", workHours: "08:00～17:00", workContent: "外壁中塗り", safetyNotes: "足場上の墜落注意", foremanName: "山田", billingManDays: "9.5" },
-      { companyId: "b", companyName: "協栄工業", occupation: "足場", plannedWorkerCount: "2", actualWorkerCount: "2", workHours: "08:30～16:30", workContent: "足場盛替え", safetyNotes: "資材の落下注意", foremanName: "佐藤", billingManDays: "7.25" }],
+      { companyId: "a", companyName: "アオバ塗装工業", occupation: "外壁塗装", plannedWorkerCount: "4", actualWorkerCount: "4", workHours: "08:00～17:00", workContent: "外壁中塗り", safetyNotes: "足場上の墜落注意", foremanName: "山田", billingManDays: "9.5" },
+      { companyId: "b", companyName: "イズミ足場工業", occupation: "足場", plannedWorkerCount: "2", actualWorkerCount: "2", workHours: "08:30～16:30", workContent: "足場盛替え", safetyNotes: "資材の落下注意", foremanName: "森川", billingManDays: "7.25" }],
     deliveries: [{ id: "d1", direction: "in", time: "09:00", item: "塗料", quantity: "12缶", vendor: "サンプル商事", status: "plan" }, { id: "d2", direction: "out", time: "15:30", item: "空缶", quantity: "1式", vendor: "サンプル運送", status: "plan" }],
     remarks: "連絡テスト：午後から車両通行止め", tomorrowPlan: "上塗り", patrolChecklist: { morningMeeting: "good" } });
   await dbPut("reports", r);
@@ -122,7 +122,7 @@ const pdfInfo = (page, pdf) => page.evaluate(async (b64) => {
   const d1 = await diff(jpegOf(r1.pdf), png1);
   check("PDFの画像は、印刷用HTMLを画面に表示した紙面と同じ見た目（画素の差が小さい。欄の中身が違うと区画の差は19程度になる）", d1.mean < 2 && d1.max < 12, JSON.stringify(d1));
   const text1 = html1.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-  const want = ["PDF共有の確認現場", "K-777", "2026/09/15", "55%", "曇り", "21℃", "08:00", "朝礼", "08:20", "12:00", "昼休憩", "16:45", "片付け開始", "17:00", "作業終了", "塗料", "空缶", "ナダカ工業", "外壁塗装", "協栄工業", "足場", "08:00～17:00", "08:30～16:30", "足場上の墜落注意", "資材の落下注意", "山田", "連絡テスト：午後から車両通行止め", "上塗り"];
+  const want = ["PDF共有の確認現場", "K-777", "2026/09/15", "55%", "曇り", "21℃", "08:00", "朝礼", "08:20", "12:00", "昼休憩", "16:45", "片付け開始", "17:00", "作業終了", "塗料", "空缶", "アオバ塗装工業", "外壁塗装", "イズミ足場工業", "足場", "08:00～17:00", "08:30～16:30", "足場上の墜落注意", "資材の落下注意", "山田", "連絡テスト：午後から車両通行止め", "上塗り"];
   const missing = want.filter((w) => !text1.includes(w));
   check("PDF（＝A3印刷の内容）に現場名・工事番号・日付・進捗率・天気・気温・流れ・搬入搬出・業者・工種・作業時間・職長・安全注意事項・連絡事項・明日の予定", missing.length === 0, missing.join(","));
   check("人数・人工（4人・2人、合計6）が入る", /6人/.test(text1) && text1.includes("4 / 4") && text1.includes("2 / 2"));

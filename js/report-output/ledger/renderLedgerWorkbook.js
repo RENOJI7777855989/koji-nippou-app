@@ -26,6 +26,7 @@ import { parseSharedStringsXml, readSheetCells, mapSheetCells, colToIndex, index
 import { WorkbookCalculator } from "./formulaCache.js";
 import { buildXlsxCellPlan } from "../xlsxCellPlan.js";
 import { applyDiagonalBorders } from "../xlsxDiagonal.js";
+import { applyCenterAlignment, expandRange } from "../xlsxAlign.js";
 import { assignTradeRows, freeLabelWrites } from "../tradeAttendance.js";
 import { attendanceBreakdown } from "../../dashboard/attendanceBreakdown.js";
 import {
@@ -439,6 +440,26 @@ export async function renderLedgerWorkbook({ templateBuffer, mapping, site, entr
       pkg.setText(pathOf(name), d.sheetXml);
       stylesXml = d.stylesXml;
       if (d.missing.length) warnings.push(`「${name}」で斜線を付けるセルが見つかりませんでした: ${d.missing.slice(0, 5).join("・")}${d.missing.length > 5 ? " ほか" : ""}`);
+    }
+    pkg.setText("xl/styles.xml", stylesXml);
+  }
+  // 稼動人数表・点検項目の中央揃え（手書印刷用と同じ位置を、日報の有無に関係なく全頁に。出力の複製の書式だけ）
+  const centerCells = (pageCfgBase.centerAlignRanges || []).flatMap(expandRange);
+  if (centerCells.length) {
+    let stylesXml = await pkg.getText("xl/styles.xml");
+    const cache = new Map();
+    const bySheet = new Map();
+    for (let d = 0; d <= lastDayIndex; d++) {
+      const name = sheetNames[Math.floor(d / profile.pagesPerSheet)];
+      if (!name) continue;
+      const off = (d % profile.pagesPerSheet) * profile.pageRows;
+      if (!bySheet.has(name)) bySheet.set(name, []);
+      bySheet.get(name).push(...centerCells.map((ref) => shiftRef(ref, off)));
+    }
+    for (const [name, cells] of bySheet) {
+      const c = applyCenterAlignment({ sheetXml: await pkg.getText(pathOf(name)), stylesXml, cells, cache });
+      pkg.setText(pathOf(name), c.sheetXml);
+      stylesXml = c.stylesXml;
     }
     pkg.setText("xl/styles.xml", stylesXml);
   }

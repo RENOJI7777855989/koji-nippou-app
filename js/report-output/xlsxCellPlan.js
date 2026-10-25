@@ -10,6 +10,7 @@
 import { renderTemplateString } from "./xlsxTemplateEngine.js";
 import { assignTradeRowsForDay, buildTradeAttendanceWrites } from "./tradeAttendance.js";
 import { patrolSlashApplies } from "../patrolChecklist.js";
+import { expandRange } from "./xlsxAlign.js";
 
 /**
  * @returns {{
@@ -153,7 +154,9 @@ export function buildXlsxCellPlan(model, cfg) {
     if (patrolSlashApplies(model.report)) diagonalCells.push(...(patrolChecklist.slashCells || Object.values(patrolChecklist.itemCells || {})));
   }
 
-  return { cellWrites, images, diagonalCells, fitToPage: cfg.fitToPage || null, sheetName: cfg.sheetName, warnings };
+  // 中央揃えにするセル（出力時に書式として付ける。xlsxAlign.js）
+  const centerCells = (cfg.centerAlignRanges || []).flatMap(expandRange);
+  return { cellWrites, images, diagonalCells, centerCells, fitToPage: cfg.fitToPage || null, sheetName: cfg.sheetName, warnings };
 }
 
 function parseCellRefRow(ref) {

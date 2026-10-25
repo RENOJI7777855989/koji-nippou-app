@@ -20,7 +20,7 @@ export function newSubmissionGroup({ name, kind }) {
   if (!SUBMISSION_GROUP_KIND_LABELS[kind]) throw new Error(`不正な区分の種類です: ${kind}`);
   const trimmed = String(name ?? "").trim();
   if (!trimmed) throw new Error("区分グループ名を入力してください");
-  // 現場管理費は原本（七里）でも内訳頁を持たない（表紙の1行のみ）ため、既定では内訳頁を作らない
+  // 現場管理費は原本（○○団地の様式）でも内訳頁を持たない（表紙の1行のみ）ため、既定では内訳頁を作らない
   return { id: createId(), name: trimmed, kind, expand: kind !== "site_management" };
 }
 

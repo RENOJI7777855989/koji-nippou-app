@@ -139,7 +139,7 @@ async function pdfInk(page, pdf) {
 
   // ===== ① 余白・1ページ・文字のはみ出し =====
   const html0 = { normal: await htmlOf(ids.normal), heavy: await htmlOf(ids.heavy), empty: await htmlOf(ids.empty) };
-  check("印刷用HTMLの印刷レイアウトの版が v71", /name="print-layout-version" content="v71"/.test(html0.normal));
+  check("印刷用HTMLの印刷レイアウトの版が v72", /name="print-layout-version" content="v72"/.test(html0.normal));
   check("@page の左右の余白が同じ（様式の左右の合計を半分ずつ）", /@page \{ size: 420mm 297mm; margin: [\d.]+mm 15mm [\d.]+mm 15mm; \}/.test(html0.normal), (html0.normal.match(/@page[^}]*\}/) || [""])[0]);
   check("印刷用HTMLに viewport と text-size-adjust（iPad の文字の自動拡大を止める）", /name="viewport"/.test(html0.normal) && /text-size-adjust: 100%/.test(html0.normal));
   for (const [label, html] of [["普通の日", html0.normal], ["業者14社・長い文", html0.heavy], ["空欄の日報", html0.empty]]) {

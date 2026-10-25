@@ -58,6 +58,8 @@ export const ANZEN_EISEI_LEDGER_MAPPING = {
     // 稼動人数の業種別（台帳シートは累計・計・延労働時間が数式なので、その日の人数と空き行の業種名だけ書く）。
     // 本日の重点指示・作業間の連絡・調整・資材・機材搬入も手書印刷用と同じ位置（台帳シートで確認済み）
     tradeAttendance: { ...FORM.tradeAttendance, cumulative: false },
+    // 中央揃え（手書印刷用と同じ位置。各頁にずらして使う）
+    centerAlignRanges: FORM.centerAlignRanges,
     textLines: FORM.textLines,
     deliveriesAmPm: FORM.deliveriesAmPm
   }

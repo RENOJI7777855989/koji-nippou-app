@@ -228,7 +228,9 @@ export function readSheetLayout(sheetXml, sharedStrings) {
       } else {
         text = cEl.getElementsByTagName("v")[0]?.textContent || "";
       }
-      if (text !== "" || styleIndex) cells.set(ref, { text, styleIndex });
+      // numeric: 数値のセル（t が無いか "n"）。配置が「標準」のとき Excel は数値を右寄せにするため（印刷用HTMLで同じにする）
+      const numeric = (!type || type === "n") && text !== "" && Number.isFinite(Number(text));
+      if (text !== "" || styleIndex) cells.set(ref, { text, styleIndex, numeric });
     });
   });
 

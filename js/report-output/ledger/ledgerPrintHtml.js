@@ -11,13 +11,21 @@
    ・シートの「ゼロ値を表示しない」設定（showZeros="0"）に従い0は空欄にする
    ・様式の図形（測量機器の表・注記）は、台帳と同じ配置の様式シートの図形を
      各頁に重ねる（台帳シート側はグループ図形で、位置・内容は同じ）
+   ・2026-10-26: 日報のPDF（companyPdfFromXlsx.js）と同じ考え方にした。
+     ①セルの文字を Excel の行の高さ・列の幅の箱（div.xc）に入れて行が伸びないようにする（以前は全行が約25%伸び、
+       Excel の行の高さで置く図（測量機器の表）が8行分ほど上にずれていた）。収まらない文字は箱の中で折り返して縮める（PDF_CELL_FIT_SCRIPT）
+     ②CSS の zoom で縮めず、最初から縮めた大きさ（列の幅・行の高さ・文字・図・サイン）で作る（iPad の Safari の印刷は zoom を文字に
+       効かせず、文字だけ約1.34倍に描かれて枠からはみ出す。日報のPDFで実物の PDF から確認した問題）
+     ③表の右に足す空白の代わりに列を広げ（widenColumnsToFill）、頁の高さ÷幅を PRINT_HEIGHT_RATIO（0.63）にする（Safari は内容を
+       用紙の幅いっぱいに合わせるため、0.867 だった以前は1日分が2ページに分かれた）。左右の余白は同じにする。
+     台帳Excel・日報のPDF・データは変えない。図形の大きさは変えず、広がった範囲の中央に置く。職長サインは該当の欄の箱に収める
    ========================================================== */
 
 import { loadZip, readZipEntryText } from "../../zipUtil.js";
 import { WorkbookPackage, parseDefinedNames, parseRelationships, resolvePartPath } from "./workbookPackage.js";
 import { parseXlsxStyles, parseSharedStrings, readSheetLayout } from "../xlsxSheetReader.js";
 import { resolveSheetPartPath } from "../xlsxTemplateEngine.js";
-import { PAPER_SIZE_MM, buildOffsets, collectTemplateShapes, cellStyleToCss, overlayImageHtml } from "../renderers/companyPdfFromXlsx.js";
+import { PAPER_SIZE_MM, buildOffsets, collectTemplateShapes, cellStyleToCss, overlayImageHtml, borderlessSpillWidth, widenColumnsToFill, PDF_CELL_FIT_SCRIPT, PRINT_HEIGHT_RATIO, PRINT_SAFE_MARGIN_MM } from "../renderers/companyPdfFromXlsx.js";
 import { escapeHtml } from "../../utils.js";
 import { indexToCol } from "./sheetCells.js";
 
@@ -228,7 +236,12 @@ async function collectSignaturesByPage(pkg, sheet, { pageRows, pageBase }) {
   return byPage;
 }
 
-function buildPageTable(layout, classOf, inlineImages = []) {
+/**
+ * 1頁分の表の行（tbody の中身）。文字は Excel の行の高さ・列の幅の箱（div.xc）に入れる（行が伸びない）。
+ * @param {object} layout 列の幅・行の高さを縮めた後の1頁分のレイアウト
+ * @param {object} ctx { classOf, styles, inlineImages, isGeneral }
+ */
+function buildPageTable(layout, { classOf, styles, inlineImages = [], isGeneral = () => false }) {
   const inlineAt = new Map(inlineImages.map((i) => [`${i.row},${i.col}`, i]));
   const covered = new Set();
   const spanAt = new Map();
@@ -236,21 +249,50 @@ function buildPageTable(layout, classOf, inlineImages = []) {
     spanAt.set(`${m.r1},${m.c1}`, { rowspan: m.r2 - m.r1 + 1, colspan: m.c2 - m.c1 + 1 });
     for (let r = m.r1; r <= m.r2; r++) for (let c = m.c1; c <= m.c2; c++) if (r !== m.r1 || c !== m.c1) covered.add(`${r},${c}`);
   }
+  const cellAt = (r, c) => layout.cells.get(`${indexToCol(c)}${r}`);
+  const hasText = (r, c) => !!String(cellAt(r, c)?.text || "").length;
+  const styleAt = (r, c) => styles.resolveStyle(cellAt(r, c)?.styleIndex || 0);
+  // 真下の空いたセルへ、罫線で区切られていない範囲だけ箱を下に伸ばせる高さ（日報のPDFと同じ決まり）
+  const extendDown = (rBelow, c1, c2) => {
+    let h = 0;
+    for (let k = rBelow; k <= layout.maxRow; k++) {
+      let ok = true;
+      for (let cc = c1; cc <= c2; cc++) {
+        const key = `${k},${cc}`;
+        if (covered.has(key) || spanAt.has(key) || hasText(k, cc) || styleAt(k - 1, cc).border.bottom || styleAt(k, cc).border.top) { ok = false; break; }
+      }
+      if (!ok) break;
+      h += layout.rowHeightPx[k] || 0;
+    }
+    return h;
+  };
   const rows = [];
   for (let r = 1; r <= layout.maxRow; r++) {
     const tds = [];
     for (let c = 1; c <= layout.maxCol; c++) {
       if (covered.has(`${r},${c}`)) continue;
-      const cell = layout.cells.get(`${indexToCol(c)}${r}`);
+      const cell = cellAt(r, c);
       const span = spanAt.get(`${r},${c}`);
       const spanAttrs = span ? ` rowspan="${span.rowspan}" colspan="${span.colspan}"` : "";
-      const inline = inlineAt.get(`${r},${c}`);
-      const inlineHtml = inline ? `<img src="${inline.dataUrl}" alt="" style="display:block;max-width:100%;max-height:${layout.rowHeightPx[r]}px;object-fit:contain">` : "";
+      const rowsN = span?.rowspan || 1, colsN = span?.colspan || 1;
+      let boxW = 0; for (let k = c; k < c + colsN; k++) boxW += layout.colWidthPx[k] || 0;
+      let boxH = 0; for (let k = r; k < r + rowsN; k++) boxH += layout.rowHeightPx[k] || 0;
       const text = escapeHtml(cell?.text || "").replace(/\n/g, "<br>");
-      // 文字は span.tx に入れる（縦書きのセルは CSS で span を縦書きにする）
-      tds.push(`<td class="${classOf(cell?.styleIndex || 0)}"${spanAttrs}>${text ? `<span class="tx">${text}</span>` : ""}${inlineHtml}</td>`);
+      const inline = inlineAt.get(`${r},${c}`);
+      const st = styleAt(r, c);
+      const vertical = st.alignment.textRotation === 255;
+      const wrap = !!st.alignment.wrapText || vertical;
+      const numericRight = !!(cell?.numeric && text && isGeneral(cell.styleIndex || 0));
+      const hz = st.alignment.horizontal || (numericRight ? "right" : "");
+      const distributed = hz === "distributed" || hz === "justify";
+      if (text || inline) boxH += extendDown(r + rowsN, c, c + colsN - 1);
+      const spill = !wrap && text && !distributed ? boxW + borderlessSpillWidth(layout, styles, r, c, c + colsN - 1, hz) : boxW;
+      const box = text ? `<div class="xc${vertical ? " xc-vert" : ""}" data-w="${Math.round(boxW)}" data-spill="${Math.round(spill)}" data-wrap="${wrap ? 1 : 0}" style="width:${Math.max(1, Math.round(boxW) - 4)}px;height:${Math.max(0, Math.round(boxH) - 1)}px"><span>${text}</span></div>` : "";
+      // 職長サイン: 該当の欄（結合・真下の空いた行を含む）の箱に収める（縦横比は保つ）
+      const sign = inline ? `<img class="ledger-sign" src="${inline.dataUrl}" alt="" style="width:${Math.round(boxW)}px;height:${Math.max(1, Math.round(boxH) - 2)}px">` : "";
+      tds.push(`<td class="${classOf(cell?.styleIndex || 0)}${numericRight ? " xn" : ""}"${spanAttrs}>${box}${sign}</td>`);
     }
-    rows.push(`<tr style="height:${layout.rowHeightPx[r]}px">${tds.join("")}</tr>`);
+    rows.push(`<tr style="height:${+layout.rowHeightPx[r].toFixed(2)}px">${tds.join("")}</tr>`);
   }
   return rows.join("");
 }
@@ -279,7 +321,7 @@ export async function buildLedgerPrintHtml({ ledgerBlob, templateBuffer = null, 
     return classNames.get(styleIndex);
   };
 
-  const pagesHtml = [];
+  const pages = []; // { layout, signatures }
   const sheetsWithPages = [];
   let pageLayout = null;
   for (const sheet of sheets) {
@@ -289,56 +331,80 @@ export async function buildLedgerPrintHtml({ ledgerBlob, templateBuffer = null, 
     const lastCol = m[3];
     const totalRows = Number(m[4]) - Number(m[2]) + 1;
     const sheetXml = await pkg.getText(sheet.path);
-    sheetsWithPages.push({ sheet, pageBase: pagesHtml.length });
+    sheetsWithPages.push({ sheet, pageBase: pages.length });
     const signatures = await collectSignaturesByPage(pkg, sheet, { pageRows, pageBase: 0 });
     const hideZeros = /<sheetView\b[^>]*\sshowZeros="0"/.test(sheetXml);
     for (let p = 0; p < Math.ceil(totalRows / pageRows); p++) {
       const pageXml = slicePageSheetXml(sheetXml, { firstRow: Number(m[2]) + p * pageRows, pageRows, lastCol, formatOf, hideZeros });
       const layout = readSheetLayout(pageXml, sharedStrings);
       pageLayout ||= layout;
-      pagesHtml.push(buildPageTable(layout, classOf, signatures.get(p) || []));
+      pages.push({ layout, signatures: signatures.get(p) || [] });
     }
   }
   if (!pageLayout) throw new Error("台帳に印刷範囲のあるシートがありません。");
 
+  // 用紙と余白（左右は同じにする。様式の左右の合計を半分ずつ。日報のPDFと同じ）
+  const [paperW, paperH] = PAPER_SIZE_MM[pageLayout.pageSetup.paperSize] || [297, 420];
+  const landscape = pageLayout.pageSetup.orientation === "landscape";
+  const pageSizeMm = landscape ? [Math.max(paperW, paperH), Math.min(paperW, paperH)] : [Math.min(paperW, paperH), Math.max(paperW, paperH)];
+  const mg = pageLayout.pageMarginsIn;
+  const sideMm = ((mg.left + mg.right) * 25.4) / 2;
+  const mmToPx = (mm) => (mm / 25.4) * 96;
+  const availW = mmToPx(Math.min(pageSizeMm[0] - sideMm * 2, pageSizeMm[0] - PRINT_SAFE_MARGIN_MM.left - PRINT_SAFE_MARGIN_MM.right));
+  const availH = mmToPx(Math.min(pageSizeMm[1] - (mg.top + mg.bottom) * 25.4, pageSizeMm[1] - PRINT_SAFE_MARGIN_MM.top - PRINT_SAFE_MARGIN_MM.bottom));
+  // 列の幅: 頁の高さ÷幅が PRINT_HEIGHT_RATIO になるまで列を広げる（全頁で同じ幅。1頁目の文字で足りない列を先に広げる）
+  const sumOf = (arr, n) => arr.slice(1, n + 1).reduce((a, b) => a + (b || 0), 0);
+  const extraPx = sumOf(pageLayout.rowHeightPx, pageLayout.maxRow) / PRINT_HEIGHT_RATIO - sumOf(pageLayout.colWidthPx, pageLayout.maxCol);
+  const widths = extraPx > 0 ? widenColumnsToFill(pageLayout, styles, extraPx) : pageLayout.colWidthPx.slice();
+  // 倍率: 最初から縮めた大きさで作る（CSS の zoom は使わない）。幅の余裕は 0.995、高さは 0.97（日報のPDFと同じ）
+  const tableHpx = sumOf(pageLayout.rowHeightPx, pageLayout.maxRow) + 1;
+  const tableWpx = Math.max(sumOf(widths, pageLayout.maxCol), tableHpx / PRINT_HEIGHT_RATIO);
+  const scale = Math.min(1, (availW / tableWpx) * 0.995, (availH / tableHpx) * 0.97);
+  const colW = widths.map((w) => (w || 0) * scale);
+  const scaled = (layout) => ({ ...layout, colWidthPx: colW, rowHeightPx: layout.rowHeightPx.map((h) => (h || 0) * scale) });
+  const isGeneral = (idx) => !styles.resolveStyle(idx).alignment?.horizontal;
+  const pagesHtml = pages.map(({ layout, signatures }) => buildPageTable(scaled(layout), { classOf, styles, inlineImages: signatures, isGeneral }));
+
   // 様式の図形（各頁の同じ位置に重ねる）。台帳シート自身の図形を使い、無ければ様式シートの図形で代用する
   let overlayHtml = "";
   const textHtml = (s) => `<div class="xlsx-overlay-text" style="left:${s.left}px;top:${s.top}px;width:${s.width}px;height:${s.height}px;font-size:${s.fontSizePx}px">${escapeHtml(s.text)}</div>`;
-  const ledgerShapes = await collectLedgerPageShapes(pkg, sheetsWithPages[0].sheet, { pageRows, colOffsetPx: buildOffsets(pageLayout.colWidthPx), rowOffsetPx: buildOffsets(pageLayout.rowHeightPx) });
+  // 図形は列を広げる前の大きさのまま、広がった範囲の中央に置き、倍率をかける
+  const sc = (b) => ({ ...b, left: b.left * scale, top: b.top * scale, width: b.width * scale, height: b.height * scale, ...(b.fontSizePx ? { fontSizePx: Math.round(b.fontSizePx * scale * 10) / 10 } : {}) });
+  const rowOff = buildOffsets(pageLayout.rowHeightPx);
+  const wide = await collectLedgerPageShapes(pkg, sheetsWithPages[0].sheet, { pageRows, colOffsetPx: buildOffsets(widths), rowOffsetPx: rowOff });
+  const orig = await collectLedgerPageShapes(pkg, sheetsWithPages[0].sheet, { pageRows, colOffsetPx: buildOffsets(pageLayout.colWidthPx), rowOffsetPx: rowOff });
+  const keepSize = (list, origList) => list.map((b, i) => (origList[i] ? { ...b, left: b.left + (b.width - origList[i].width) / 2, width: origList[i].width } : b));
+  const ledgerShapes = { images: keepSize(wide.images, orig.images).map(sc), texts: keepSize(wide.texts, orig.texts).map(sc) };
   if (ledgerShapes.images.length + ledgerShapes.texts.length > 0) {
     overlayHtml = ledgerShapes.images.map(overlayImageHtml).join("") + ledgerShapes.texts.map(textHtml).join("");
   } else if (templateBuffer && formSheetName) {
     const zip = loadZip(templateBuffer);
     const sheetPath = resolveSheetPartPath(await readZipEntryText(zip, "xl/workbook.xml"), await readZipEntryText(zip, "xl/_rels/workbook.xml.rels"), formSheetName);
-    const { images, textShapes } = await collectTemplateShapes(zip, sheetPath, buildOffsets(pageLayout.colWidthPx), buildOffsets(pageLayout.rowHeightPx));
+    const shapes = await collectTemplateShapes(zip, sheetPath, buildOffsets(colW), buildOffsets(pageLayout.rowHeightPx.map((h) => (h || 0) * scale)));
+    const images = shapes.images, textShapes = shapes.textShapes.map((t) => ({ ...t, fontSizePx: Math.round(t.fontSizePx * scale * 10) / 10 }));
     overlayHtml =
       images.map(overlayImageHtml).join("") +
       textShapes.map((s) => `<div class="xlsx-overlay-text" style="left:${s.left}px;top:${s.top}px;width:${s.width}px;height:${s.height}px;font-size:${s.fontSizePx}px">${escapeHtml(s.text)}</div>`).join("");
   }
 
-  const colWidths = pageLayout.colWidthPx.slice(1, pageLayout.maxCol + 1);
+  const colWidths = colW.slice(1, pageLayout.maxCol + 1);
   const totalWidthPx = colWidths.reduce((a, b) => a + b, 0);
-  const colGroup = colWidths.map((w) => `<col style="width:${w}px">`).join("");
+  const colGroup = colWidths.map((w) => `<col style="width:${+w.toFixed(2)}px">`).join("");
   const styleCss = [...classNames]
     .map(([idx, cls]) => {
       const st = styles.resolveStyle(idx);
-      const base = `table.xlsx-sheet td.${cls}{${cellStyleToCss(st).replace(/[<>]/g, "")}}`;
-      // 縦書き（textRotation=255）のセル（巡回点検の分類名など）は縦書きで表示する（横書きだと細い枠からはみ出す）
-      return st.alignment?.textRotation === 255
-        ? `${base}\ntable.xlsx-sheet td.${cls}{text-align:center;vertical-align:middle;white-space:normal}table.xlsx-sheet td.${cls}>.tx{writing-mode:vertical-rl;text-orientation:upright;display:inline-block;max-height:100%}`
-        : base;
+      const al = st.alignment || {};
+      const vertical = al.textRotation === 255;
+      const distributed = al.horizontal === "distributed" || al.horizontal === "justify";
+      const valign = vertical || al.vertical === "center" ? "center" : al.vertical === "top" ? "flex-start" : "flex-end";
+      const halign = vertical ? "center" : distributed ? "stretch" : al.horizontal === "center" ? "center" : al.horizontal === "right" ? "flex-end" : "flex-start";
+      const span = [distributed && !vertical ? "display:block;text-align:justify;text-align-last:justify" : "", st.font?.underline ? "text-decoration:underline" : ""].filter(Boolean).join(";");
+      return `table.xlsx-sheet td.${cls}{${cellStyleToCss(st, scale).replace(/[<>]/g, "")}}\ntable.xlsx-sheet td.${cls} .xc{justify-content:${valign};align-items:${halign}}${span ? `\ntable.xlsx-sheet td.${cls} .xc>span{${span}}` : ""}`;
     })
     .join("\n");
 
-  const [paperW, paperH] = PAPER_SIZE_MM[pageLayout.pageSetup.paperSize] || [297, 420];
-  const landscape = pageLayout.pageSetup.orientation === "landscape";
-  const pageSizeMm = landscape ? [Math.max(paperW, paperH), Math.min(paperW, paperH)] : [Math.min(paperW, paperH), Math.max(paperW, paperH)];
-  const mg = pageLayout.pageMarginsIn;
-  const mmToPx = (mm) => (mm / 25.4) * 96;
-  const availW = mmToPx(pageSizeMm[0] - (mg.left + mg.right) * 25.4);
-  const availH = mmToPx(pageSizeMm[1] - (mg.top + mg.bottom) * 25.4);
-  // 1頁が用紙の印刷可能範囲に収まる倍率（描画された表の実寸から計算。会社様式PDFと同じ方式）
-  const fitScript = `<script>(function(){var AW=${availW.toFixed(1)},AH=${availH.toFixed(1)};function fit(){var w=document.querySelector(".ledger-page");if(!w)return;var t=w.querySelector("table.xlsx-sheet");w.style.zoom="1";var r=t.getBoundingClientRect();if(!r.width||!r.height)return;var z=String(Math.min(1,AW/r.width*0.99,AH/r.height*0.99));var ws=document.querySelectorAll(".ledger-page");for(var i=0;i<ws.length;i++)ws[i].style.zoom=z;}fit();window.addEventListener("load",fit);window.addEventListener("beforeprint",fit);})();</script>`;
+  // 安全策: 描画された表が計算より大きかったときだけ zoom で縮める（計算どおりなら zoom=1 のまま）。紙面の幅は「高さ÷0.63」以上
+  const fitScript = `<script>(function(){var AW=${availW.toFixed(1)},AH=${availH.toFixed(1)},RATIO=${PRINT_HEIGHT_RATIO};function fit(){var ws=document.querySelectorAll(".ledger-page");for(var i=0;i<ws.length;i++){var w=ws[i];var t=w.querySelector("table.xlsx-sheet");if(!t)continue;w.style.zoom="1";w.style.width="";var r=t.getBoundingClientRect();if(!r.width||!r.height)continue;var WW=Math.max(r.width,r.height/RATIO);w.style.width=WW+"px";var z=Math.min(1,AW/WW*0.995,AH/r.height*0.97);w.style.zoom=z<0.99?String(z):"1";}}fit();window.addEventListener("load",fit);window.addEventListener("beforeprint",fit);})();</script>`;
 
   const sections = pagesHtml
     .map(
@@ -351,22 +417,32 @@ export async function buildLedgerPrintHtml({ ledgerBlob, templateBuffer = null, 
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <style>
-  @page { size: ${pageSizeMm[0]}mm ${pageSizeMm[1]}mm; margin: ${mg.top * 25.4}mm ${mg.right * 25.4}mm ${mg.bottom * 25.4}mm ${mg.left * 25.4}mm; }
+  @page { size: ${pageSizeMm[0]}mm ${pageSizeMm[1]}mm; margin: ${mg.top * 25.4}mm ${sideMm}mm ${mg.bottom * 25.4}mm ${sideMm}mm; }
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body { margin: 0; }
   .ledger-page { position: relative; }
   table.xlsx-sheet { border-collapse: collapse; table-layout: fixed; }
-  table.xlsx-sheet td { padding: 1px 2px; }
+  table.xlsx-sheet td { padding: 0 2px; position: relative; }
+  /* セルの中身の箱: Excelの行の高さに固定し、セルの上に重ねて置く（行が伸びて図がずれるのを防ぐ。日報のPDFと同じ） */
+  table.xlsx-sheet td .xc { position: absolute; left: 2px; top: 0; display: flex; flex-direction: column; overflow: visible; line-height: 1.15; white-space: pre; }
+  table.xlsx-sheet td .xc.xc-fit { overflow: hidden; white-space: pre-wrap; word-break: break-all; align-items: stretch; }
+  table.xlsx-sheet td .xc.xc-vert > span { writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 0.05em; }
+  table.xlsx-sheet td .xc.xc-vert, table.xlsx-sheet td .xc.xc-vert.xc-fit { align-items: center; justify-content: center; }
+  table.xlsx-sheet td.xn .xc { align-items: flex-end; }
+  table.xlsx-sheet td .ledger-sign { position: absolute; left: 0; top: 1px; object-fit: contain; }
   .xlsx-overlay-img { position: absolute; object-fit: contain; }
   .xlsx-overlay-crop { position: absolute; overflow: hidden; }
-  .xlsx-overlay-text { position: absolute; display: flex; align-items: center; justify-content: center; text-align: center; }
+  .xlsx-overlay-text { position: absolute; display: flex; align-items: center; justify-content: center; text-align: center; white-space: nowrap; }
 ${styleCss}
 </style>
 </head>
 <body>
 ${sections}
+<script>${PDF_CELL_FIT_SCRIPT}</script>
 ${fitScript}
 </body>
 </html>`;

@@ -230,12 +230,21 @@ const sha = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
     const a = dec(tpl), b = dec(out);
     const changed = [];
     for (const name of a.entries.keys()) { const x = await readZipEntryBytes(a, name), y = await readZipEntryBytes(b, name); if (!y || x.length !== y.length || x.some((v, i) => v !== y[i])) changed.push(name); }
+    // 書式(styles.xml): 稼動人数表・点検項目の中央揃え（2026-10-25、xlsxAlign.js）で、出力の複製には書式が「末尾に追加」される。
+    // 原本の書式（cellXfs の既存の書式とその他の部分）が1文字も変わっていなければ、変更なしとみなす
+    if (changed.includes("xl/styles.xml")) {
+      const { readZipEntryText } = await import("/js/zipUtil.js");
+      const x = await readZipEntryText(a, "xl/styles.xml"), y = await readZipEntryText(b, "xl/styles.xml");
+      const split = (t) => { const m = /(<cellXfs\b[^>]*>)([\s\S]*?)(<\/cellXfs>)/.exec(t); return { before: t.slice(0, m.index), inner: m[2], after: t.slice(m.index + m[0].length), open: m[1].replace(/\scount="\d+"/, "") }; };
+      const sx = split(x), sy = split(y);
+      if (sx.before === sy.before && sx.after === sy.after && sx.open === sy.open && sy.inner.startsWith(sx.inner)) changed.splice(changed.indexOf("xl/styles.xml"), 1);
+    }
     return changed;
   }, { tpl: templateBytes.toString("base64"), out: fs.readFileSync(xlsxPath).toString("base64") });
   // 他工事データ除去（台帳シート・保存先パス・外部リンク・参照されない共有文字列は出力の複製から外す）ため、それらのパートは原本と一致しない。
   // 書式(styles)・テーマ・記入する様式シートの図形と印刷設定は原本のまま。
   const untouched = ["xl/styles.xml", "xl/theme/theme1.xml", "xl/drawings/drawing1.xml", "xl/printerSettings/printerSettings1.bin", "xl/media/image1.jpg"];
-  check("11 出力Excelで、書式(styles)・テーマ・記入シートの図形と印刷設定は原本のまま（変わるのは記入シート・ブック構成・他工事データの除去だけ）", untouched.every((n) => !partsSame.includes(n)), partsSame.filter((n) => untouched.includes(n)).join(","));
+  check("11 出力Excelで、書式(styles。中央揃えの書式を末尾に足すだけ)・テーマ・記入シートの図形と印刷設定は原本のまま（変わるのは記入シート・ブック構成・他工事データの除去だけ）", untouched.every((n) => !partsSame.includes(n)), partsSame.filter((n) => untouched.includes(n)).join(","));
 
   // ===== 画面幅（iPad・スマホ・Windows）でページ全体が横にはみ出さない =====
   for (const [label, vp] of [["スマホ375", { width: 375, height: 800 }], ["iPad820", { width: 820, height: 1180 }], ["Windows1366", { width: 1366, height: 768 }]]) {

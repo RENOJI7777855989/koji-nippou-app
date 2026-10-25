@@ -65,7 +65,7 @@ const sha = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
         patrolComment: i % 7 === 0 ? `是正${date}` : "",
         companies: [
           { companyId: "c1", companyName: "山田足場工業", occupation: "とび工", plannedWorkerCount: "5", actualWorkerCount: "4", workContent: `足場${date}`, safetyNotes: "墜落注意" },
-          { companyId: "c2", companyName: "佐藤電設", occupation: "電工", plannedWorkerCount: "2", actualWorkerCount: "2", workContent: `配線${date}`, safetyNotes: "感電注意" }
+          { companyId: "c2", companyName: "森川電設", occupation: "電工", plannedWorkerCount: "2", actualWorkerCount: "2", workContent: `配線${date}`, safetyNotes: "感電注意" }
         ]
       });
       ids[date] = r.id;
