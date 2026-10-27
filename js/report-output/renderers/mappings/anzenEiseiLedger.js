@@ -51,6 +51,7 @@ export const ANZEN_EISEI_LEDGER_MAPPING = {
     ],
     // 本文の配置は手書印刷用と同じ（原本で位置・文言の一致を確認済み）
     companiesTable: FORM.companiesTable,
+    dayStatusNote: FORM.dayStatusNote, // 現場作業なし・休工日・雨天作業不可日・事務作業日（手書印刷用と同じ2業者目の作業内容の欄）
     patrolChecklist: FORM.patrolChecklist,
     // 稼動人数表の「社員」行（監督・職員）。台帳シートの P50（社員の累計）は数式の無い値の欄なので、
     // 全頁に工事開始からその日までの累計を書く（計 P51=SUM(P7:P50)・延労働時間 P52=P51*8 に入る）
@@ -60,6 +61,7 @@ export const ANZEN_EISEI_LEDGER_MAPPING = {
     tradeAttendance: { ...FORM.tradeAttendance, cumulative: false },
     // 中央揃え（手書印刷用と同じ位置。各頁にずらして使う）
     centerAlignRanges: FORM.centerAlignRanges,
+    rightAlignRanges: FORM.rightAlignRanges,
     textLines: FORM.textLines,
     deliveriesAmPm: FORM.deliveriesAmPm
   }

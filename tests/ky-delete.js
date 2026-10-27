@@ -1,5 +1,6 @@
 // 危険予知活動表の提出状況から、誤って登録した業者を削除する（提出時刻も一緒に消える）ことを確かめる（架空データ・Chromium）。
-//   ・削除するのは その日・その現場・その業者の KY の記録だけ（提出状況・提出時刻・変更履歴）。保存場所から完全に消す
+//   ・削除するのは その日・その現場・その業者の KY の記録だけ（提出状況・提出時刻・変更履歴）。2026-10-27 から、日報の業者を自動で
+//     提出対象にするので、外した業者が戻らないよう業者名と外した日時だけの印（removed）に置き換える（提出時刻・履歴は残さない）
 //   ・日報の業者・工種・人数・作業時間・署名・写真・請求人工は変えない。日報に無い業者も削除できる。削除後に正しい業者を登録できる
 const path = require("path");
 const fs = require("fs");
@@ -36,7 +37,8 @@ const D = "2026-09-15";
     return { siteId: site.id, reportId: r.id };
   }, D);
   const snapshot = () => page.evaluate(async (rid) => { const { dbGet, dbGetAll } = await import("/js/db.js"); return { report: JSON.stringify(await dbGet("reports", rid)), sigs: JSON.stringify((await dbGetAll("signatures")).map((s) => [s.id, s.reportId, s.companyId, s.isDeleted || false, s.imageBlob?.size])), photos: JSON.stringify((await dbGetAll("photos")).map((p) => [p.id, p.reportId, p.isDeleted || false, p.blob?.size])) }; }, ids.reportId);
-  const kyAll = () => page.evaluate(async (sid) => (await (await import("/js/db.js")).dbGetAll("kySubmissions", "by_siteId", sid)).map((r) => ({ id: r.id, name: r.vendorName, submitted: r.submitted, at: r.submittedAt, hist: r.history?.length || 0, del: !!r.isDeleted })), ids.siteId);
+  const kyAll = () => page.evaluate(async (sid) => (await (await import("/js/db.js")).dbGetAll("kySubmissions", "by_siteId", sid)).map((r) => ({ id: r.id, name: r.vendorName, submitted: r.submitted, at: r.submittedAt, hist: r.history?.length || 0, del: !!r.isDeleted, removed: !!r.removed })), ids.siteId);
+  const active = (list) => list.filter((r) => !r.removed);
   const kyRows = () => page.$$eval("#siteDashboard .dash-ky-table tbody tr", (trs) => trs.map((tr) => ({ name: tr.querySelector("td b").textContent, time: tr.querySelectorAll("td")[2].textContent.trim(), del: !!tr.querySelector("[data-ky-delete]") })));
 
   await page.goto(`${BASE}#/sites/${ids.siteId}`); await page.waitForSelector("#siteDashboard:not([hidden])");
@@ -44,16 +46,14 @@ const D = "2026-09-15";
   await page.click("#siteDashboard .dash-tab[data-tab=manage]");
   const before = await snapshot();
 
-  // ===== 1・2・8 登録（日報の業者2社＋日報に無いウエノ工業）と提出時刻 =====
-  await page.click('[data-ky-add="アオバ塗装工業"]'); await page.waitForTimeout(300);
-  await page.click('[data-ky-add="エノキ建装工業"]'); await page.waitForTimeout(300);
+  // ===== 1・2・8 登録（日報の業者3社は自動で対象＋日報に無いウエノ工業）と提出時刻 =====
   await page.fill("#siteDashboard .dash-ky-name", "ウエノ工業"); await page.click("#siteDashboard .dash-ky-form button[type=submit]"); await page.waitForTimeout(400);
   const kyIds = Object.fromEntries((await kyAll()).map((r) => [r.name, r.id]));
   await page.click(`[data-ky-id="${kyIds["アオバ塗装工業"]}"][data-ky-state="submitted"]`); await page.waitForTimeout(300);
   await page.click(`[data-ky-id="${kyIds["ウエノ工業"]}"][data-ky-state="submitted"]`); await page.waitForTimeout(300);
   let all = await kyAll();
   let rows = await kyRows();
-  check("1・8 KY提出状況に業者を登録（日報に無いウエノ工業も登録できる）", rows.map((r) => r.name).join() === "アオバ塗装工業,エノキ建装工業,ウエノ工業", rows.map((r) => r.name).join());
+  check("1・8 KY提出状況に業者を登録（日報の業者は自動・日報に無いウエノ工業も登録できる）", rows.map((r) => r.name).join() === "アオバ塗装工業,エノキ建装工業,イズミ足場工業,ウエノ工業", rows.map((r) => r.name).join());
   check("2 提出済みにすると提出時刻が記録される（アオバ塗装工業・ウエノ工業）", all.find((r) => r.name === "アオバ塗装工業").at && all.find((r) => r.name === "ウエノ工業").at && rows.find((r) => r.name === "ウエノ工業").time !== "—");
   check("3 各業者の行に「削除」ボタン（操作の列）", rows.every((r) => r.del) && (await page.textContent("#siteDashboard .dash-ky-table thead")).includes("操作"));
   const nadakaBefore = JSON.stringify(all.find((r) => r.name === "アオバ塗装工業"));
@@ -71,14 +71,16 @@ const D = "2026-09-15";
   await page.click(`[data-ky-delete="${kyIds["ウエノ工業"]}"]`); await page.waitForFunction(() => document.getElementById("kyDeleteDialog").open);
   await page.click("#kyDeleteConfirmBtn"); await page.waitForTimeout(600);
   all = await kyAll(); rows = await kyRows();
-  check("6・9 削除するとウエノ工業（日報に無い・提出済み）が一覧から消える", rows.map((r) => r.name).join() === "アオバ塗装工業,エノキ建装工業", rows.map((r) => r.name).join());
-  check("7 提出時刻も消える（記録そのものを保存場所から削除。削除済みの印や履歴も残らない）", !all.some((r) => r.name === "ウエノ工業") && !(await page.evaluate(async (id) => !!(await (await import("/js/db.js")).dbGet("kySubmissions", id)), kyIds["ウエノ工業"])));
-  const dash = await page.textContent("#siteDashboard");
+  check("6・9 削除するとウエノ工業（日報に無い・提出済み）が一覧から消える", rows.map((r) => r.name).join() === "アオバ塗装工業,エノキ建装工業,イズミ足場工業", rows.map((r) => r.name).join());
+  const tomb = await page.evaluate(async (id) => (await (await import("/js/db.js")).dbGet("kySubmissions", id)), kyIds["ウエノ工業"]);
+  check("7 提出時刻・変更履歴も消える（業者名と外した日時だけの印に置き換わる）", !active(all).some((r) => r.name === "ウエノ工業") && tomb?.removed === true && tomb.submittedAt === null && !tomb.submitted && (tomb.history || []).length === 0 && !!tomb.removedAt, JSON.stringify(tomb));
+  const dash = (await page.textContent("#siteDashboard .dash-ky-table")) + (await page.$eval("#siteDashboard [data-panel=board]", (el) => el.textContent));
+  const removedChips = await page.$$eval("#siteDashboard .dash-ky-removed [data-ky-add]", (bs) => bs.map((b) => b.dataset.kyAdd));
   const a3 = await page.evaluate(async ([sid, d]) => {
     const { buildDashboardModel } = await import("/js/dashboard/siteDashboardModel.js"); const { buildTodaySheetHtml } = await import("/js/dashboard/todaySheetHtml.js"); const { listReportsBySite } = await import("/js/reports.js"); const { listKySubmissions } = await import("/js/ky/kySubmissions.js"); const { dbGet } = await import("/js/db.js");
     return buildTodaySheetHtml(buildDashboardModel({ site: await dbGet("sites", sid), reports: await listReportsBySite(sid), signatures: [], date: d, kySubmissions: await listKySubmissions(sid, d) }));
   }, [ids.siteId, D]);
-  check("7 削除した業者・提出時刻はダッシュボード・現場掲示・A3に残らない", !dash.includes("ウエノ工業") && !a3.includes("ウエノ工業"));
+  check("7 削除した業者・提出時刻はダッシュボードの提出対象の表・現場掲示・A3に残らない（監督管理の「提出対象から外した業者」に戻す候補として出るだけ）", !dash.includes("ウエノ工業") && !a3.includes("ウエノ工業") && removedChips.join() === "ウエノ工業", removedChips.join());
 
   // ===== 10・13〜17 日報・署名・写真・請求人工は変わらない =====
   const after = await snapshot();
@@ -94,18 +96,18 @@ const D = "2026-09-15";
   await page.click(`[data-ky-delete="${kyIds["エノキ建装工業"]}"]`); await page.waitForFunction(() => document.getElementById("kyDeleteDialog").open);
   const dlg2 = await page.textContent("#kyDeleteNote");
   await page.click("#kyDeleteConfirmBtn"); await page.waitForTimeout(500);
-  check("未提出の業者も削除できる（提出時刻は記録されていない旨を表示）", dlg2.includes("提出時刻は記録されていません") && !(await kyAll()).some((r) => r.name === "エノキ建装工業"));
+  check("未提出の業者も削除できる（提出時刻は記録されていない旨を表示）", dlg2.includes("提出時刻は記録されていません") && !active(await kyAll()).some((r) => r.name === "エノキ建装工業"));
 
   // ===== 18・19 正しい業者を登録し直す =====
   await page.fill("#siteDashboard .dash-ky-name", "ウエノ建設"); await page.click("#siteDashboard .dash-ky-form button[type=submit]"); await page.waitForTimeout(400);
-  const newId = (await kyAll()).find((r) => r.name === "ウエノ建設").id;
+  const newId = active(await kyAll()).find((r) => r.name === "ウエノ建設").id;
   await page.click(`[data-ky-id="${newId}"][data-ky-state="submitted"]`); await page.waitForTimeout(300);
   rows = await kyRows();
-  check("18・19 誤登録を削除したあと、正しい業者（ウエノ建設）を登録し、提出時刻を記録できる", rows.some((r) => r.name === "ウエノ建設" && r.time !== "—") && (await kyAll()).find((r) => r.name === "ウエノ建設").at);
+  check("18・19 誤登録を削除したあと、正しい業者（ウエノ建設）を登録し、提出時刻を記録できる", rows.some((r) => r.name === "ウエノ建設" && r.time !== "—") && active(await kyAll()).find((r) => r.name === "ウエノ建設").at);
   // 同じ名前（ウエノ工業）を登録し直すと、新しい記録（提出時刻なし）として作られる
   await page.fill("#siteDashboard .dash-ky-name", "ウエノ工業"); await page.click("#siteDashboard .dash-ky-form button[type=submit]"); await page.waitForTimeout(400);
-  const re = (await kyAll()).find((r) => r.name === "ウエノ工業");
-  check("削除した業者名を登録し直すと、前の提出時刻・履歴は引き継がない（未提出・提出時刻なし）", re && !re.submitted && !re.at && re.hist === 1 && re.id !== kyIds["ウエノ工業"]);
+  const re = active(await kyAll()).find((r) => r.name === "ウエノ工業");
+  check("削除した業者名を登録し直すと、前の提出時刻・履歴は引き継がない（未提出・提出時刻なし・外した印は消える）", re && !re.submitted && !re.at && re.hist === 1 && re.id !== kyIds["ウエノ工業"] && (await kyAll()).filter((r) => r.name === "ウエノ工業").length === 1);
 
   // ===== バックアップに削除した記録が入らない =====
   await page.evaluate(async (id) => (await import("/js/ky/kySubmissions.js")).deleteKyVendor(id), re.id);
@@ -118,8 +120,9 @@ const D = "2026-09-15";
   await p3.goto(`${BASE}#/backup`); await restoreViaUi(p3, zipPath); // 新しい復元の流れ（検査→復元前のバックアップ→一括適用）
   await waitForAsync(p3, async () => (await (await import("/js/db.js")).dbGetAll("reports")).length >= 1, null, { timeout: 20000 });
   await p3.waitForTimeout(500);
-  const restoredKy = await p3.evaluate(async () => (await (await import("/js/db.js")).dbGetAll("kySubmissions")).map((r) => r.vendorName).sort().join());
-  check("バックアップ・復元: 削除した業者（ウエノ工業・エノキ建装工業）の記録・提出時刻は入らず、残した記録（アオバ塗装工業・ウエノ建設）は復元される", restoredKy === "アオバ塗装工業,ウエノ建設", restoredKy);
+  const restoredKy = await p3.evaluate(async () => (await (await import("/js/db.js")).dbGetAll("kySubmissions")).map((r) => ({ n: r.vendorName, removed: !!r.removed, at: r.submittedAt || null, hist: (r.history || []).length })));
+  const actNames = restoredKy.filter((r) => !r.removed).map((r) => r.n).sort().join(), tombs = restoredKy.filter((r) => r.removed);
+  check("バックアップ・復元: 削除した業者（ウエノ工業・エノキ建装工業）は外した印だけで提出時刻・履歴は入らず、残した記録（アオバ塗装工業・イズミ足場工業・ウエノ建設）は復元される", actNames === "アオバ塗装工業,イズミ足場工業,ウエノ建設" && tombs.map((r) => r.n).sort().join() === "ウエノ工業,エノキ建装工業" && tombs.every((r) => !r.at && r.hist === 0), JSON.stringify(restoredKy));
   await ctx2.close();
 
   // 工事完了の現場は削除できない（データ層）

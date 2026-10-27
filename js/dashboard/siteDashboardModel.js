@@ -131,10 +131,12 @@ function actualOf(report) {
  * @param {string} params.date 表示する日（YYYY-MM-DD）
  */
 /**
- * 危険予知活動表（KY活動表）の当日の状況（純粋関数）。日報とは独立した記録（kySubmissions）だけから作る。
- * 候補業者: その日の日報の業者と、前の作業日（通常作業）の日報の業者。候補は表示するだけで、対象には自動で入れない。
+ * 危険予知活動表（KY活動表）の当日の状況（純粋関数）。提出状況は日報とは独立した記録（kySubmissions）だけから作る。
+ * この日の日報の業者は、画面を開いたときにデータ層（syncKyFromReports）が提出対象に入れておく。ここでは入れない。
+ * 候補業者: 監督が提出対象から外した業者（removedNames。押すと戻す）、対象に無いこの日の日報の業者（工事完了の現場など自動で
+ * 入れなかった場合）、前の作業日（通常作業）の日報の業者。候補は表示するだけ。各行の inReport＝この日の日報にその業者名があるか
  */
-export function buildKyModel({ records = [], reports = [], date }) {
+export function buildKyModel({ records = [], reports = [], date, removedNames = [] }) {
   const key = (n) => String(n || "").trim();
   const rows = records
     .filter((r) => !r.isDeleted && r.date === date)
@@ -142,9 +144,13 @@ export function buildKyModel({ records = [], reports = [], date }) {
   const targets = rows.filter((r) => r.state !== "excluded");
   const submitted = targets.filter((r) => r.state === "submitted");
   const notSubmitted = targets.filter((r) => r.state === "not_submitted");
-  const registered = new Set(rows.map((r) => key(r.vendorName)));
   const namesOf = (r) => [...new Set((r?.companies || []).map((c) => key(c.companyName)).filter(Boolean))];
   const live = reports.filter((r) => !r.isDeleted);
+  // この日の日報（同じ日に複数あればすべて）の業者名。日報から無くなった業者の行に印を付ける（記録は消さない）
+  const reportNames = new Set(live.filter((r) => r.date === date).flatMap(namesOf));
+  for (const r of rows) r.inReport = reportNames.has(key(r.vendorName));
+  const removed = [...new Set(removedNames.map(key).filter(Boolean))];
+  const registered = new Set([...rows.map((r) => key(r.vendorName)), ...removed]);
   const todayReport = reportOfDate(live, date).report;
   const prevWork = live.filter((r) => (r.date || "") < date && isWorkDay(r) && namesOf(r).length).sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.updatedAt || "").localeCompare(a.updatedAt || ""))[0] || null;
   return {
@@ -155,6 +161,7 @@ export function buildKyModel({ records = [], reports = [], date }) {
     excludedCount: rows.length - targets.length,
     notSubmittedNames: notSubmitted.map((r) => r.vendorName),
     candidates: {
+      removed: removed.filter((n) => !rows.some((r) => key(r.vendorName) === n)),
       today: todayReport ? namesOf(todayReport).filter((n) => !registered.has(n)) : [],
       previousDate: prevWork?.date || null,
       previous: prevWork ? namesOf(prevWork).filter((n) => !registered.has(n)) : []
@@ -191,7 +198,7 @@ export function buildGroundbreakingInfo(actualStartDate, date) {
   return n < 1 ? { phase: "before", date: d, dayNumber: null } : { phase: "started", date: d, dayNumber: n };
 }
 
-export function buildDashboardModel({ site, reports = [], signatures = [], date, kySubmissions = [] }) {
+export function buildDashboardModel({ site, reports = [], signatures = [], date, kySubmissions = [], kyRemovedNames = [] }) {
   const live = reports.filter((r) => !r.isDeleted);
   const { report, count: sameDayCount } = reportOfDate(live, date);
   // 日の状態。日報が無い日は null（未入力）。作業なし・休工日の日報は稼働人数・人工などに数えない
@@ -451,7 +458,7 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
     add("日報の確認", report.confirmedAt ? "確認済み" : "未確認", "info");
   }
   // 危険予知活動表（日報とは別の提出物。日報の有無・提出とは連動させない）
-  const ky = buildKyModel({ records: kySubmissions, reports: live, date });
+  const ky = buildKyModel({ records: kySubmissions, reports: live, date, removedNames: kyRemovedNames });
   if (ky.rows.length) {
     if (ky.notSubmittedCount) add("危険予知活動表", `未提出 ${ky.notSubmittedCount}業者（${ky.notSubmittedNames.join("・")}）・提出済み ${ky.submittedCount}／対象 ${ky.targetCount}業者`, "warn");
     else add("危険予知活動表", ky.targetCount ? `全業者 提出済み（${ky.targetCount}業者）` : "対象業者なし（すべて対象外）", ky.targetCount ? "ok" : "info");

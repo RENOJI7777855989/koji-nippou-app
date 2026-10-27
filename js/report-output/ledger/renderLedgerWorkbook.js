@@ -26,7 +26,7 @@ import { parseSharedStringsXml, readSheetCells, mapSheetCells, colToIndex, index
 import { WorkbookCalculator } from "./formulaCache.js";
 import { buildXlsxCellPlan } from "../xlsxCellPlan.js";
 import { applyDiagonalBorders } from "../xlsxDiagonal.js";
-import { applyCenterAlignment, expandRange } from "../xlsxAlign.js";
+import { applyAlignmentPlan, expandRange } from "../xlsxAlign.js";
 import { assignTradeRows, freeLabelWrites } from "../tradeAttendance.js";
 import { attendanceBreakdown } from "../../dashboard/attendanceBreakdown.js";
 import {
@@ -356,6 +356,7 @@ export async function renderLedgerWorkbook({ templateBuffer, mapping, site, entr
         return v != null && String(v).trim() !== "";
       })),
       companiesTable: pageCfgBase.companiesTable,
+      dayStatusNote: pageCfgBase.dayStatusNote, // 現場作業なし・休工日・雨天作業不可日・事務作業日（2業者目の作業内容の欄）
       patrolChecklist: pageCfgBase.patrolChecklist,
       staffAttendance: pageCfgBase.staffAttendance,
       tradeAttendance: pageCfgBase.tradeAttendance,
@@ -443,9 +444,11 @@ export async function renderLedgerWorkbook({ templateBuffer, mapping, site, entr
     }
     pkg.setText("xl/styles.xml", stylesXml);
   }
-  // 稼動人数表・点検項目の中央揃え（手書印刷用と同じ位置を、日報の有無に関係なく全頁に。出力の複製の書式だけ）
+  // 中央揃え（稼動人数表・点検項目・○×・協力会社欄の人数）と右揃え（協力会社欄の職種）。手書印刷用と同じ位置を、
+  // 日報の有無に関係なく全頁に。出力の複製の書式だけ
   const centerCells = (pageCfgBase.centerAlignRanges || []).flatMap(expandRange);
-  if (centerCells.length) {
+  const rightCells = (pageCfgBase.rightAlignRanges || []).flatMap(expandRange);
+  if (centerCells.length || rightCells.length) {
     let stylesXml = await pkg.getText("xl/styles.xml");
     const cache = new Map();
     const bySheet = new Map();
@@ -453,11 +456,12 @@ export async function renderLedgerWorkbook({ templateBuffer, mapping, site, entr
       const name = sheetNames[Math.floor(d / profile.pagesPerSheet)];
       if (!name) continue;
       const off = (d % profile.pagesPerSheet) * profile.pageRows;
-      if (!bySheet.has(name)) bySheet.set(name, []);
-      bySheet.get(name).push(...centerCells.map((ref) => shiftRef(ref, off)));
+      if (!bySheet.has(name)) bySheet.set(name, { center: [], right: [] });
+      bySheet.get(name).center.push(...centerCells.map((ref) => shiftRef(ref, off)));
+      bySheet.get(name).right.push(...rightCells.map((ref) => shiftRef(ref, off)));
     }
-    for (const [name, cells] of bySheet) {
-      const c = applyCenterAlignment({ sheetXml: await pkg.getText(pathOf(name)), stylesXml, cells, cache });
+    for (const [name, { center, right }] of bySheet) {
+      const c = applyAlignmentPlan({ sheetXml: await pkg.getText(pathOf(name)), stylesXml, center, right, cache });
       pkg.setText(pathOf(name), c.sheetXml);
       stylesXml = c.stylesXml;
     }

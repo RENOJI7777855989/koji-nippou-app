@@ -1,6 +1,7 @@
 /* ==========================================================
-   出力用の複製のセルを、上下・左右とも中央揃えにする（DOM非依存・文字列処理。2026-10-25）
-   03-2の稼動人数表（職種・人数・累計・計・延労働時間）と巡回点検の点検項目に使う。
+   出力用の複製のセルの配置を変える（DOM非依存・文字列処理。2026-10-25）
+   中央揃え（上下・左右とも中央）: 03-2の稼動人数表（職種・人数・累計・計・延労働時間）、巡回点検の点検項目と ○×（2026-10-26）、
+   協力会社欄の予定・実績の人数（2026-10-26）。右揃え（上下は中央）: 協力会社欄の職種（2026-10-26）。
    ・セルの今の書式（xf: フォント・塗り・罫線・配置）をそのまま複製し、配置だけ「横・縦とも中央」にしたものを styles.xml の
      末尾に足して、そのセルの s 属性を付け替える（xlsxDiagonal.js の斜線と同じ方式）。縦書き・折り返しなどの他の配置はそのまま。
    ・セルの値・結合・行・列・罫線・文字の大きさ・数式には触れない。原本テンプレートは変更しない（出力の複製だけ）。
@@ -8,11 +9,11 @@
 
 import { sectionOf, childElements } from "./xlsxDiagonal.js";
 
-/** xf の配置を横・縦とも中央にする（字下げは中央揃えでは使われないので外す） */
-export function centerXf(xf) {
+/** xf の配置を、横は horizontal（center／right）・縦は中央にする（字下げは外す） */
+export function alignXf(xf, horizontal = "center") {
   const align = (attrs) => {
     let a = attrs.replace(/\s(horizontal|vertical|indent)="[^"]*"/g, "");
-    return `<alignment${a} horizontal="center" vertical="center"/>`;
+    return `<alignment${a} horizontal="${horizontal}" vertical="center"/>`;
   };
   let x = /<alignment\b/.test(xf)
     ? xf.replace(/<alignment\b([^>]*?)\s*\/>|<alignment\b([^>]*)>[\s\S]*?<\/alignment>/, (m, a1, a2) => align(a1 ?? a2 ?? ""))
@@ -23,13 +24,16 @@ export function centerXf(xf) {
   return x;
 }
 
+/** xf の配置を横・縦とも中央にする */
+export const centerXf = (xf) => alignXf(xf, "center");
+
 /**
- * 指定したセルを中央揃えにする。
- * @param {{sheetXml: string, stylesXml: string, cells: string[], cache?: Map<number, number>}} p
- *   cache: 元の書式番号 → 中央揃えの書式番号（同じブックの複数シートで使い回す）
- * @returns {{sheetXml: string, stylesXml: string, applied: string[], missing: string[], cache: Map<number, number>}}
+ * 指定したセルの配置を、横は horizontal・縦は中央にする。
+ * @param {{sheetXml: string, stylesXml: string, cells: string[], horizontal?: "center"|"right", cache?: Map<string, number>}} p
+ *   cache: 「横の配置:元の書式番号」→ 付け替えた書式番号（同じブックの複数シートで使い回す）
+ * @returns {{sheetXml: string, stylesXml: string, applied: string[], missing: string[], cache: Map<string, number>}}
  */
-export function applyCenterAlignment({ sheetXml, stylesXml, cells, cache = new Map() }) {
+export function applyCellAlignment({ sheetXml, stylesXml, cells, horizontal = "center", cache = new Map() }) {
   const want = new Set(cells);
   const applied = [];
   let st = stylesXml;
@@ -37,7 +41,8 @@ export function applyCenterAlignment({ sheetXml, stylesXml, cells, cache = new M
   const sx = sheetXml.replace(/<c r="([A-Z]+\d+)"((?:\s[^>]*?)?)(\/?)>/g, (m, ref, attrs, slash) => {
     if (!want.has(ref)) return m;
     const sIndex = Number((/\ss="(\d+)"/.exec(attrs) || [])[1] || 0);
-    let newIndex = cache.get(sIndex);
+    const key = `${horizontal}:${sIndex}`;
+    let newIndex = cache.get(key);
     if (newIndex == null) {
       const xfsSec = sectionOf(st, "cellXfs");
       if (!xfsSec) return m;
@@ -46,8 +51,8 @@ export function applyCenterAlignment({ sheetXml, stylesXml, cells, cache = new M
       if (!xf) return m;
       newIndex = xfs.length;
       const xOpen = xfsSec.openTag.replace(/\scount="\d+"/, ` count="${xfs.length + 1}"`);
-      st = st.slice(0, xfsSec.start) + xOpen + st.slice(xfsSec.openEnd, xfsSec.close) + centerXf(xf) + st.slice(xfsSec.close);
-      cache.set(sIndex, newIndex);
+      st = st.slice(0, xfsSec.start) + xOpen + st.slice(xfsSec.openEnd, xfsSec.close) + alignXf(xf, horizontal) + st.slice(xfsSec.close);
+      cache.set(key, newIndex);
     }
     want.delete(ref);
     applied.push(ref);
@@ -55,6 +60,20 @@ export function applyCenterAlignment({ sheetXml, stylesXml, cells, cache = new M
     return `<c r="${ref}"${a2}${slash}>`;
   });
   return { sheetXml: sx, stylesXml: st, applied, missing: [...want], cache };
+}
+
+/** 指定したセルを中央揃えにする（上下・左右とも中央） */
+export const applyCenterAlignment = (p) => applyCellAlignment({ ...p, horizontal: "center" });
+
+/** 中央揃えのセル（center）と右揃えのセル（right）をまとめて付け替える（出力の各経路で同じ処理を使う） */
+export function applyAlignmentPlan({ sheetXml, stylesXml, center = [], right = [], cache = new Map() }) {
+  const missing = [];
+  for (const [cells, horizontal] of [[center, "center"], [right, "right"]]) {
+    if (!cells.length) continue;
+    const r = applyCellAlignment({ sheetXml, stylesXml, cells, horizontal, cache });
+    sheetXml = r.sheetXml; stylesXml = r.stylesXml; missing.push(...r.missing);
+  }
+  return { sheetXml, stylesXml, missing, cache };
 }
 
 /** "J7:K39" のような範囲をセルの一覧にする（行・列の順） */

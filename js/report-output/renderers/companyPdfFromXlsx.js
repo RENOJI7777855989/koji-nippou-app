@@ -24,7 +24,7 @@ import { loadZip, readZipEntryText, readZipEntryBytes } from "../../zipUtil.js";
 import { setCellInSheetXml, resolveSheetPartPath } from "../xlsxTemplateEngine.js";
 import { buildXlsxCellPlan } from "../xlsxCellPlan.js";
 import { applyDiagonalBorders } from "../xlsxDiagonal.js";
-import { applyCenterAlignment } from "../xlsxAlign.js";
+import { applyAlignmentPlan } from "../xlsxAlign.js";
 import { parseXlsxStyles, parseSharedStrings, readSheetLayout, colLettersToIndex } from "../xlsxSheetReader.js";
 import { escapeHtml } from "../../utils.js";
 import { ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING } from "./mappings/anzenEiseiUchiawaseNisshi.js";
@@ -473,8 +473,8 @@ async function render(model, mapping, companyProfile, template) {
   let stylesXml = await readZipEntryText(zip, "xl/styles.xml");
   // 巡回点検の欄の斜線（Excel出力と同じ処理。休工日・作業なし・事務作業日で点検記録が無い日）
   if (plan.diagonalCells?.length) ({ sheetXml, stylesXml } = applyDiagonalBorders({ sheetXml, stylesXml, cells: plan.diagonalCells }));
-  // 稼動人数表・点検項目の中央揃え（Excel出力と同じ処理）
-  if (plan.centerCells?.length) ({ sheetXml, stylesXml } = applyCenterAlignment({ sheetXml, stylesXml, cells: plan.centerCells }));
+  // 中央揃え・右揃え（Excel出力と同じ処理）
+  if (plan.centerCells?.length || plan.rightCells?.length) ({ sheetXml, stylesXml } = applyAlignmentPlan({ sheetXml, stylesXml, center: plan.centerCells || [], right: plan.rightCells || [] }));
   const sharedStringsXml = await readZipEntryText(zip, "xl/sharedStrings.xml");
   const styles = parseXlsxStyles(stylesXml);
   const sharedStrings = parseSharedStrings(sharedStringsXml);

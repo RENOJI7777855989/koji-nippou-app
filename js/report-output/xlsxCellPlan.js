@@ -10,6 +10,7 @@
 import { renderTemplateString } from "./xlsxTemplateEngine.js";
 import { assignTradeRowsForDay, buildTradeAttendanceWrites } from "./tradeAttendance.js";
 import { patrolSlashApplies } from "../patrolChecklist.js";
+import { DAY_STATUSES, dayStatusOf } from "../dashboard/dailyFlow.js";
 import { expandRange } from "./xlsxAlign.js";
 
 /**
@@ -60,6 +61,27 @@ export function buildXlsxCellPlan(model, cfg) {
       if (table.signatureColumn && company.signature?.blob) {
         images.push({ cell: `${table.signatureColumn}${rowNum}`, blob: company.signature.blob, company });
       }
+    }
+  }
+
+  // 日の状態（現場作業なし・休工日・雨天作業不可日・事務作業日）を、協力会社欄の決まった業者の行（03-2は2業者目）の
+  // 作業内容の欄に書く（2026-10-27。利用者の指定）。表示名は日報カレンダーと同じ（dailyFlow.js の DAY_STATUSES）。
+  // その欄に業者の作業内容があれば消さずに、後ろへ全角の空白で区切って足す。雨天作業不可日の中止作業・理由、事務作業日の内容は、
+  // 同じ業者の欄の下の行（03-2は E10。業者の欄は2行で、間に罫線が無い）に書く（1行に詰めると欄の幅を超えるため）。通常作業の日は書かない
+  const note = cfg.dayStatusNote;
+  if (note && table) {
+    const { label, detail } = dayStatusNoteText(model.report, note);
+    const colDef = table.columns?.[note.field];
+    const col = typeof colDef === "string" ? colDef : colDef?.column;
+    if (label && col) {
+      const row = parseCellRefRow(table.startCell).row + 1 + (note.companyIndex || 0) * (table.rowStep || 1);
+      const put = (cell, text) => {
+        const existing = cellWrites.find((w) => w.cell === cell);
+        if (existing) existing.value = `${existing.value}　${text}`;
+        else cellWrites.push({ cell, value: text, numeric: false });
+      };
+      put(`${col}${row}`, label);
+      if (detail) put(`${col}${row + (note.detailRowOffset ?? 1)}`, detail);
     }
   }
 
@@ -154,9 +176,29 @@ export function buildXlsxCellPlan(model, cfg) {
     if (patrolSlashApplies(model.report)) diagonalCells.push(...(patrolChecklist.slashCells || Object.values(patrolChecklist.itemCells || {})));
   }
 
-  // 中央揃えにするセル（出力時に書式として付ける。xlsxAlign.js）
+  // 中央揃え・右揃えにするセル（出力時に書式として付ける。xlsxAlign.js）
   const centerCells = (cfg.centerAlignRanges || []).flatMap(expandRange);
-  return { cellWrites, images, diagonalCells, centerCells, fitToPage: cfg.fitToPage || null, sheetName: cfg.sheetName, warnings };
+  const rightCells = (cfg.rightAlignRanges || []).flatMap(expandRange);
+  return { cellWrites, images, diagonalCells, centerCells, rightCells, fitToPage: cfg.fitToPage || null, sheetName: cfg.sheetName, warnings };
+}
+
+/**
+ * 日の状態の表示の文字。label＝「【現場作業なし】」など（日報カレンダーと同じ表示名）、detail＝雨天作業不可日の中止作業・理由、
+ * 事務作業日の内容（無ければ ""）。通常作業・知らない値の日は label も ""
+ */
+export function dayStatusNoteText(report, note) {
+  const status = dayStatusOf(report);
+  if (!(note?.statuses || []).includes(status)) return { label: "", detail: "" };
+  const label = `【${DAY_STATUSES.find((s) => s.value === status).label}】`;
+  const one = (v) => String(v || "").replace(/\s*\r?\n\s*/g, "　").trim();
+  const parts = [];
+  if (status === "rain") {
+    if (one(report.rainCancelledWork)) parts.push(`中止作業：${one(report.rainCancelledWork)}`);
+    if (one(report.rainReason)) parts.push(`理由：${one(report.rainReason)}`);
+  }
+  // 事務作業日の内容は、登録画面の「連絡事項・事務作業の内容」（remarks）。無ければ監督・職員の作業内容（staffWork）
+  if (status === "office" && one(report.remarks || report.staffWork)) parts.push(`内容：${one(report.remarks || report.staffWork)}`);
+  return { label, detail: parts.join("　") };
 }
 
 function parseCellRefRow(ref) {

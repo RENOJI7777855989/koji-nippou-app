@@ -46,7 +46,9 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
     await setKyState(a.id, "submitted"); await setKyState(c.id, "excluded");
     return { siteId: site.id };
   });
-  const dataDump = () => page.evaluate(async () => { const { dbGetAll } = await import("/js/db.js"); return JSON.stringify([await dbGetAll("reports"), await dbGetAll("kySubmissions"), await dbGetAll("sites")].map((x) => x.sort((p, q) => p.id.localeCompare(q.id)))); });
+  // 日報の業者から自動で作る KY の提出対象（2026-10-27。source:"report"・未提出）は、ダッシュボードを開くと作られるので比べない（別に確かめる）
+  const dataDump = () => page.evaluate(async () => { const { dbGetAll } = await import("/js/db.js"); return JSON.stringify([await dbGetAll("reports"), (await dbGetAll("kySubmissions")).filter((r) => r.source !== "report"), await dbGetAll("sites")].map((x) => x.sort((p, q) => p.id.localeCompare(q.id)))); });
+  const autoKy = () => page.evaluate(async () => (await (await import("/js/db.js")).dbGetAll("kySubmissions")).filter((r) => r.source === "report"));
   const before = await dataDump();
 
   const openDate = async (date) => {
@@ -124,7 +126,9 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   const html2 = await printedHtml();
   check("11 別の日付（9/29）では、画面も印刷もその日の内容（翌日内装・雨・重点指示）で、前の日の業者は出ない", board2.includes("翌日内装") && html2.includes("翌日内装") && html2.includes("雨天時の足元注意") && html2.includes("2026年9月29日") && !html2.includes("掲示塗装") && !board2.includes("掲示塗装"));
 
-  check("12 画面表示・印刷の前後で日報・KY・現場のデータは変わらない", (await dataDump()) === before);
+  check("12 画面表示・印刷の前後で日報・KY（監督が付けた状態）・現場のデータは変わらない", (await dataDump()) === before);
+  const auto = await autoKy();
+  check("12 開いたときに日報の業者から作られた KY の提出対象は、未提出・提出時刻なし（日報の状態から提出済みにしない）", auto.every((r) => !r.submitted && !r.submittedAt && !r.removed), JSON.stringify(auto.map((r) => [r.date, r.vendorName, r.submitted])));
 
   // Service Worker のキャッシュに入った印刷用のファイルがサーバーの最新と同じ（古いファイルが混ざらない）
   await page.goto(BASE); await page.waitForSelector("#view-site-list:not([hidden])");

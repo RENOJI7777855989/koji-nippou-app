@@ -21,7 +21,7 @@ import { BOARD_SECTIONS, BOARD_LAYOUT_VERSION, KY_BOARD_LABELS, buildInfoBand } 
 import { openReportPrintDialog } from "./report-print-dialog.js";
 import { openBoardPdfDialog } from "./board-pdf.js";
 import { openChoreiDialog } from "./chorei-dialog.js";
-import { listKySubmissions, addKyVendor, setKyState, deleteKyVendor } from "../ky/kySubmissions.js";
+import { listKySubmissions, listKyRemovedNames, syncKyFromReports, addKyVendor, setKyState, deleteKyVendor } from "../ky/kySubmissions.js";
 import { showMessage } from "./common.js";
 
 const root = document.getElementById("siteDashboard");
@@ -52,8 +52,16 @@ async function loadModel(site, date) {
   const reports = (await listReportsBySite(site.id)).filter((r) => !r.isDeleted);
   const ids = new Set(reports.map((r) => r.id));
   const signatures = (await dbGetAll("signatures")).filter((s) => ids.has(s.reportId));
+  // 日報の業者から、その日の危険予知活動表の提出対象を自動で作る（未提出で作る。監督が外した業者は戻さない）。
+  // 保存に失敗したら、作れたように見せずに画面で知らせる
+  let kySyncError = "";
+  try { await syncKyFromReports({ siteId: site.id, date }); }
+  catch (err) { kySyncError = `日報の業者から危険予知活動表の提出対象を作れませんでした（保存に失敗）: ${err?.message || err}`; }
   const kySubmissions = await listKySubmissions(site.id, date);
-  return buildDashboardModel({ site, reports, signatures, date, kySubmissions });
+  const kyRemovedNames = await listKyRemovedNames(site.id, date);
+  const model = buildDashboardModel({ site, reports, signatures, date, kySubmissions, kyRemovedNames });
+  model.ky.syncError = kySyncError;
+  return model;
 }
 
 /** 上部の情報帯（工期・本日・工事○日目・工期経過・残り・進捗・天気）。A3の印刷と同じ buildInfoBand から作る */
@@ -240,9 +248,9 @@ function render(model) {
   const kyManageSummary = `<p class="dash-ky-summary">対象 <b>${ky.targetCount}</b>業者　提出済み <b>${ky.submittedCount}</b>業者　未提出 <b>${ky.notSubmittedCount}</b>業者　対象外 <b>${ky.excludedCount}</b>業者</p>`;
   const kyBoardHtml = ky.rows.length
     ? `<ul class="dash-ky-list">${ky.rows.map((r) => `<li class="is-${r.state}"><b>${escapeHtml(r.vendorName)}</b>　${KY_BOARD_LABELS[r.state]}</li>`).join("")}</ul><p class="dash-ky-summary">対象 <b>${ky.targetCount}</b>業者　提出済み <b>${ky.submittedCount}</b>業者　未提出 <b>${ky.notSubmittedCount}</b>業者${ky.excludedCount ? `　対象外 <b>${ky.excludedCount}</b>業者` : ""}</p>`
-    : empty("本日の危険予知活動表の対象業者は、まだ登録されていません。");
+    : empty("本日の危険予知活動表の対象業者は、まだありません。");
   const hhmm = (iso) => { if (!iso) return "—"; const t = new Date(iso); return Number.isNaN(t.getTime()) ? "—" : `${t.getHours()}:${String(t.getMinutes()).padStart(2, "0")}`; };
-  const kyRowHtml = (r) => `<tr class="ky-${r.state}"><td><b>${escapeHtml(r.vendorName)}</b></td>
+  const kyRowHtml = (r) => `<tr class="ky-${r.state}"><td><b>${escapeHtml(r.vendorName)}</b>${r.inReport ? "" : `<br><small class="dash-sub dash-ky-noreport">この日の日報に無い業者</small>`}</td>
       <td><div class="dash-ky-states" role="group" aria-label="${escapeHtml(r.vendorName)}の提出状況">${[["submitted", "提出済み"], ["not_submitted", "未提出"], ["excluded", "対象外"]]
         .map(([v, label]) => `<button type="button" class="dash-ky-state${r.state === v ? " is-on" : ""}" data-ky-id="${escapeHtml(r.id)}" data-ky-state="${v}" aria-pressed="${r.state === v}"${canEdit ? "" : " disabled"}>${label}</button>`).join("")}</div></td>
       <td class="num">${hhmm(r.submittedAt)}</td>
@@ -250,19 +258,21 @@ function render(model) {
   const candidateChips = (names) => names.map((n) => `<button type="button" class="dash-ky-add" data-ky-add="${escapeHtml(n)}"${canEdit ? "" : " disabled"}>＋ ${escapeHtml(n)}</button>`).join("");
   const prevLabel = ky.candidates.previousDate ? (() => { const [, pm, pd] = ky.candidates.previousDate.split("-").map(Number); return `${pm}/${pd}`; })() : "";
   const kyManageHtml = `
+    ${ky.syncError ? `<p class="dash-ky-missing dash-ky-sync-error" role="alert">${escapeHtml(ky.syncError)}</p>` : ""}
     ${kyManageSummary}
     ${ky.notSubmittedCount ? `<p class="dash-ky-missing">未提出: ${ky.notSubmittedNames.map((n) => escapeHtml(n)).join("・")}</p>` : ""}
     ${ky.rows.length
       ? `<div class="dash-table-wrap"><table class="dash-table dash-ky-table"><thead><tr><th>業者</th><th>状態</th><th class="num">提出時刻</th><th>操作</th></tr></thead><tbody>${ky.rows.map(kyRowHtml).join("")}</tbody></table></div>`
-      : `<p class="dash-sub">対象業者を選んで登録してください（日報がまだ無くても登録できます）。</p>`}
+      : `<p class="dash-sub">この日の日報の業者が、提出対象（未提出）に自動で入ります。日報がまだ無いときは、業者名を入れて登録できます。</p>`}
     ${canEdit
       ? `<div class="dash-ky-candidates">
+          ${ky.candidates.removed.length ? `<p class="dash-sub">提出対象から外した業者（日報にあっても自動では戻りません。押すと対象に戻します・未提出から）</p><div class="dash-ky-chips dash-ky-removed">${candidateChips(ky.candidates.removed)}</div>` : ""}
           ${ky.candidates.today.length ? `<p class="dash-sub">この日の日報の業者（押すと対象に追加）</p><div class="dash-ky-chips">${candidateChips(ky.candidates.today)}</div>` : ""}
           ${ky.candidates.previous.length ? `<p class="dash-sub">前の作業日（${prevLabel}）の業者（候補。押した業者だけ対象に追加）</p><div class="dash-ky-chips">${candidateChips(ky.candidates.previous)}</div>` : ""}
           <form class="dash-ky-form"><input type="text" class="dash-ky-name" placeholder="業者名を入力（日報に無い業者も登録できます）" aria-label="追加する業者名"><button type="submit" class="secondary-btn">追加</button></form>
         </div>`
       : ""}
-    <p class="dash-sub">会社指定の紙のKY活動表が現場に提出されたかだけを記録します（KYの内容は記録しません）。「未提出」は紙がまだ提出されていないという意味です。日報とは別の提出物で、日報の入力・確認とは連動しません。「提出済み」を押した時刻を提出時刻として記録します。業者は業者名で区別します（表記が違えば別の業者）。</p>`;
+    <p class="dash-sub">会社指定の紙のKY活動表が現場に提出されたかだけを記録します（KYの内容は記録しません）。「未提出」は紙がまだ提出されていないという意味です。この日の日報の業者は提出対象に自動で入りますが、提出状況は日報の入力・確認・署名とは連動しません（日報を直しても・消しても提出状況と提出時刻は残ります）。「提出済み」を押した時刻を提出時刻として記録します。業者は業者名で区別します（表記が違えば別の業者）。不要な業者は［削除］で提出対象から外せます。</p>`;
 
   const worksHtml = model.works.length
     ? `<div class="dash-table-wrap"><table class="dash-table">
@@ -399,7 +409,7 @@ root?.addEventListener("click", async (e) => {
   if (kyDel) {
     const dlg = document.getElementById("kyDeleteDialog");
     document.getElementById("kyDeleteText").textContent = `危険予知活動表の提出状況から「${kyDel.dataset.kyName}」を削除しますか？`;
-    document.getElementById("kyDeleteNote").textContent = `${kyDel.dataset.kyTime ? `提出時刻（${kyDel.dataset.kyTime}）も削除されます。` : "提出時刻は記録されていません。"}日報や業者の情報（人数・作業時間・署名・写真・請求人工など）は削除されません。`;
+    document.getElementById("kyDeleteNote").textContent = `${kyDel.dataset.kyTime ? `提出時刻（${kyDel.dataset.kyTime}）も削除されます。` : "提出時刻は記録されていません。"}日報や業者の情報（人数・作業時間・署名・写真・請求人工など）は削除されません。日報にこの業者が残っていても、自動では提出対象に戻りません（「提出対象から外した業者」から戻せます）。`;
     dlg.dataset.kyId = kyDel.dataset.kyDelete;
     dlg.showModal();
     document.getElementById("kyDeleteCancelBtn").focus();
@@ -468,7 +478,7 @@ document.getElementById("kyDeleteConfirmBtn")?.addEventListener("click", async (
   try {
     const removed = await deleteKyVendor(dlg.dataset.kyId);
     dlg.close();
-    showMessage(`危険予知活動表の提出状況から「${removed.vendorName}」を削除しました（提出時刻も削除）。`);
+    showMessage(`危険予知活動表の提出対象から「${removed.vendorName}」を削除しました（提出時刻も削除）。日報の業者は変わりません。`);
     await refresh();
   } catch (err) { showMessage(err.message, true); }
 });

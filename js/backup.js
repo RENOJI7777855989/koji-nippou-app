@@ -364,6 +364,10 @@ export async function analyzeBackupFile(file) {
             ? "この端末で削除した記録があります（復元すると戻ります）"
             : "この端末に無いデータです（この端末で削除した可能性があります。削除の記録は無いため、削除済みとは断定できません）";
         } else { action = "new"; defaultApply = true; }
+      } else if (storeName === "kySubmissions" && local.removed === true && record.removed !== true) {
+        // この端末で危険予知活動表の提出対象から外した業者（外した印の記録。2026-10-27）。写真・署名の削除と同じく、既定では戻さない
+        action = "candidate"; defaultApply = false;
+        reason = "この端末で提出対象から外した業者です（復元すると、提出対象に戻ります）";
       } else if ((await comparableText(local, storeName, localBlobSha)) === (await comparableText(record, storeName, blobSha))) {
         action = "same"; defaultApply = false;
       } else if (!local.updatedAt || !record.updatedAt) {
