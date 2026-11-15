@@ -15,6 +15,7 @@
    ・ヘッダーの右端に現場掲示レイアウトの版を小さく出す（画面の現場掲示タブと同じ版か見分けるため）
    ========================================================== */
 
+import { TODAY_SHEET_FIT_SCRIPT } from "../printScripts.js";
 import { buildBoardContent, sectionTitle } from "./boardContent.js";
 
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -121,31 +122,7 @@ export function buildTodaySheetHtml(model) {
 
   // 各欄の中身が溢れる場合だけ、その欄の文字を小さくして1枚に収める（最小6pt）。
   // 本日の作業（業者の表）が最小の文字でも収まらない日は、その欄の高さを少しずつ広げて中段を詰め直す
-  const fitScript = `<script>(function(){
-    function over(c){return c.scrollHeight>c.clientHeight+1||c.scrollWidth>c.clientWidth+1;}
-    function fitBox(c){var size=10.5;c.style.fontSize=size+"pt";while(over(c)&&size>6){size-=0.5;c.style.fontSize=size+"pt";}return !over(c);}
-    function fitAll(){document.querySelectorAll(".box .content").forEach(fitBox);}
-    function fit(){
-      var works=document.querySelector(".worksbox");
-      var heights=[80,95,110,125];
-      if(works){works.style.maxHeight="";works.style.flex="";}
-      fitAll();
-      for(var i=0;works&&over(works.querySelector(".content"))&&i<heights.length;i++){
-        works.style.maxHeight="none";works.style.flex="0 0 "+heights[i]+"mm";
-        fitAll();
-      }
-      // それでも収まらない欄（最小6ptでも入りきらない）がある日は、紙面にその旨を出す（黙って切らない）。window.__a3Overflow は検証用
-      var over6=[].slice.call(document.querySelectorAll(".box .content")).filter(over);
-      window.__a3Overflow=over6.map(function(c){return c.parentNode.getAttribute("data-section");});
-      var warn=document.querySelector(".a3-overflow-warn");
-      if(warn)warn.remove();
-      if(over6.length){
-        warn=document.createElement("div");warn.className="a3-overflow-warn";
-        warn.textContent="※情報が多く、一部の欄（"+over6.map(function(c){return c.parentNode.querySelector("h2").textContent;}).join("・")+"）が1枚に収まりません。内容は画面・日報で確認してください。";
-        document.querySelector(".sheet").appendChild(warn);
-      }
-    }
-    fit();window.addEventListener("load",fit);window.addEventListener("beforeprint",fit);})();</script>`;
+  const fitScript = `<script>${TODAY_SHEET_FIT_SCRIPT}</script>`; // 本文は js/printScripts.js（CSP の指紋で許可するため固定）
 
   return `<!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8"><title>現場掲示 ${esc(h.siteName)} ${esc(h.date)}</title>

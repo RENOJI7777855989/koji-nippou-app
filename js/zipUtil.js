@@ -34,10 +34,39 @@ function crc32(bytes) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-async function inflateRaw(bytes) {
+/**
+ * 読み込むZIPの大きさの上限（2026-11-01。壊れた・悪意のあるZIPで端末のメモリを使い切らないため）。
+ * 実際のファイル（実データのバックアップ 7.6MB・89ファイル・最大4.2MB、03-2の原本 展開後6.8MB・最大0.6MB・圧縮率17倍、
+ * 写真は1枚 数百KB）より十分大きい値にしてある。バックアップの復元・テンプレートの登録・積算/見積のExcelの取込・出力の読み直しの
+ * すべてが loadZip / readZipEntryBytes を通るので、ここで止めれば、どの経路でもデータを書き込む前に止まる。
+ */
+export const ZIP_LIMITS = {
+  maxFileBytes: 1024 * 1024 * 1024, // ZIPファイル全体（iPadはファイル全体をメモリに読むので、これより大きいと扱えない）
+  maxEntries: 20000, // ZIPの中のファイル数
+  maxEntryBytes: 256 * 1024 * 1024, // 1ファイルの展開後
+  maxTotalBytes: 2 * 1024 * 1024 * 1024 // 展開後の合計
+};
+
+const MB = (n) => `${Math.round(n / 1048576)}MB`;
+
+/** deflate を展開する。expected（ZIPの中の申告の大きさ）を超えたら途中でやめ、展開後の大きさが申告と違えば誤りにする */
+async function inflateRaw(bytes, expected, name = "") {
   const ds = new DecompressionStream("deflate-raw");
-  const stream = new Blob([bytes]).stream().pipeThrough(ds);
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const reader = new Blob([bytes]).stream().pipeThrough(ds).getReader();
+  const out = new Uint8Array(expected);
+  let n = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (n + value.length > expected) {
+      await reader.cancel().catch(() => {});
+      throw new Error(`ZIPの中のファイル（${name}）が、申告された大きさより大きく展開されます（壊れたファイルか、不正なファイルの可能性があります）`);
+    }
+    out.set(value, n);
+    n += value.length;
+  }
+  if (n !== expected) throw new Error(`ZIPの中のファイル（${name}）の大きさが申告と違います（壊れたファイルの可能性があります）`);
+  return out;
 }
 
 /**
@@ -48,6 +77,7 @@ async function inflateRaw(bytes) {
 export function loadZip(arrayBuffer) {
   const buffer = new Uint8Array(arrayBuffer);
   const view = new DataView(arrayBuffer);
+  if (buffer.length > ZIP_LIMITS.maxFileBytes) throw new Error(`ファイルが大きすぎます（${MB(buffer.length)}。読み込めるのは${MB(ZIP_LIMITS.maxFileBytes)}まで）`);
 
   // EOCDを末尾から探索（コメント長は可変のため）
   let eocdOffset = -1;
@@ -62,11 +92,14 @@ export function loadZip(arrayBuffer) {
 
   const totalEntries = view.getUint16(eocdOffset + 10, true);
   const cdOffset = view.getUint32(eocdOffset + 16, true);
+  if (totalEntries > ZIP_LIMITS.maxEntries) throw new Error(`ZIPの中のファイルが多すぎます（${totalEntries}件。${ZIP_LIMITS.maxEntries}件まで）`);
+  if (cdOffset >= buffer.length) throw new Error("中央ディレクトリの位置がファイルの外を指しています（壊れたファイルの可能性があります）");
 
   const entries = new Map();
   let ptr = cdOffset;
+  let totalBytes = 0;
   for (let i = 0; i < totalEntries; i++) {
-    if (view.getUint32(ptr, true) !== SIG_CENTRAL_DIR) throw new Error("中央ディレクトリの解析に失敗しました");
+    if (ptr + 46 > buffer.length || view.getUint32(ptr, true) !== SIG_CENTRAL_DIR) throw new Error("中央ディレクトリの解析に失敗しました");
     const method = view.getUint16(ptr + 10, true);
     const modTime = view.getUint16(ptr + 12, true);
     const modDate = view.getUint16(ptr + 14, true);
@@ -80,10 +113,20 @@ export function loadZip(arrayBuffer) {
     const nameBytes = buffer.subarray(ptr + 46, ptr + 46 + nameLen);
     const name = new TextDecoder().decode(nameBytes);
 
+    // 大きさ・名前・位置の検査（2026-11-01）。ZIP64（大きさが 0xFFFFFFFF）は扱わない
+    if (compressedSize === 0xffffffff || uncompressedSize === 0xffffffff) throw new Error(`この形式のZIP（ZIP64）には対応していません（${name}）`);
+    if (uncompressedSize > ZIP_LIMITS.maxEntryBytes) throw new Error(`ZIPの中のファイル（${name}）が大きすぎます（展開後${MB(uncompressedSize)}。1ファイル${MB(ZIP_LIMITS.maxEntryBytes)}まで）`);
+    totalBytes += uncompressedSize;
+    if (totalBytes > ZIP_LIMITS.maxTotalBytes) throw new Error(`ZIPを展開した後の合計が大きすぎます（${MB(ZIP_LIMITS.maxTotalBytes)}まで）`);
+    if (name.includes("\0") || name.startsWith("/") || name.split("/").includes("..")) throw new Error(`ZIPの中のファイル名が不正です（${name}）`);
+    if (method === 0 && compressedSize !== uncompressedSize) throw new Error(`ZIPの中のファイル（${name}）の大きさが不正です（壊れたファイルの可能性があります）`);
+    if (localHeaderOffset + 30 > buffer.length) throw new Error(`ZIPの中のファイル（${name}）の位置がファイルの外を指しています`);
+
     // ローカルファイルヘッダ側のname/extra長を読み、実データの開始位置を求める。
     const localNameLen = view.getUint16(localHeaderOffset + 26, true);
     const localExtraLen = view.getUint16(localHeaderOffset + 28, true);
     const dataOffset = localHeaderOffset + 30 + localNameLen + localExtraLen;
+    if (dataOffset + compressedSize > buffer.length) throw new Error(`ZIPの中のファイル（${name}）のデータがファイルの外にはみ出しています（壊れたファイルの可能性があります）`);
 
     entries.set(name, { method, modTime, modDate, crc, compressedSize, uncompressedSize, dataOffset });
 
@@ -98,7 +141,7 @@ export async function readZipEntryBytes(zip, name) {
   if (!entry) return null;
   const compressed = zip.buffer.subarray(entry.dataOffset, entry.dataOffset + entry.compressedSize);
   if (entry.method === 0) return compressed.slice();
-  if (entry.method === 8) return inflateRaw(compressed);
+  if (entry.method === 8) return inflateRaw(compressed, entry.uncompressedSize, name);
   throw new Error(`未対応の圧縮方式です(method=${entry.method}): ${name}`);
 }
 

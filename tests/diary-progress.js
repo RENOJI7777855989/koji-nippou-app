@@ -114,7 +114,7 @@ const day = (n) => { const d = new Date(Date.now() + n * 86400000); return `${d.
   const a3 = await page.evaluate(() => document.getElementById("reportPrintFrame").srcdoc);
   check("10 A3「今日の現場シート」に日誌の進捗率（45%）が出る", a3.includes('<span class="bl">進捗</span><span class="bv">45%</span>') && a3.includes("size: A3 landscape"));
   await page.click("#reportPrintCloseBtn");
-  const [bdl] = await Promise.all([page.waitForEvent("download"), page.goto(`${BASE}#/backup`).then(() => page.waitForSelector("#view-backup:not([hidden])")).then(() => page.click("#exportBackupBtn"))]);
+  const [bdl] = await Promise.all([page.waitForEvent("download"), page.goto(`${BASE}#/backup`).then(() => page.waitForSelector("#view-backup:not([hidden])")).then(() => page.uncheck("#backupEncryptToggle").then(() => page.click("#exportBackupBtn")))]);
   const bf = path.join(dir, "backup.zip"); await bdl.saveAs(bf);
   const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "diary-progress-restore-"));
   const ctx2 = await chromium.launchPersistentContext(dir2, {}); const q = await ctx2.newPage(); q.on("dialog", (d) => d.accept());

@@ -109,6 +109,11 @@ const sha = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
     const w = box ? Number(box[1]) : 0, h = box ? Number(box[2]) : 0;
     check("3 実際にPDFファイルを生成できる（1ページ・A3横 1191×842pt）", txt.startsWith("%PDF") && (txt.match(/\/Type\s*\/Page[^s]/g) || []).length === 1 && Math.abs(w - 1190.55) < 3 && Math.abs(h - 841.89) < 3, `${w}x${h}pt`);
   }
+  // 2026-11-01: 「工事日報PDFを出力」では、アプリが作る1ページのPDF（A3）が通常の出力で、ブラウザの印刷画面は
+  // ［ブラウザの印刷画面からPDFにする］の奥にある。ブラウザの印刷画面からのPDF出力の記録も、従来どおり確かめる
+  check("3 PDF出力のダイアログ: 「工事日報PDFを作成（A3・1ページ）」が先に出て、印刷画面を開くボタンは奥に隠れている",
+    await page.isVisible("#reportOnePageBtn") && (await page.textContent("#reportOnePageBtn")).includes("工事日報PDFを作成") && !(await page.isVisible("#reportPrintOpenBtn")) && await page.isVisible("#reportPrintBrowserToggle"));
+  await page.click("#reportPrintBrowserToggle");
   await stubPrint(); await page.click("#reportPrintOpenBtn");
   await page.click("#reportPrintCloseBtn");
   r1 = await reportOf(saved.id);

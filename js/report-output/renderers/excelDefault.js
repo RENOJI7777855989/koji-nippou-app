@@ -19,7 +19,8 @@ export const DEFAULT_EXCEL_MAPPING = {
   },
   companiesTable: {
     startCell: "A9",
-    columns: ["name", "occupation", "plannedWorkerCount", "actualWorkerCount", "machinery", "workContent", "safetyNotes"]
+    // 棟（2026-11-01）は従来の列の後ろに足す（既存の列の位置は変えない）
+    columns: ["name", "occupation", "plannedWorkerCount", "actualWorkerCount", "machinery", "workContent", "safetyNotes", "buildingName"]
   }
 };
 

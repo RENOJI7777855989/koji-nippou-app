@@ -1,7 +1,7 @@
 // 03-2（会社様式）の配置（2026-10-26。架空データ・隔離したプロファイル・同梱の03-2）
 //   ・巡回点検の ○×（L7〜L39）: 上下・左右とも中央
 //   ・協力会社欄の予定・実績の人数（C・D列）: 上下・左右とも中央
-//   ・協力会社欄の職種（B列）: 右揃え（上下は中央）。稼動人数表の職種（M列）は中央のまま
+//   ・協力会社欄の職種（B列）: 左揃え（上下は中央。2026-11-01。10-26〜10-31 は右揃え）。稼動人数表の職種（M・N列）は様式どおり左揃え（2026-11-01）
 //   Excel（1日分・台帳）・PDF（会社様式の印刷用HTML）・台帳の印刷で確かめる。配置以外の書式（フォント・罫線・塗り・表示形式）、
 //   列幅・行の高さ・結合・印刷設定・値は変えないことも確かめる。Microsoft Excel 実機・Safari・iPad の印刷は自動テストでは確認できない
 const path = require("path");
@@ -73,11 +73,11 @@ const MEASURE = (texts) => Object.fromEntries(texts.map((text) => [text, [...doc
     const d1 = await open((await generateReportOutput({ reportId: ids.d1, format: "excel", templateId: t.templateId })).blob);
     const d2 = await open((await generateReportOutput({ reportId: ids.d2, format: "excel", templateId: t.templateId })).blob);
     const led = await open((await generateLedgerWorkbook({ siteId: ids.site, templateId: t.templateId })).blob);
-    const refs = ["L7", "L8", "L39", "C7", "D7", "C33", "D33", "B7", "B33", "A7", "E7", "G7", "J7", "M7", "O7", "I7", "L6", "B6", "C6", "D6"];
+    const refs = ["L7", "L8", "L39", "C7", "D7", "C33", "D33", "B7", "B33", "A7", "E7", "G7", "J7", "M7", "N7", "M11", "O7", "I7", "L6", "B6", "C6", "D6"];
     const pick = (o, rs) => Object.fromEntries(rs.map((r) => [r, o.align(r)]));
     const restSame = (o, base, rs) => rs.filter((r) => o.rest(r) !== base.rest(r));
     // 台帳の頁: 1日目＝1〜52行、2日目＝53〜104行、3日目＝105〜156行
-    const ledRefs = ["L7", "L59", "L111", "L143", "C111", "D111", "B111", "A111", "B85", "M111"];
+    const ledRefs = ["L7", "L59", "L111", "L143", "C111", "D111", "B111", "A111", "B85", "M111", "N111", "M115"];
     // 原本の xf（既存の書式）が書き換わっていないか（足すだけ）
     const xfsOf = (s) => [...(/<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/.exec(s)[1].matchAll(/<xf\b[^>]*\/>|<xf\b[^>]*>[\s\S]*?<\/xf>/g))].map((m) => m[0]);
     const tx = xfsOf(tpl.stylesXml), ox = xfsOf(d1.stylesXml);
@@ -96,12 +96,13 @@ const MEASURE = (texts) => Object.fromEntries(texts.map((text) => [text, [...doc
   check("Excel（1日分）: 値は日報のまま（○・×・職種・予定・実績・協力会社名）", x.vals.L7 === "○" && x.vals.L8 === "×" && x.vals.B7 === OCC && x.vals.C7 === PLAN && x.vals.D7 === ACT && x.vals.A7 === "サンプル工業", JSON.stringify(x.vals));
   check("Excel（1日分）: ○×（L7〜L39）は上下・左右とも中央", ["L7", "L8", "L39"].every((r) => x.d1[r].startsWith("center/center")), JSON.stringify(["L7", "L8", "L39"].map((r) => `${r} ${x.tpl[r]}→${x.d1[r]}`)));
   check("Excel（1日分）: 予定・実績（C・D列。2社目以降の行も）は上下・左右とも中央", ["C7", "D7", "C33", "D33"].every((r) => x.d1[r].startsWith("center/center")), JSON.stringify(["C7", "D7", "C33", "D33"].map((r) => `${r} ${x.tpl[r]}→${x.d1[r]}`)));
-  check("Excel（1日分）: 協力会社欄の職種（B列）は右揃え・上下は中央", ["B7", "B33"].every((r) => x.d1[r].startsWith("right/center")), JSON.stringify(["B7", "B33"].map((r) => `${r} ${x.tpl[r]}→${x.d1[r]}`)));
-  check("Excel（1日分）: 対象外のセル（協力会社名・作業内容・注意事項・見出し・分類・稼動人数表は従来の中央）は変えない", ["A7", "E7", "G7", "I7", "L6", "B6", "C6", "D6"].every((r) => x.d1[r] === x.tpl[r]) && ["J7", "M7", "O7"].every((r) => x.d1[r].startsWith("center/center")), JSON.stringify(["A7", "E7", "G7", "I7", "B6"].map((r) => `${r} ${x.tpl[r]}→${x.d1[r]}`)));
+  check("Excel（1日分）: 協力会社欄の職種（B列）は左揃え・上下は中央", ["B7", "B33"].every((r) => x.d1[r].startsWith("left/center")), JSON.stringify(["B7", "B33"].map((r) => `${r} ${x.tpl[r]}→${x.d1[r]}`)));
+  check("Excel（1日分）: 稼動人数表の職種（N7 鳶工事・M11 土工事）は様式どおり左揃え、縦書きの分類（M7 仮設工事）は様式どおり中央", ["N7", "M11"].every((r) => x.d1[r] === x.tpl[r] && x.d1[r].startsWith("left/center")) && x.d1.M7 === x.tpl.M7 && x.d1.M7.startsWith("center/center"), JSON.stringify(["N7", "M11", "M7"].map((r) => `${r} ${x.tpl[r]}→${x.d1[r]}`)));
+  check("Excel（1日分）: 対象外のセル（協力会社名・作業内容・注意事項・見出し・分類）は変えない、稼動人数表の人数（O列）は中央", ["A7", "E7", "G7", "I7", "L6", "B6", "C6", "D6"].every((r) => x.d1[r] === x.tpl[r]) && ["J7", "O7"].every((r) => x.d1[r].startsWith("center/center")), JSON.stringify(["A7", "E7", "G7", "I7", "B6"].map((r) => `${r} ${x.tpl[r]}→${x.d1[r]}`)));
   check("Excel（1日分）: 配置以外の書式（フォント・罫線・塗り・表示形式）は様式のまま", x.restDiff1.length === 0, x.restDiff1.join("・"));
   check("Excel（1日分）: 列幅・行の高さ・結合・印刷設定（従来の1ページに収める指定のほか）・改頁は様式のまま、原本の書式は書き換えず足すだけ", x.structSame && x.xfAppendOnly);
   check("Excel（休工日・点検の記録なし）: ○×の欄は斜線のまま（文字なし）で中央揃え", x.d2diag && x.d2text.every((t) => t === "") && ["L7", "L39"].every((r) => x.d2[r].startsWith("center/center")), JSON.stringify({ diag: x.d2diag, text: x.d2text, align: x.d2 }));
-  check("Excel（台帳）: 全頁の ○×・予定・実績が中央、職種が右揃え（3日目の頁を含む）", ["L7", "L59", "L111", "L143", "C111", "D111", "M111"].every((r) => x.led[r].startsWith("center/center")) && ["B111", "B85"].every((r) => x.led[r].startsWith("right/center")), JSON.stringify(x.led));
+  check("Excel（台帳）: 全頁の ○×・予定・実績が中央、協力会社欄の職種が左揃え、稼動人数表の職種は様式のまま（3日目の頁を含む）", ["L7", "L59", "L111", "L143", "C111", "D111", "M111"].every((r) => x.led[r].startsWith("center/center")) && ["B111", "B85"].every((r) => x.led[r].startsWith("left/center")) && ["N111", "M115"].every((r) => x.led[r] === x.ledTpl[r]), JSON.stringify({ out: x.led, 原本: x.ledTpl }));
   check("Excel（台帳）: 協力会社名は変えない・縮小して全体を表示（shrinkToFit）など他の配置の指定は残す・配置以外の書式は様式のまま", x.led.A111 === x.ledTpl.A111 && /縮小/.test(x.led.B111) === /縮小/.test(x.ledTpl.B111) && /縮小/.test(x.led.L111) === /縮小/.test(x.ledTpl.L111) && x.restDiffLed.length === 0, JSON.stringify({ A: [x.ledTpl.A111, x.led.A111], B: [x.ledTpl.B111, x.led.B111], diff: x.restDiffLed }));
 
   // ---------- PDF（会社様式の印刷用HTML）・台帳の印刷：実際に描画した位置 ----------
@@ -109,13 +110,15 @@ const MEASURE = (texts) => Object.fromEntries(texts.map((text) => [text, [...doc
     const b = await bt.launch(); const p = await b.newPage({ viewport: { width: 1600, height: 1200 } });
     for (const [label, html] of [["PDF", x.pdf1], ["台帳の印刷", x.ledHtml]]) {
       await p.setContent(html); await p.waitForTimeout(700);
-      const m = await p.evaluate(MEASURE, ["○", "×", PLAN, ACT, OCC, "サンプル工業"]);
+      const m = await p.evaluate(MEASURE, ["○", "×", PLAN, ACT, OCC, "サンプル工業", "鳶工事", "杭打工事"]);
       const centered = (arr) => arr.length > 0 && arr.every((v) => Math.abs(v.dx) <= 1.5 && Math.abs(v.dy) <= 1.5);
       check(`${name} ${label}: ○×はセルの上下・左右とも中央`, centered(m["○"]) && centered(m["×"]), JSON.stringify({ o: m["○"].length, x: m["×"].length, worst: [...m["○"], ...m["×"]].reduce((a, v) => Math.max(a, Math.abs(v.dx), Math.abs(v.dy)), 0).toFixed(2) }));
       check(`${name} ${label}: 予定・実績の人数はセルの上下・左右とも中央`, centered(m[PLAN]) && centered(m[ACT]), JSON.stringify([m[PLAN][0], m[ACT][0]]));
-      // 同じ職種名は稼動人数表（M列・中央のまま）の空き行にも出るので、左にある協力会社欄（B列）のものだけを見る
+      // 同じ職種名は稼動人数表（N列）の空き行にも出るので、左にある協力会社欄（B列）のものだけを見る
       const minX = Math.min(...m[OCC].map((v) => v.x)); const occB = m[OCC].filter((v) => v.x < minX + 5);
-      check(`${name} ${label}: 協力会社欄の職種はセルの右端にそろい（左は空く）・上下は中央`, occB.length > 0 && occB.every((v) => v.right <= 3.5 && v.left > v.right + 4 && Math.abs(v.dy) <= 1.5), JSON.stringify(occB));
+      check(`${name} ${label}: 協力会社欄の職種はセルの左端にそろい（右は空く）・上下は中央`, occB.length > 0 && occB.every((v) => v.left <= 4 && v.right > v.left + 4 && Math.abs(v.dy) <= 1.5), JSON.stringify(occB));
+      const tradeLabels = [...m["鳶工事"], ...m["杭打工事"]];
+      check(`${name} ${label}: 稼動人数表の職種（鳶工事・杭打工事）はセルの左端にそろう`, tradeLabels.length >= 2 && tradeLabels.every((v) => v.left <= 4 && v.right > v.left), JSON.stringify(tradeLabels));
       check(`${name} ${label}: 協力会社名は左寄せのまま`, m["サンプル工業"].length > 0 && m["サンプル工業"].every((v) => v.left <= 4 && v.right > v.left), JSON.stringify(m["サンプル工業"]));
       if (label === "PDF") check(`${name} PDF: 箱に収まらない文字が無い`, (await p.evaluate(() => window.__xlsxCellsClipped)) === 0);
     }

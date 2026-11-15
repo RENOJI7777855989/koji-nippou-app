@@ -8,6 +8,7 @@ import { escapeHtml } from "../utils.js";
 import { showView, showMessage } from "./common.js";
 import { navigate } from "../router.js";
 import { listReportTemplates, getAppDefaultReportTemplate, repinSite, resolveReportTemplateForSite } from "../report-output/index.js";
+import { renderSiteMasters } from "./site-masters-panel.js";
 
 const titleEl = document.getElementById("siteFormTitle");
 const form = document.getElementById("siteForm");
@@ -100,6 +101,7 @@ export async function initSiteFormViewNew() {
   templateSelect.disabled = false;
   await populateAssignedSelect();
   await populateTemplateSelect();
+  await renderSiteMasters(null); // 棟・工種の一覧は、現場を保存した後に登録できる
   nameInput.focus();
 }
 
@@ -132,6 +134,7 @@ export async function initSiteFormViewEdit(params) {
   // 工事完了の現場は様式を切り替えない（日報は確定済み。再出力は固定した様式・版で行う）
   templateSelect.disabled = editingCompleted;
   updateTemplateHint();
+  await renderSiteMasters(site.id); // 棟・工種の一覧（この現場だけ。変更はその場で保存）
 }
 
 form.addEventListener("submit", async (e) => {

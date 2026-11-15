@@ -87,11 +87,14 @@ async function runBrowser(bt, bname, errors) {
 
     // ===== 日報1件（情報の多い日）: PDF出力 → 1ページのPDFを作成 → 共有 =====
     await page.goto(`${BASE}#/sites/${ids.site}/report/${ids.heavy}`); await page.waitForSelector("#reportPdfBtn");
+    check(T("日報画面のPDFのボタンの名前は「工事日報PDFを出力」"), (await page.textContent("#reportPdfBtn")).trim() === "工事日報PDFを出力");
     await page.click("#reportPdfBtn");
     await page.waitForFunction(() => document.getElementById("reportPrintDialog").open);
     await page.waitForTimeout(800);
     const areaShown = await page.isVisible("#reportOnePageArea");
-    check(T("会社指定様式の印刷ダイアログに「1ページのPDFを作成（A3）」が出る（従来の「印刷画面を開く」もそのまま）"), areaShown && (await page.isVisible("#reportPrintOpenBtn")));
+    // 2026-11-01: PDF出力では、アプリが作る1ページのPDF（A3）が通常の出力。ブラウザの印刷画面は［ブラウザの印刷画面からPDFにする］の奥
+    const dlg = await page.evaluate(() => { const area = document.getElementById("reportOnePageArea"), frame = document.getElementById("reportPrintFrame"); return { before: !!(area.compareDocumentPosition(frame) & Node.DOCUMENT_POSITION_FOLLOWING), text: document.getElementById("reportOnePageBtn").textContent }; });
+    check(T("PDF出力のダイアログ: 「工事日報PDFを作成（A3・1ページ）」がプレビューの上に出て、ブラウザの印刷画面のボタンは奥に隠れている"), areaShown && dlg.before && dlg.text.includes("工事日報PDFを作成") && !(await page.isVisible("#reportPrintOpenBtn")) && !(await page.isVisible("#reportPrintShareBtn")) && (await page.isVisible("#reportPrintBrowserToggle")), JSON.stringify(dlg));
     const note = await page.textContent("#reportPrintNote");
     const ver = await page.evaluate(async () => (await import("/js/report-output/renderers/companyPdfFromXlsx.js")).PRINT_LAYOUT_VERSION);
     check(T("印刷ダイアログに、会社様式の印刷レイアウトの版を表示する（iPad で新しい版が読み込まれているかを確かめるため）"), !!ver && note.includes(`印刷レイアウト ${ver}`), note.slice(-40));
@@ -116,6 +119,7 @@ async function runBrowser(bt, bname, errors) {
     await page.goto(`${BASE}#/sites/${ids.site}`); await page.waitForSelector("#bulkPdfBtn", { state: "attached" });
     await page.waitForFunction(() => document.querySelectorAll("#reportList li").length >= 2, null, { timeout: 15000 });
     await page.evaluate(() => { document.getElementById("reportBulkPanel").open = true; document.getElementById("bulkPdfBtn").scrollIntoView(); });
+    check(T("まとめて出力のPDFのボタンの名前は「工事日報PDFを一括出力」"), (await page.textContent("#bulkPdfBtn")).trim() === "工事日報PDFを一括出力");
     await page.click("#bulkPdfBtn");
     await page.waitForFunction(() => document.getElementById("reportPrintDialog").open, null, { timeout: 15000 });
     await page.waitForTimeout(1000);

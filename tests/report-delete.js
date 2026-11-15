@@ -170,7 +170,7 @@ const D = "2026-09-03"; // 重複のある日（実際は10/3。テストは過�
 
   // ===== 28 バックアップ・復元（削除済みの日報・写真・署名は復元後も出てこない。他は残る）=====
   await page.goto(`${BASE}#/backup`); await page.waitForSelector("#exportBackupBtn");
-  const [bk] = await Promise.all([page.waitForEvent("download"), page.click("#exportBackupBtn")]);
+  const [bk] = await Promise.all([page.waitForEvent("download"), page.uncheck("#backupEncryptToggle").then(() => page.click("#exportBackupBtn"))]);
   const zipPath = path.join(dir, "backup.zip"); await bk.saveAs(zipPath);
   const ctx2 = await chromium.launchPersistentContext(fs.mkdtempSync(path.join(os.tmpdir(), "report-delete-restore-")), { serviceWorkers: "block" });
   const p3 = await ctx2.newPage(); p3.on("dialog", (d) => d.accept());

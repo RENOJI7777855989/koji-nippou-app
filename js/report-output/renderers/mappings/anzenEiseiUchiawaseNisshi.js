@@ -75,13 +75,16 @@ export const ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING = {
   //   巡回点検の点検項目（J7〜K39。見出しの I6 は様式で中央）、稼動人数表の職種・人数・累計・計・延労働時間（M7〜P52。
   //   見出しの M6・O6・P6 は様式で中央）。2026-10-26 から、巡回点検の状況の ○×（L7〜L39）と、協力会社欄の予定・実績の
   //   人数（C7〜D34）も中央。分類の縦書き（I列）・協力会社名（A列）は対象外
-  centerAlignRanges: ["J7:K39", "L7:L39", "C7:D34", "M7:P52"],
+  //   2026-11-01（利用者の指定「職種は左揃え」）: 稼動人数表の職種（M・N列）を中央にするのをやめ、様式どおり（職種名は左揃え、
+  //   縦書きの「仮設工事」「内装工事」と「計」「延労働時間」は中央）に戻した。人数・累計（O・P列）は中央のまま
+  centerAlignRanges: ["J7:K39", "L7:L39", "C7:D34", "O7:P52"],
   // 日の状態の表示（2026-10-27。利用者の指定）: 現場作業なし・休工日・雨天作業不可日・事務作業日は、協力会社欄の2業者目（A9 の行）の
   //   作業内容（E9）に【現場作業なし】【休工日】【雨天作業不可日】【事務作業日】と書く（表示名は日報カレンダーと同じ）。2業者目の作業内容が
   //   あれば消さずに後ろへ足す。雨天作業不可日の中止作業・理由、事務作業日の内容は、その下の行（E10。2業者目の欄の2行目）に書く
   dayStatusNote: { companyIndex: 1, field: "workContent", detailRowOffset: 1, statuses: ["nowork", "holiday", "rain", "office"] },
-  // 右揃え（上下は中央）にするセル（2026-10-26）: 協力会社欄の職種（B7〜B34）。稼動人数表の職種（M列）は中央のまま
-  rightAlignRanges: ["B7:B34"],
+  // 左揃え（上下は中央）にするセル（2026-11-01。利用者の指定「職種は左揃え」。10-26〜10-31 は右揃え）: 協力会社欄の職種（B7〜B34。
+  //   様式は B7 だけ中央で、ほかは標準＝文字は左）。稼動人数表の職種は様式どおり左揃え（上の centerAlignRanges を参照）
+  leftAlignRanges: ["B7:B34"],
 
   tradeAttendance: {
     countColumn: "O",
@@ -128,7 +131,10 @@ export const ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING = {
       safetyNotes: "G"
       // foremanName: "X" ← 名前欄のある様式ではここに列を追加する
     },
-    signatureColumn: "H" // company.signature.blob があればこの列へ画像を貼る
+    signatureColumn: "H", // company.signature.blob があればこの列へ画像を貼る
+    // 棟（2026-11-01。利用者の指定）: 03-2 に棟の欄は無いので、作業内容（E列）の先頭に「【A棟】」と書く。職種（B列）には混ぜない。
+    // 棟が未設定の行は何も付けない。台帳も同じ協力会社欄の設定を使うので同じ書き方になる
+    buildingPrefix: { field: "workContent", template: "【{name}】" }
   },
 
   // 巡回点検記録。未確認（""）の項目は元の空欄のまま何も書き込まない。

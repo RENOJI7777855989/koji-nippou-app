@@ -16,7 +16,7 @@
    そのパスを追加すること（ビルド工程が無い方針のため手動管理）。
    ========================================================== */
 
-const CACHE_NAME = "koji-nippou-v73";
+const CACHE_NAME = "koji-nippou-v79";
 
 const PRECACHE_URLS = [
   "./assets/templates/manifest.json",
@@ -41,6 +41,7 @@ const PRECACHE_URLS = [
   "./js/auth.js",
   "./js/auditLog.js",
   "./js/backup.js",
+  "./js/backupCrypto.js",
   "./js/zipUtil.js",
   "./js/patrolChecklist.js",
   "./js/photos.js",
@@ -48,6 +49,8 @@ const PRECACHE_URLS = [
   "./js/directorSealBulk.js",
   "./js/signature-pad.js",
   "./js/signatures.js",
+  "./js/printScripts.js",
+  "./js/siteMasters.js",
   "./js/sites.js",
   "./js/ui/app-shell.js",
   "./js/ui/audit-log-view.js",
@@ -334,9 +337,12 @@ const PRECACHE_URLS = [
   "./js/ky/kySubmissions.js",
   "./js/billing/billingMonthly.js",
   "./js/billing/billingValue.js",
+  "./js/billing/dailyBillingSheet.js",
   "./js/ui/vendor-management-view.js",
   "./js/ui/site-dashboard.js",
+  "./js/ui/output-warnings.js",
   "./js/ui/report-print-dialog.js",
+  "./js/ui/site-masters-panel.js",
   "./js/printSupport.js",
   "./js/ui/master-item-list-view.js",
   "./js/quote-output/quoteDataAdapter.js",

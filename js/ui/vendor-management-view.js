@@ -62,6 +62,11 @@ function render() {
  * 業者×職種の明細の行（業者の行の下に置く）。cells(line) は2列目以降のセルのHTML。
  * key ごとに［日報］で根拠の日付（日報）を開く行を出す（openLine）
  */
+/** 明細の棟ごとの内訳（棟を使っているときだけ。数値はその表の列と同じもの。2026-11-15） */
+function buildingsText(list, label = "棟別") {
+  return (list || []).length ? `<br><small class="dash-sub vm-line-buildings">${label}: ${list.map((b) => `${escapeHtml(b.label)} ${b.value}`).join("・")}</small>` : "";
+}
+
 function lineRows(kind, vendor, lines, cells, colCount, entriesOf = (l) => l.entries) {
   return lines.map((l) => {
     const key = `${kind}|${vendor}|${l.trade}`; // HTML の属性に入れるので、見えない制御文字は使わない
@@ -69,7 +74,8 @@ function lineRows(kind, vendor, lines, cells, colCount, entriesOf = (l) => l.ent
     const open = state.openLine === key;
     const btn = entries.length ? `<button type="button" class="link-btn vm-line-toggle" data-vm-line="${escapeHtml(key)}" aria-expanded="${open}">日報（${new Set(entries.map((e) => e.date)).size}日）${open ? "▲" : "▼"}</button>` : "";
     const list = open ? `<tr class="vm-line-dates"><td colspan="${colCount}"><span class="empty-message">${escapeHtml(vendor)}／${escapeHtml(l.trade)} の日報: </span>${entries.map((e) => `<button type="button" class="secondary-btn vm-line-report" data-report-id="${escapeHtml(e.reportId)}" data-cids="${escapeHtml(e.companyIds.join(","))}">${md(e.date)}（${e.value}）</button>`).join(" ")}</td></tr>` : "";
-    return `<tr class="vm-line" data-vm-line-row="${escapeHtml(key)}"><td class="vm-line-name">└ ${escapeHtml(l.trade)}<br>${btn}</td>${cells(l)}</tr>${list}`;
+    const bText = kind === "activity" ? buildingsText(l.buildings, "棟別（この月）") + buildingsText(l.cumBuildings, "棟別（累計）") : buildingsText(l.buildings, kind === "period" ? "棟別（期間）" : "棟別");
+    return `<tr class="vm-line" data-vm-line-row="${escapeHtml(key)}"><td class="vm-line-name">└ ${escapeHtml(l.trade)}${bText}<br>${btn}</td>${cells(l)}</tr>${list}`;
   }).join("");
 }
 

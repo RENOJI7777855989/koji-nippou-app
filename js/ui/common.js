@@ -11,12 +11,13 @@ export function showView(viewId) {
 const messageEl = document.getElementById("message");
 let messageTimer = null;
 
-export function showMessage(text, isError = false) {
+/** duration: 表示する時間（ミリ秒。省略時は3秒）。帳票の出力後の注意など、長い文を読ませたいときだけ長くする（2026-11-01） */
+export function showMessage(text, isError = false, duration = 3000) {
   messageEl.textContent = text;
   messageEl.classList.toggle("error", isError);
   clearTimeout(messageTimer);
   messageTimer = setTimeout(() => {
     messageEl.textContent = "";
     messageEl.classList.remove("error");
-  }, 3000);
+  }, duration);
 }

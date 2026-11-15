@@ -9,6 +9,8 @@ async function restoreViaUi(page, zipPath, { applyAll = false } = {}) {
   const errors = await page.$eval("#restoreErrors", (el) => (el.hidden ? "" : el.textContent));
   if (errors) throw new Error(`復元の検査で問題: ${errors.replace(/\s+/g, " ").slice(0, 300)}`);
   if (applyAll && (await page.$('#restoreChoices [data-restore-all="1"]'))) await page.click('#restoreChoices [data-restore-all="1"]');
+  // 復元前のバックアップは、既定でパスワード暗号化がオン（2026-11-01）。この手順は暗号化しない ZIP で確かめる（暗号化は tests/backup-encryption.js）
+  if (await page.$("#restorePreEncrypt")) await page.uncheck("#restorePreEncrypt");
   await page.click("#restorePreBackupBtn");
   await page.waitForFunction(() => !document.getElementById("restorePreBackupConfirmLabel").hidden || /作成できませんでした/.test(document.getElementById("restorePreBackupStatus").textContent), null, { timeout: 60000 });
   const pre = await page.textContent("#restorePreBackupStatus");

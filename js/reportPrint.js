@@ -57,13 +57,18 @@ async function contextOf(reportId) {
   return { report, site, company };
 }
 
-/** Excel出力（会社指定様式の複製に書き込み）。出力日時を記録する */
-export async function exportReportExcel(reportId) {
+/**
+ * Excel出力（会社指定様式の複製に書き込み）。出力日時を記録する。
+ * beforeDownload(warnings): 帳票に書けない内容の警告を見せて、出力するか決める（false ならダウンロード・記録をしない。2026-11-01）
+ */
+export async function exportReportExcel(reportId, { beforeDownload = null } = {}) {
   const { company } = await contextOf(reportId);
   const result = await generateReportOutput({ reportId, format: "excel", templateId: company?.templateId || null });
+  const warnings = result.warnings || [];
+  if (beforeDownload && !(await beforeDownload(warnings))) return { ...result, warnings, cancelled: true, usedCompanyTemplate: !!company, company };
   downloadBlob(result.blob, result.filename);
   await recordReportOutput(reportId, "excel");
-  return { ...result, usedCompanyTemplate: !!company, company };
+  return { ...result, warnings, usedCompanyTemplate: !!company, company };
 }
 
 /** 印刷用HTML（ブラウザの印刷・PDF保存で使う）。記録はしない（印刷・保存したかは利用者の操作で決まるため） */
@@ -92,14 +97,16 @@ export function combinePrintHtml(htmls, title = "工事日報（まとめて出�
  * 複数日報のExcelを1つのZIPにまとめて出力する（ZIP内のファイル名は日付の英数字のみ。
  * Windowsの標準ZIP展開で日本語ファイル名が文字化けするのを避けるため）。
  */
-export async function exportReportsExcelZip(reportIds, zipName) {
+export async function exportReportsExcelZip(reportIds, zipName, { beforeDownload = null } = {}) {
   const files = new Map();
   const used = new Set();
+  const warnings = []; // 日報ごとの警告（日付つき。2026-11-01）
   let usedCompanyTemplate = true;
   for (const id of reportIds) {
     const { report, company } = await contextOf(id);
     if (!company) usedCompanyTemplate = false;
     const result = await generateReportOutput({ reportId: id, format: "excel", templateId: company?.templateId || null });
+    for (const w of result.warnings || []) warnings.push(`${report.date || "日付未設定"}: ${w}`);
     const ext = /\.(\w+)$/.exec(result.filename)?.[1] || "xlsx";
     let base = `${report.date || "no-date"}`;
     let name = `${base}.${ext}`;
@@ -107,22 +114,28 @@ export async function exportReportsExcelZip(reportIds, zipName) {
     used.add(name);
     files.set(name, new Uint8Array(await result.blob.arrayBuffer()));
   }
+  if (beforeDownload && !(await beforeDownload(warnings))) return { count: 0, usedCompanyTemplate, warnings, cancelled: true };
   const zip = buildZip({ buffer: new Uint8Array(0), entries: new Map() }, files, "application/zip");
   downloadBlob(zip, zipName);
   for (const id of reportIds) await recordReportOutput(id, "excel");
-  return { count: files.size, usedCompanyTemplate };
+  return { count: files.size, usedCompanyTemplate, warnings };
 }
 
 /** 複数日報の印刷用HTMLをまとめて作る（会社様式の有無は現場で共通） */
 export async function buildReportsPrintHtml(reportIds, title) {
   const htmls = [];
+  const warnings = []; // 日報ごとの警告（日付つき。2026-11-01）
   let usedCompanyTemplate = true;
   for (const id of reportIds) {
     const r = await buildReportPrintHtml(id);
     if (!r.usedCompanyTemplate) usedCompanyTemplate = false;
     htmls.push(r.html);
+    if (r.warnings.length) {
+      const date = (await getReport(id))?.date || "日付未設定";
+      for (const w of r.warnings) warnings.push(`${date}: ${w}`);
+    }
   }
-  return { html: combinePrintHtml(htmls, title), usedCompanyTemplate };
+  return { html: combinePrintHtml(htmls, title), usedCompanyTemplate, warnings };
 }
 
 /* ---------- 工事期間の台帳（1冊）---------- */
@@ -138,9 +151,10 @@ async function ledgerContextOf(siteId) {
 }
 
 /** 台帳Excel（工事開始日〜終了日の全頁を1冊に）を出力する。日報ごとの出力履歴には記録しない */
-export async function exportSiteLedgerExcel(siteId) {
+export async function exportSiteLedgerExcel(siteId, { beforeDownload = null } = {}) {
   const { company } = await ledgerContextOf(siteId);
   const result = await generateLedgerWorkbook({ siteId, templateId: company.templateId });
+  if (beforeDownload && !(await beforeDownload(result.warnings || []))) return { ...result, company, cancelled: true };
   downloadBlob(result.blob, result.filename);
   return { ...result, company };
 }

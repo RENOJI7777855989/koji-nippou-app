@@ -129,7 +129,7 @@ function render(model) {
   const cr = s.crew;
   const staffCell = cr.staff == null ? "未入力" : `${cr.staff}人${cr.staffSource === "names" ? "（現場監督の氏名から）" : ""}`;
   const crewHtml = `<div class="dash-table-wrap"><table class="dash-table dash-crew">
-      <thead><tr><th></th><th class="num">稼働人数</th><th class="num">人工</th><th class="num">累計人数</th></tr></thead>
+      <thead><tr><th></th><th class="num">稼働人数（延べ）</th><th class="num">人工</th><th class="num">累計人数（延べ）</th></tr></thead>
       <tbody>
         <tr><th>現場作業員</th><td class="num"><b>${cr.workers}</b>人</td><td class="num">${cr.workerManDays}</td><td class="num">${cr.workersCumulative}人</td></tr>
         <tr><th>監督・職員</th><td class="num"><b>${escapeHtml(staffCell)}</b></td><td class="num">${cr.staffManDays ?? "-"}</td><td class="num">${cr.staffCumulative}人</td></tr>
@@ -137,7 +137,28 @@ function render(model) {
       <tfoot><tr><th>全体</th><td class="num"><b>${cr.total}</b>人</td><td class="num">${cr.totalManDays}</td><td class="num">${cr.totalCumulative}人</td></tr></tfoot>
     </table></div>
     ${cr.staffWork ? `<p class="dash-sub">監督・職員の作業内容：${escapeHtml(cr.staffWork).replace(/\n/g, "<br>")}</p>` : ""}
-    <p class="dash-sub">人工は1人＝1人工の現場集計の値です。監督・職員は03-2の稼動人数表の「社員」の行に入り、計・延労働時間に含まれます。</p>`;
+    <p class="dash-sub">人工は1人＝1人工の現場集計の値です。監督・職員は03-2の稼動人数表の「社員」の行に入り、計・延労働時間に含まれます。現場作業員の人数は、各作業行の実績人数の合計（延べ人数）です（同じ人が複数の行に出ても見分けられないため、実人数ではありません）。</p>`;
+
+  // 工種別の延べ人数（棟・業者ごと。2026-11-15）: 同じ工種でも、棟・業者が違えば別の行（塗装をA棟はX社・B棟はY社が担当、など）
+  const tb = model.staff?.tradeBreakdown || [];
+  const tradeBreakdownHtml = tb.length
+    ? `<div class="dash-table-wrap"><table class="dash-table dash-trade-breakdown">
+        <thead><tr><th>工種</th><th>棟</th><th>業者</th><th class="num">本日（延べ）</th><th class="num">累計（延べ）</th></tr></thead>
+        <tbody>${tb.map((g) => `<tr class="dash-building-total"><th>${escapeHtml(g.trade)}</th><td colspan="2">計（${g.lines.length}組）</td><td class="num"><b>${g.today}</b>人</td><td class="num">${g.cumulative}人</td></tr>${g.lines.map((l) => `<tr><td></td><td>${escapeHtml(l.buildingSet ? l.building : "（棟未設定）")}</td><td>${escapeHtml(l.vendor)}</td><td class="num">${l.today}人</td><td class="num">${l.cumulative}人</td></tr>`).join("")}`).join("")}</tbody>
+        <tfoot><tr><th colspan="3">合計</th><td class="num"><b>${tb.reduce((s, g) => s + g.today, 0)}</b>人</td><td class="num">${tb.reduce((s, g) => s + g.cumulative, 0)}人</td></tr></tfoot>
+      </table></div><p class="dash-sub">本日稼働した工種だけ。同じ工種でも棟・業者が違えば別の行です。人数は作業行の実績人数の合計（延べ人数）、累計は同じ棟・工種・業者の工期開始から表示日までの合計です。03-2 の稼動人数表は様式どおり工種ごとにまとめて書きます。</p>`
+    : "";
+
+  // 棟別の延べ人数（2026-11-01。棟×工種×業者。03-2・業者別稼働と同じ集計 attendanceBreakdown の buildings）。
+  // 棟を1つも使っていない現場では出さない。棟が未設定の行（以前の日報を含む）は「（棟未設定）」
+  const bl = model.staff?.attendance?.buildings || [];
+  const buildingHtml = bl.some((b) => b.key)
+    ? `<div class="dash-table-wrap"><table class="dash-table dash-buildings">
+        <thead><tr><th>棟</th><th>工種・業者</th><th class="num">本日（延べ）</th><th class="num">累計（延べ）</th></tr></thead>
+        <tbody>${bl.map((b) => `<tr class="dash-building-total"><th>${escapeHtml(b.label)}</th><td>計</td><td class="num"><b>${b.today}</b>人</td><td class="num">${b.cumulative}人</td></tr>${b.lines.map((l) => `<tr><td></td><td>${escapeHtml(l.trade)}・${escapeHtml(l.vendor)}</td><td class="num">${l.today}人</td><td class="num">${l.cumulative}人</td></tr>`).join("")}`).join("")}</tbody>
+        <tfoot><tr><th colspan="2">合計</th><td class="num"><b>${bl.reduce((s, b) => s + b.today, 0)}</b>人</td><td class="num">${bl.reduce((s, b) => s + b.cumulative, 0)}人</td></tr></tfoot>
+      </table></div><p class="dash-sub">人数は各作業行の実績人数の合計（延べ人数）です。棟別の合計は全体の合計と同じです。</p>`
+    : "";
 
   const d = model.diary;
   const diaryHtml = d
@@ -152,14 +173,15 @@ function render(model) {
   // 業者別 稼働状況（人工は稼働人数を 1人＝1人工 として数えた現場集計の値。請求人工は表示しない）
   const fmtNum = (n) => (n == null ? "-" : Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, ""));
   const vendorRows = model.works.filter((w) => w.vendor || w.actual);
+  const hasBuilding = vendorRows.some((w) => w.building); // 棟を使っている日だけ棟の列を出す
   const totalWorkers = vendorRows.reduce((s, w) => s + (w.actual || 0), 0);
   const totalManDays = vendorRows.reduce((s, w) => s + (w.manDays || 0), 0);
   const vendorHtml = vendorRows.length
     ? `<div class="dash-table-wrap"><table class="dash-table dash-vendors">
-        <thead><tr><th>業者</th><th>工種</th><th class="num">稼働人数</th><th>作業時間</th><th class="num">人工</th><th class="num">累計人工</th></tr></thead>
-        <tbody>${vendorRows.map((w) => `<tr><td><b>${escapeHtml(w.vendor || "（業者名なし）")}</b></td><td>${escapeHtml(w.occupation)}</td><td class="num dash-workers"><b>${w.actual ?? "-"}</b>人</td><td>${escapeHtml(w.hours || "-")}${w.hoursDuration ? `<br><small class="dash-sub">${escapeHtml(w.hoursDuration)}</small>` : ""}</td><td class="num">${fmtNum(w.manDays)}</td><td class="num">${fmtNum(w.cumulativeManDays)}</td></tr>`).join("")}</tbody>
-        <tfoot><tr><th colspan="2">合計（${countVendors(vendorRows)}社・${countTrades(vendorRows)}工種）</th><th class="num"><b>${totalWorkers}</b>人</th><th></th><th class="num">${fmtNum(totalManDays)}</th><th></th></tr></tfoot>
-      </table></div><p class="dash-sub">人工は稼働人数を1人＝1人工として数えた現場集計の値です。同じ業者が複数の工種を担当する日は工種ごとに行が分かれます（累計人工も業者×工種ごと）。</p>`
+        <thead><tr>${hasBuilding ? "<th>棟</th>" : ""}<th>業者</th><th>工種</th><th class="num">延べ人数</th><th>作業時間</th><th class="num">人工</th><th class="num">累計人工</th></tr></thead>
+        <tbody>${vendorRows.map((w) => `<tr>${hasBuilding ? `<td>${escapeHtml(w.building || "（未設定）")}</td>` : ""}<td><b>${escapeHtml(w.vendor || "（業者名なし）")}</b></td><td>${escapeHtml(w.occupation)}</td><td class="num dash-workers"><b>${w.actual ?? "-"}</b>人</td><td>${escapeHtml(w.hours || "-")}${w.hoursDuration ? `<br><small class="dash-sub">${escapeHtml(w.hoursDuration)}</small>` : ""}</td><td class="num">${fmtNum(w.manDays)}</td><td class="num">${fmtNum(w.cumulativeManDays)}</td></tr>`).join("")}</tbody>
+        <tfoot><tr><th colspan="${hasBuilding ? 3 : 2}">合計（${countVendors(vendorRows)}社・${countTrades(vendorRows)}工種）</th><th class="num"><b>${totalWorkers}</b>人</th><th></th><th class="num">${fmtNum(totalManDays)}</th><th></th></tr></tfoot>
+      </table></div><p class="dash-sub">延べ人数は作業行ごとの実績人数（同じ人が複数の行に出ても見分けられないため、実人数ではありません）。人工は1人＝1人工として数えた現場集計の値です。同じ業者が複数の棟・工種を担当する日は作業行ごとに分かれます（累計人工は業者×工種ごと）。</p>`
     : empty(model.reportId ? "日誌の業者欄に入力すると、ここに業者別の稼働人数が表示されます。" : "この日の日誌はまだありません。");
   const textCard = (text, none) => (text ? `<p class="dash-notice">${escapeHtml(text).replace(/\n/g, "<br>")}</p>` : empty(model.reportId ? none : "この日の日誌はまだありません。"));
   const focusHtml = textCard(model.diary?.focusInstructions, "日誌の「本日の重点指示」に入力すると、ここに表示されます。");
@@ -343,6 +365,8 @@ function render(model) {
       <section class="dash-card dash-card-wide dash-today"><h3>✅ 今日の確認事項</h3>${stateHtml}${checksHtml}</section>
       <section class="dash-card dash-card-wide dash-ky"><h3>📝 本日の危険予知活動表 提出状況</h3>${kyManageHtml}</section>
       <section class="dash-card dash-card-wide"><h3>👥 本日の稼働（現場作業員・監督/職員）</h3>${crewHtml}</section>
+      ${tradeBreakdownHtml ? `<section class="dash-card dash-card-wide"><h3>🔧 工種別の延べ人数（棟・業者ごと）</h3>${tradeBreakdownHtml}</section>` : ""}
+      ${buildingHtml ? `<section class="dash-card dash-card-wide"><h3>🏢 棟別の延べ人数（本日・累計）</h3>${buildingHtml}</section>` : ""}
       <section class="dash-card"><h3>🏗 現場概要</h3>${overviewHtml}</section>
       <section class="dash-card"><h3>📈 昨日 → 今日</h3>${compareHtml}</section>
       <section class="dash-card"><h3>🔍 本日の巡回点検（03-2の巡回点検記録）</h3>${patrolHtml}</section>

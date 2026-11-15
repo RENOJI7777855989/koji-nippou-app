@@ -444,11 +444,12 @@ export async function renderLedgerWorkbook({ templateBuffer, mapping, site, entr
     }
     pkg.setText("xl/styles.xml", stylesXml);
   }
-  // 中央揃え（稼動人数表・点検項目・○×・協力会社欄の人数）と右揃え（協力会社欄の職種）。手書印刷用と同じ位置を、
+  // 中央揃え（稼動人数表の人数・点検項目・○×・協力会社欄の人数）と左揃え（協力会社欄の職種）。手書印刷用と同じ位置を、
   // 日報の有無に関係なく全頁に。出力の複製の書式だけ
   const centerCells = (pageCfgBase.centerAlignRanges || []).flatMap(expandRange);
   const rightCells = (pageCfgBase.rightAlignRanges || []).flatMap(expandRange);
-  if (centerCells.length || rightCells.length) {
+  const leftCells = (pageCfgBase.leftAlignRanges || []).flatMap(expandRange);
+  if (centerCells.length || rightCells.length || leftCells.length) {
     let stylesXml = await pkg.getText("xl/styles.xml");
     const cache = new Map();
     const bySheet = new Map();
@@ -456,12 +457,13 @@ export async function renderLedgerWorkbook({ templateBuffer, mapping, site, entr
       const name = sheetNames[Math.floor(d / profile.pagesPerSheet)];
       if (!name) continue;
       const off = (d % profile.pagesPerSheet) * profile.pageRows;
-      if (!bySheet.has(name)) bySheet.set(name, { center: [], right: [] });
+      if (!bySheet.has(name)) bySheet.set(name, { center: [], right: [], left: [] });
       bySheet.get(name).center.push(...centerCells.map((ref) => shiftRef(ref, off)));
       bySheet.get(name).right.push(...rightCells.map((ref) => shiftRef(ref, off)));
+      bySheet.get(name).left.push(...leftCells.map((ref) => shiftRef(ref, off)));
     }
-    for (const [name, { center, right }] of bySheet) {
-      const c = applyAlignmentPlan({ sheetXml: await pkg.getText(pathOf(name)), stylesXml, center, right, cache });
+    for (const [name, { center, right, left }] of bySheet) {
+      const c = applyAlignmentPlan({ sheetXml: await pkg.getText(pathOf(name)), stylesXml, center, right, left, cache });
       pkg.setText(pathOf(name), c.sheetXml);
       stylesXml = c.stylesXml;
     }

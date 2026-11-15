@@ -12,6 +12,9 @@
 function mapCompany(c, signature) {
   return {
     id: c.companyId || "",
+    // 棟（2026-11-01。任意）: 保存した時点の棟の名前。未設定は ""
+    buildingId: c.buildingId || "",
+    buildingName: c.buildingId ? c.buildingName || "" : "",
     name: c.companyName || "",
     occupation: c.occupation || "",
     plannedWorkerCount: c.plannedWorkerCount || "",

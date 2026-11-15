@@ -85,7 +85,9 @@ async function seed(page) {
 
 (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "backup-restore-"));
-  const ctx = await chromium.launchPersistentContext(dir, { viewport: { width: 1000, height: 1100 }, acceptDownloads: true });
+  // bypassCSP: このテストは計画の後の変更を、ページの中で文字列の処理（間接の eval）として作って試すため、CSP（2026-11-01。index.html）を外す。
+  //   アプリの CSP そのものは tests/csp.js で確かめる
+  const ctx = await chromium.launchPersistentContext(dir, { viewport: { width: 1000, height: 1100 }, acceptDownloads: true, bypassCSP: true });
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));

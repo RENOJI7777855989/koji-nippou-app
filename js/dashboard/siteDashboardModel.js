@@ -282,6 +282,7 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
       const minutes = p ? workMinutes(p.start, p.end) : null;
       return {
       companyId: c.companyId || "",
+      building: c.buildingId ? c.buildingName || "" : "", // 棟（保存した時点の名前。未設定は ""）
       vendor: c.companyName || "",
       occupation: c.occupation || "",
       planned: num(c.plannedWorkerCount),
@@ -338,6 +339,21 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
   const cumulative = workLive.filter((r) => (r.date || "") <= date).reduce((s, r) => s + actualOf(r), 0);
   // 業種別の人数（03-2の「稼動人数」欄と同じ集計。工種の表記ゆれをそろえ、業者ごとの内訳と作業内容に書かれた棟を添える。累計は工事開始から表示日まで）
   const byOccupation = attendance.trades.filter((t) => t.today > 0).map((t) => ({ occupation: t.label, count: t.today, cumulative: t.cumulative, vendors: t.vendorsToday }));
+  // 工種別の延べ人数を、棟×業者ごとに分ける（2026-11-15。利用者の指定: 棟ごとに塗装の業者が違うとき、同じ「塗装」にまとめずに見たい）。
+  // 元は同じ集計（attendanceBreakdown の buildings＝棟×工種×業者）。その日に稼働した組だけを出し、累計はその組の工期開始から表示日まで。
+  // 棟は作業行の棟（保存した時点の名前）で、未設定の行は「（棟未設定）」。人数は行の実績人数の合計（延べ）
+  const tradeBreakdown = (() => {
+    const groups = new Map();
+    for (const b of attendance.buildings || []) for (const l of b.lines) {
+      if (!l.today) continue;
+      if (!groups.has(l.tradeKey)) groups.set(l.tradeKey, { trade: l.trade, today: 0, cumulative: 0, lines: [] });
+      const g = groups.get(l.tradeKey);
+      g.today += l.today; g.cumulative += l.cumulative;
+      g.lines.push({ building: b.label, buildingSet: !!b.key, vendor: l.vendor, today: l.today, cumulative: l.cumulative });
+    }
+    const order = new Map(attendance.trades.map((t, i) => [t.tradeKey, i]));
+    return [...groups.entries()].sort((a, b) => (a[0] ? 0 : 1) - (b[0] ? 0 : 1) || (order.get(a[0]) ?? 999) - (order.get(b[0]) ?? 999)).map(([, g]) => g);
+  })();
   if (attendance.noTrade.today > 0) byOccupation.push({ occupation: NO_TRADE_LABEL, count: attendance.noTrade.today, cumulative: attendance.noTrade.cumulative, vendors: attendance.rows.filter((r) => !r.tradeKey && r.today).map((r) => ({ vendor: r.vendor, today: r.today, buildings: r.buildingsToday })) });
   // 監督・職員（現場作業員とは別系統。dailyFlow.js の staffHeadcountInfo: 入力された人数→未入力なら現場監督の氏名の数、
   // 休工日は0人）。03-2の稼動人数表の「社員」行と同じ値で、計・延労働時間には社員として入る。人工は1人＝1人工（請求人工ではない）
@@ -346,6 +362,7 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
   const supervisorsCumulative = live.filter((r) => (r.date || "") <= date).reduce((s, r) => s + (staffHeadcountForDay(r) ?? 0), 0);
   const staff = {
     byOccupation,
+    tradeBreakdown, // 工種別の延べ人数（棟×業者ごと。その日に稼働した組だけ）
     attendance, // 業者×工種の内訳（03-2と同じ集計）
     today,
     plannedToday,

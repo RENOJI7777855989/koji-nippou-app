@@ -39,9 +39,14 @@ export function buildXlsxCellPlan(model, cfg) {
     const rowStep = table.rowStep || 1;
     const maxCompanies = Math.floor((maxRows - 1) / rowStep) + 1;
     if (companies.length > maxCompanies) {
-      const overflowMsg = `帳票テンプレート「${cfg.sheetName}」は${maxCompanies}社までのため、業者${companies.length}件のうち${companies.length - maxCompanies}件が出力されません。`;
-      console.warn(overflowMsg);
-      warnings.push(overflowMsg);
+      // 入りきらない行を具体的に示す（2026-11-01。以前は件数だけで、日報画面・まとめて出力では画面に出ていなかった）。
+      // 日報のデータは削除・統合しない（帳票に書かないだけ）
+      const omitted = companies.slice(maxCompanies).map((c, k) => {
+        const parts = [c.buildingName, c.occupation, c.name].map((x) => String(x || "").trim()).filter(Boolean);
+        const n = String(c.actualWorkerCount ?? "").trim();
+        return `${maxCompanies + k + 1}行目（${parts.join("／") || "名前なし"}${n ? `・実績${n}人` : ""}${c.signature?.blob ? "・職長サインあり" : ""}）`;
+      });
+      warnings.push(`協力会社欄に書けるのは${maxCompanies}行までのため、作業行${companies.length}行のうち${companies.length - maxCompanies}行を帳票に書けません: ${omitted.join("、")}。日報のデータは消えていません（人数は稼動人数表の計には含めます）。`);
     }
 
     const { row: startRow0 } = parseCellRefRow(table.startCell);
@@ -50,10 +55,13 @@ export function buildXlsxCellPlan(model, cfg) {
       const company = companies[i];
       const rowNum = startRow0 + i * rowStep + 1;
 
+      const bp = table.buildingPrefix;
+      const buildingLabel = bp && String(company.buildingName || "").trim() ? bp.template.replace("{name}", String(company.buildingName).trim()) : "";
       for (const [fieldKey, colDef] of Object.entries(table.columns || {})) {
         const colLetter = typeof colDef === "string" ? colDef : colDef.column;
         const numeric = typeof colDef === "object" && !!colDef.numeric;
-        const value = company[fieldKey];
+        // 棟の欄が無い様式は、決めた欄（03-2 は作業内容）の先頭に棟を付ける（日報のデータは変えない）
+        const value = buildingLabel && fieldKey === bp.field ? `${buildingLabel}${company[fieldKey] || ""}` : company[fieldKey];
         if (value === "" || value == null) continue;
         cellWrites.push({ cell: `${colLetter}${rowNum}`, value, numeric });
       }
@@ -176,10 +184,11 @@ export function buildXlsxCellPlan(model, cfg) {
     if (patrolSlashApplies(model.report)) diagonalCells.push(...(patrolChecklist.slashCells || Object.values(patrolChecklist.itemCells || {})));
   }
 
-  // 中央揃え・右揃えにするセル（出力時に書式として付ける。xlsxAlign.js）
+  // 中央揃え・右揃え・左揃えにするセル（出力時に書式として付ける。xlsxAlign.js）
   const centerCells = (cfg.centerAlignRanges || []).flatMap(expandRange);
   const rightCells = (cfg.rightAlignRanges || []).flatMap(expandRange);
-  return { cellWrites, images, diagonalCells, centerCells, rightCells, fitToPage: cfg.fitToPage || null, sheetName: cfg.sheetName, warnings };
+  const leftCells = (cfg.leftAlignRanges || []).flatMap(expandRange);
+  return { cellWrites, images, diagonalCells, centerCells, rightCells, leftCells, fitToPage: cfg.fitToPage || null, sheetName: cfg.sheetName, warnings };
 }
 
 /**

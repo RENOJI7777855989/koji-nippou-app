@@ -6,6 +6,7 @@
 import { getSite, copySite, archiveSite, unarchiveSite, completeSite, reopenSite } from "../sites.js";
 import { listReportsBySite, getPrintStatus, isEditedAfterPrint, PRINT_STATUS_LABELS, recordReportOutput } from "../reports.js";
 import { exportReportsExcelZip, buildReportsPrintHtml, exportSiteLedgerExcel, buildSiteLedgerPrintHtml, resolveCompanyTemplateForSite } from "../reportPrint.js";
+import { confirmOutputWarnings } from "./output-warnings.js";
 import { previewSiteTemplateUpgrade, upgradeSiteTemplate, revertSiteTemplate } from "../report-output/templateResolver.js";
 import { getReportTemplate } from "../report-output/reportTemplates.js";
 import { renderSiteDashboard, setDashboardTab } from "./site-dashboard.js";
@@ -69,6 +70,27 @@ function fmtPeriod(site) {
 
 let allReports = [];
 let shownReports = [];
+
+/* ---------- 日報一覧の年月の選択（2026-11-15）----------
+   表示だけを選んだ年月の日報に絞る。shownReports（まとめて出力の対象＝絞り込み・検索に合う、すべての月の日報）は変えない。
+   初期は日報がある一番新しい年月。同じ現場の中では、ほかの画面から戻っても選んだ年月のまま。"all" は「すべての月」 */
+const reportMonthBar = document.getElementById("reportMonthBar");
+const reportMonthSelect = document.getElementById("reportMonthSelect");
+const reportMonthPrev = document.getElementById("reportMonthPrev");
+const reportMonthNext = document.getElementById("reportMonthNext");
+const reportMonthCount = document.getElementById("reportMonthCount");
+let listMonth = null; // "YYYY-MM" か "all"
+let listMonthSiteId = null;
+const monthLabelJa = (ym) => { const [y, m] = ym.split("-").map(Number); return `${y}年${m}月`; };
+const shiftMonth = (ym, d) => { const [y, m] = ym.split("-").map(Number); const t = new Date(y, m - 1 + d, 1); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`; };
+
+function renderMonthOptions(months) {
+  const list = listMonth !== "all" && listMonth && !months.includes(listMonth) ? [...months, listMonth].sort().reverse() : months;
+  reportMonthSelect.innerHTML = list.map((m) => `<option value="${m}">${monthLabelJa(m)}${months.includes(m) ? "" : "（日報なし）"}</option>`).join("") + `<option value="all">すべての月</option>`;
+  reportMonthSelect.value = listMonth;
+  reportMonthPrev.disabled = listMonth === "all";
+  reportMonthNext.disabled = listMonth === "all";
+}
 
 const fmtDateTime = (iso) => (iso ? new Date(iso).toLocaleString("ja-JP") : "");
 const todayIso = () => {
@@ -276,6 +298,7 @@ async function renderReportList() {
   reportListSummary.textContent = `全${allReports.length}件（未印刷${counts.unprinted}・印刷済み${counts.printed}・再印刷${counts.reprinted}・確認済み${counts.confirmed}）${missing ? `／未入力（日報のない日）${missing.length}日` : "／工期開始日が未設定のため未入力日は判定できません"}`;
 
   if (filter === "missing") {
+    reportMonthBar.hidden = true; // 未入力の日の一覧には年月の選択を使わない
     reportListEl.hidden = true;
     reportMissingList.hidden = false;
     shownReports = [];
@@ -290,7 +313,16 @@ async function renderReportList() {
   reportListEl.hidden = false;
   reportMissingList.hidden = true;
   shownReports = allReports.filter((r) => matchesFilter(r, filter) && matchesSearch(r, q));
-  for (const report of shownReports) {
+  // 年月の選択（表示だけ）。日報がある年月（新しい順）。初めて開いた現場は一番新しい年月
+  const months = [...new Set(allReports.map((r) => String(r.date || "").slice(0, 7)).filter((m) => /^\d{4}-\d{2}$/.test(m)))].sort().reverse();
+  if (listMonthSiteId !== currentSite.id || !listMonth) { listMonth = months[0] || null; listMonthSiteId = currentSite.id; }
+  reportMonthBar.hidden = allReports.length === 0;
+  if (listMonth) renderMonthOptions(months);
+  const displayed = !listMonth || listMonth === "all" ? shownReports : shownReports.filter((r) => String(r.date || "").startsWith(listMonth));
+  reportMonthCount.textContent = !listMonth ? "" : listMonth === "all"
+    ? `すべての月: ${displayed.length}件`
+    : `${monthLabelJa(listMonth)}: ${displayed.length}件${filter !== "all" || q ? "（絞り込み・検索に合うもの）" : ""}`;
+  for (const report of displayed) {
     const li = document.createElement("li");
     li.className = "report-card";
     li.dataset.reportId = report.id;
@@ -299,8 +331,14 @@ async function renderReportList() {
   }
   if (allReports.length > 0 && shownReports.length === 0) {
     reportListEl.innerHTML = `<li class="empty-message">条件に合う日報はありません。</li>`;
+  } else if (allReports.length > 0 && displayed.length === 0) {
+    reportListEl.innerHTML = `<li class="empty-message">${monthLabelJa(listMonth)}の日報はありません${filter !== "all" || q ? "（絞り込み・検索に合うもの）" : ""}。［◀ 前の月］［次の月 ▶］か、年月の選択で別の月を選んでください。</li>`;
   }
 }
+
+reportMonthSelect.addEventListener("change", () => { listMonth = reportMonthSelect.value; renderReportList(); });
+reportMonthPrev.addEventListener("click", () => { if (listMonth && listMonth !== "all") { listMonth = shiftMonth(listMonth, -1); renderReportList(); } });
+reportMonthNext.addEventListener("click", () => { if (listMonth && listMonth !== "all") { listMonth = shiftMonth(listMonth, 1); renderReportList(); } });
 
 reportListFilter.addEventListener("change", renderReportList);
 reportListSearch.addEventListener("input", renderReportList);
@@ -324,8 +362,11 @@ bulkExcelBtn.addEventListener("click", async () => {
   if (!targets) return;
   bulkExcelBtn.disabled = true;
   try {
-    const r = await exportReportsExcelZip(targets.map((t) => t.id), `${currentSite.name}_日報Excel_${targets[0].date}〜${targets[targets.length - 1].date}.zip`);
-    showMessage(`日報${r.count}件のExcelをZIPで出力しました。${r.usedCompanyTemplate ? "" : " 注意: 会社指定様式が見つからないため汎用フォーマットで出力しました。"}`, !r.usedCompanyTemplate);
+    // 帳票に書けない内容（入りきらない作業行など）があれば、ダウンロードの前に確認する（日報ごとに日付つき。2026-11-01）
+    const r = await exportReportsExcelZip(targets.map((t) => t.id), `${currentSite.name}_日報Excel_${targets[0].date}〜${targets[targets.length - 1].date}.zip`, { beforeDownload: (w) => confirmOutputWarnings(w, "ZIPを出力") });
+    if (r.cancelled) { showMessage("一括出力をやめました（帳票に書けない内容があるため）。", true); return; }
+    const warn = r.warnings.length ? ` 注意: ${r.warnings.join(" ")}` : "";
+    showMessage(`日報${r.count}件のExcelをZIPで出力しました。${r.usedCompanyTemplate ? "" : " 注意: 会社指定様式が見つからないため汎用フォーマットで出力しました。"}${warn}`, !r.usedCompanyTemplate || !!warn, warn ? 12000 : 3000);
     await renderReportList();
   } catch (err) {
     showMessage(`一括出力に失敗しました: ${err.message}`, true);
@@ -349,6 +390,7 @@ async function openBulkPrint(mode) {
     mode,
     title: `${mode === "pdf" ? "PDF一括出力" : "まとめて印刷"}（${targets.length}件: ${targets[0].date}〜${targets[targets.length - 1].date}）`,
     note: built.usedCompanyTemplate ? "会社指定様式のレイアウトで、1日報1ページで出力します。" : "会社指定様式が見つからない日報があるため、アプリ独自のレイアウトで出力します。",
+    warnings: built.warnings, // 日報ごとの、帳票に書けない内容（日付つき）
     // すべて会社指定様式のときだけ、1日報1ページのPDF（A3）も作れる（アプリ独自のレイアウトの日報が混ざると、その日報が抜けるため出さない）
     onePagePdfName: built.usedCompanyTemplate ? `工事日報_${currentSite.name}_${targets[0].date}〜${targets[targets.length - 1].date}` : null,
     onPrinted: async () => {
@@ -372,7 +414,8 @@ ledgerExcelBtn.addEventListener("click", async () => {
   try {
     const r = await exportSiteLedgerExcel(currentSite.id);
     const notes = r.warnings.length ? ` 注意: ${r.warnings.join(" ")}` : "";
-    showMessage(`台帳Excelを出力しました（${r.firstDate}〜${r.lastDate}、${r.pageCount}頁・シート${r.sheetNames.length}枚、日報${r.placedCount}件）。${notes}`);
+    // 台帳の警告は、帳票に書けない内容のほか「シートを追加しました」などのお知らせも含むので、出力後に警告の色で出す
+    showMessage(`台帳Excelを出力しました（${r.firstDate}〜${r.lastDate}、${r.pageCount}頁・シート${r.sheetNames.length}枚、日報${r.placedCount}件）。${notes}`, r.warnings.length > 0, r.warnings.length ? 12000 : 3000);
   } catch (err) {
     showMessage(`台帳を出力できませんでした: ${err.message}`, true);
   } finally {
@@ -397,7 +440,8 @@ ledgerPrintBtn.addEventListener("click", async () => {
     html: built.html,
     mode: "pdf",
     title: `台帳の印刷・PDF（${built.firstDate}〜${built.lastDate}、${built.printPageCount}頁）`,
-    note: "台帳Excelと同じ内容を1日1頁で出力します。紙に印刷する場合も、この画面の印刷先でプリンターを選んでください（台帳の出力は日報ごとの印刷記録には残しません）。"
+    note: "台帳Excelと同じ内容を1日1頁で出力します。紙に印刷する場合も、この画面の印刷先でプリンターを選んでください（台帳の出力は日報ごとの印刷記録には残しません）。",
+    warnings: built.warnings || []
   });
 });
 

@@ -158,7 +158,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
 
   // ===== 14 バックアップ・復元 =====
   await page.goto(`${BASE}#/backup`); await page.waitForSelector("#exportBackupBtn");
-  const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#exportBackupBtn")]);
+  const [dl] = await Promise.all([page.waitForEvent("download"), page.uncheck("#backupEncryptToggle").then(() => page.click("#exportBackupBtn"))]);
   const zipPath = path.join(dir, "backup.zip"); await dl.saveAs(zipPath);
   const ctx2 = await chromium.launchPersistentContext(fs.mkdtempSync(path.join(os.tmpdir(), "dlv-copy-restore-")), { serviceWorkers: "block" });
   const p3 = await ctx2.newPage(); p3.on("pageerror", (e) => errors.push(e.message)); p3.on("dialog", (d) => d.accept());

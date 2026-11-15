@@ -25,7 +25,11 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   page.on("dialog", (d) => d.accept());
   await page.goto(BASE); await page.waitForSelector("#view-site-list:not([hidden])");
   const today = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; });
-  const month = today.slice(0, 7);
+  // 日報は対象の月の1〜4日に作る。今日より後の日報は数えないので、月の4日までに実行するときは前の月を使う（2026-11-01 に月初めで失敗した）
+  const prevMonth = (ym) => { const [y, m] = ym.split("-").map(Number); return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`; };
+  const month = Number(today.slice(8, 10)) >= 5 ? today.slice(0, 7) : prevMonth(today.slice(0, 7));
+  // 業者管理の画面は今月を開くので、対象の月がちがえば選び直す
+  const pickMonth = async () => { if (month !== today.slice(0, 7) && (await page.$eval("#vendorMgmtMonth", (el) => el.value)) !== month) { await page.selectOption("#vendorMgmtMonth", month); await page.waitForTimeout(300); } };
   const ids = await page.evaluate(async (month) => {
     const { createSite } = await import("/js/sites.js"); const { dbPut } = await import("/js/db.js"); const { stampNew } = await import("/js/utils.js");
     const site = await createSite({ name: "業者×職種の明細の試験", startDate: `${month}-01` });
@@ -61,7 +65,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   check("6 新しい業者（A社）も同じ決まり: 防水・屋上防水・シーリング・外壁補修は別の明細、業者合計＝明細の合計", data.a.A && data.a.A.lines["防水"] === 2 && data.a.A.lines["屋上防水"] === 1 && data.a.A.lines["シーリング"] === 2 && data.a.A.lines["外壁補修"] === 1 && data.a.A.total === 6 && data.b.A.total === 4 && !("シーリング" in data.b.A.lines), JSON.stringify({ a: data.a.A, b: data.b.A }));
 
   // 画面: 請求人工管理の明細 → 日報の日付 → 日報（該当の業者の行が目立つ）→ 修正・保存 → 業者管理に戻り集計し直す
-  await page.goto(`${BASE}#/sites/${ids.site}/vendors`); await page.waitForSelector("#vendorMgmtMonth"); await page.waitForTimeout(300);
+  await page.goto(`${BASE}#/sites/${ids.site}/vendors`); await page.waitForSelector("#vendorMgmtMonth"); await page.waitForTimeout(300); await pickMonth();
   const actLines = await page.evaluate(() => [...document.querySelectorAll(".vm-activity tbody tr.vm-line")].map((tr) => tr.cells[0].textContent.replace(/\s+/g, "")));
   check("業者別稼働の画面: 業者の行（業者合計）の下に職種ごとの明細が出る", actLines.some((t) => t.startsWith("└洗浄")) && actLines.some((t) => t.startsWith("└屋根洗浄")) && actLines.some((t) => t.startsWith("└防水")) && actLines.some((t) => t.startsWith("└屋上防水")), JSON.stringify(actLines));
   // 9: 業者別稼働から日報へ

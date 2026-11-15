@@ -9,8 +9,10 @@ import { getReport, listReportsBySite, createReport, updateReport, getPrintStatu
 import { DAY_STATUSES, labelOf as dayLabelOf, dayStatusOf } from "../dashboard/dailyFlow.js";
 import { countVendors, countTrades } from "../dashboard/siteDashboardModel.js";
 import { exportReportExcel, buildReportPrintHtml } from "../reportPrint.js";
+import { confirmOutputWarnings } from "./output-warnings.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
 import { getSite } from "../sites.js";
+import { listMaster, addMasterItem, matchTrade } from "../siteMasters.js";
 import { addPhoto, listPhotosByReport, deletePhoto } from "../photos.js";
 import { saveSignature, listSignaturesByReport, deleteSignature } from "../signatures.js";
 import { createId, escapeHtml } from "../utils.js";
@@ -178,9 +180,47 @@ function collectPatrolChecklist() {
 }
 
 function renumberCompanyRows() {
+  // 1行＝棟・工種・業者ごとの作業の単位（2026-11-01。以前の見出しは「業者 n」）
   companiesContainer.querySelectorAll(".company-row").forEach((row, index) => {
-    row.querySelector("h3").textContent = `業者 ${index + 1}`;
+    row.querySelector("h3").textContent = `作業行 ${index + 1}`;
   });
+}
+
+/* ---------- 棟・工種（現場ごとの一覧。js/siteMasters.js。2026-11-01）----------
+   行には棟の id と保存した時点の棟の名前（row.dataset.buildingName）を持たせる。一覧で名前を変えても、
+   この行を選び直さない限り保存した名前のまま（過去の日報の表示・帳票は変わらない）。棟を選ばない行は「未設定」 */
+let rowSite = null; // 日報の現場（棟・工種の一覧の元）
+
+/** 行の棟の選択欄を作り直す（選んでいる棟は、使用停止・名前の変更があっても保存した名前で残す） */
+function renderBuildingSelect(row) {
+  const sel = row.querySelector(".buildingId");
+  const selectedId = row.dataset.buildingId || "";
+  const snap = row.dataset.buildingName || "";
+  const all = listMaster(rowSite, "buildings", { includeInactive: true });
+  const active = all.filter((b) => b.active !== false);
+  const opts = [`<option value="">（棟 未設定）</option>`];
+  for (const b of active) {
+    const label = b.id === selectedId && snap && snap !== b.name ? `${snap}（現在の名前: ${b.name}）` : b.name;
+    opts.push(`<option value="${escapeHtml(b.id)}">${escapeHtml(label)}</option>`);
+  }
+  if (selectedId && !active.some((b) => b.id === selectedId)) {
+    const m = all.find((b) => b.id === selectedId);
+    opts.push(`<option value="${escapeHtml(selectedId)}">${escapeHtml(snap || m?.name || "（名前なし）")}${m ? "（使用停止）" : ""}</option>`);
+  }
+  if (rowSite && !rowSite.completedAt) opts.push(`<option value="__add__">＋ 棟を追加…</option>`);
+  sel.innerHTML = opts.join("");
+  sel.value = selectedId;
+}
+
+function refreshBuildingSelects() {
+  companiesContainer.querySelectorAll(".company-row").forEach(renderBuildingSelect);
+}
+
+/** 工種が現場の一覧に無ければ［この工種を一覧に追加］を出す */
+function updateTradeAddButton(row) {
+  const btn = row.querySelector(".addTradeBtn");
+  const v = row.querySelector(".occupation").value.trim();
+  btn.hidden = !v || !rowSite || !!rowSite.completedAt || !!matchTrade(rowSite, v) || form.classList.contains("read-only-form");
 }
 
 /** 作業人数（合計）は、各業者の実績人数の合計を自動算出する（手入力欄ではない） */
@@ -244,19 +284,38 @@ function addCompanyRow(data = {}) {
   row.className = "company-row";
   row.dataset.companyId = data.companyId || createId();
   row.dataset.existingSignatureId = "";
+  // 入力の順: 棟 → 工種 → 業者 → 人数 → 職長名 → 作業内容（2026-11-01）。同じ業者・同じ職長でも、棟・工種が違えば別の行
   row.innerHTML = `
-    <h3></h3>
+    <div class="company-row-head">
+      <h3></h3>
+      <span class="row-move">
+        <button type="button" class="moveRowUpBtn secondary-btn" aria-label="この行を上へ" title="上へ">▲</button>
+        <button type="button" class="moveRowDownBtn secondary-btn" aria-label="この行を下へ" title="下へ">▼</button>
+      </span>
+    </div>
+    <label>棟
+      <select class="buildingId" aria-label="棟"></select>
+    </label>
+    <div class="trade-field">
+      <label>工種
+        <input type="text" class="occupation" list="occupationSuggestions" placeholder="例）塗装" autocomplete="off">
+      </label>
+      <button type="button" class="addTradeBtn link-btn" hidden>＋ この工種を現場の一覧に追加</button>
+    </div>
     <label>業者名
       <input type="text" class="companyName" list="companyNameSuggestions" placeholder="例）〇〇建設" autocomplete="off">
-    </label>
-    <label>工種
-      <input type="text" class="occupation" list="occupationSuggestions" placeholder="例）塗装" autocomplete="off">
     </label>
     <label>予定人数
       <input type="number" class="plannedWorkerCount" min="0" placeholder="例）5">
     </label>
     <label>実績人数
       <input type="number" class="actualWorkerCount" min="0" placeholder="例）5">
+    </label>
+    <label>職長名
+      <input type="text" class="foremanName" placeholder="例）山田太郎">
+    </label>
+    <label class="full-row">作業内容
+      <textarea class="workContent" rows="2" placeholder="例）1階配筋工事"></textarea>
     </label>
     <div class="work-hours-field">
       <span class="work-hours-label">作業時間</span>
@@ -274,17 +333,11 @@ function addCompanyRow(data = {}) {
     <label class="full-row">使用機械
       <input type="text" class="machinery" placeholder="例）バックホウ">
     </label>
-    <label class="full-row">作業内容
-      <textarea class="workContent" rows="2" placeholder="例）1階配筋工事"></textarea>
-    </label>
     <label class="full-row">安全注意事項
       <textarea class="safetyNotes" rows="2" placeholder="例）高所作業のため親綱使用"></textarea>
     </label>
     <div class="foreman-signature-block full-row">
-      <label>職長名
-        <input type="text" class="foremanName" placeholder="例）山田太郎">
-      </label>
-      <h4>職長サイン</h4>
+      <h4>職長サイン（この作業行の職長）</h4>
       <div class="signature-pad-wrap">
         <canvas class="signatureCanvas signature-canvas"></canvas>
       </div>
@@ -293,8 +346,11 @@ function addCompanyRow(data = {}) {
         <span class="signatureSignedAt signature-signed-at"></span>
       </div>
     </div>
-    <button type="button" class="removeCompanyBtn">この業者を削除</button>
+    <button type="button" class="removeCompanyBtn">この作業行を削除</button>
   `;
+  // 棟: id と保存した時点の名前（名前を変えても、この行を選び直さない限りそのまま）
+  row.dataset.buildingId = data.buildingId || "";
+  row.dataset.buildingName = data.buildingName || "";
   row.querySelector(".companyName").value = data.companyName || "";
   row.querySelector(".occupation").value = data.occupation || "";
   row.querySelector(".plannedWorkerCount").value = data.plannedWorkerCount || "";
@@ -311,6 +367,8 @@ function addCompanyRow(data = {}) {
 
   companiesContainer.appendChild(row);
   renumberCompanyRows();
+  renderBuildingSelect(row);
+  updateTradeAddButton(row);
 
   row._signaturePad = createSignaturePad(row.querySelector(".signatureCanvas"));
 
@@ -327,9 +385,61 @@ async function loadSignatureIntoRow(row, signature) {
 
 companiesContainer.addEventListener("input", (e) => {
   if (e.target.classList.contains("actualWorkerCount")) recalcWorkerCountTotal();
+  if (e.target.classList.contains("occupation")) updateTradeAddButton(e.target.closest(".company-row"));
+});
+
+// 棟の選択（「＋ 棟を追加…」で現場の一覧に足す。同じ名前（表記ゆれを含む）は登録しない）
+companiesContainer.addEventListener("change", async (e) => {
+  const sel = e.target.closest(".buildingId");
+  if (!sel) return;
+  const row = sel.closest(".company-row");
+  if (sel.value === "__add__") {
+    const name = prompt("追加する棟の名前（例: A棟・共用部・全棟）");
+    if (name && name.trim()) {
+      try {
+        const { site, item } = await addMasterItem(rowSite.id, "buildings", name);
+        rowSite = site;
+        row.dataset.buildingId = item.id;
+        row.dataset.buildingName = item.name;
+        showMessage(`棟「${item.name}」を現場の一覧に追加しました。`);
+      } catch (err) {
+        showMessage(err.message, true);
+      }
+    }
+    refreshBuildingSelects();
+    return;
+  }
+  row.dataset.buildingId = sel.value;
+  row.dataset.buildingName = sel.value ? (listMaster(rowSite, "buildings", { includeInactive: true }).find((b) => b.id === sel.value)?.name || row.dataset.buildingName) : "";
 });
 
 companiesContainer.addEventListener("click", async (e) => {
+  // 行の並べ替え（行の要素ごと動かすので、職長サイン（行の id で保存）・入力中のサインはその行についたまま）
+  const moveBtn = e.target.closest(".moveRowUpBtn, .moveRowDownBtn");
+  if (moveBtn) {
+    if (form.classList.contains("read-only-form")) return;
+    const row = moveBtn.closest(".company-row");
+    if (moveBtn.classList.contains("moveRowUpBtn")) { const prev = row.previousElementSibling; if (prev) companiesContainer.insertBefore(row, prev); }
+    else { const next = row.nextElementSibling; if (next) companiesContainer.insertBefore(next, row); }
+    renumberCompanyRows();
+    moveBtn.focus();
+    return;
+  }
+  const addTrade = e.target.closest(".addTradeBtn");
+  if (addTrade) {
+    const row = addTrade.closest(".company-row");
+    const v = row.querySelector(".occupation").value.trim();
+    try {
+      const { site, item } = await addMasterItem(rowSite.id, "trades", v);
+      rowSite = site;
+      await loadCompanySuggestions(rowSite.id);
+      showMessage(`工種「${item.name}」を現場の一覧に追加しました。`);
+    } catch (err) {
+      showMessage(err.message, true);
+    }
+    companiesContainer.querySelectorAll(".company-row").forEach(updateTradeAddButton);
+    return;
+  }
   const clearBtn = e.target.closest(".clearSignatureBtn");
   if (clearBtn) {
     const row = clearBtn.closest(".company-row");
@@ -349,7 +459,7 @@ companiesContainer.addEventListener("click", async (e) => {
       (cls) => row.querySelector(`.${cls}`).value.trim() !== ""
     );
     const hasSignature = !row._signaturePad.isEmpty() || row.dataset.existingSignatureId;
-    if ((hasInput || hasSignature) && !confirm("入力内容が削除されます。この業者を削除しますか？")) return;
+    if ((hasInput || hasSignature) && !confirm("入力内容とこの行の職長サインが削除されます。この作業行を削除しますか？")) return;
     if (row.dataset.existingSignatureId) await deleteSignature(row.dataset.existingSignatureId);
     row._signaturePad.destroy();
     row.remove();
@@ -610,14 +720,20 @@ progressInput.addEventListener("input", updateProgressHint);
  */
 async function loadCompanySuggestions(siteId) {
   const reports = siteId ? await listReportsBySite(siteId) : [];
+  rowSite = siteId ? await getSite(siteId) : null; // 棟・工種の一覧（現場ごと）
   const names = new Set(), trades = new Set();
   for (const r of reports) for (const c of r.companies || []) {
     if ((c.companyName || "").trim()) names.add(c.companyName.trim());
     if ((c.occupation || "").trim()) trades.add(c.occupation.trim());
   }
-  const fill = (id, values) => { const el = document.getElementById(id); if (el) el.innerHTML = [...values].sort((a, b) => a.localeCompare(b, "ja")).map((v) => `<option value="${escapeHtml(v)}"></option>`).join(""); };
-  fill("companyNameSuggestions", names);
-  fill("occupationSuggestions", trades);
+  const fill = (id, values) => { const el = document.getElementById(id); if (el) el.innerHTML = [...values].map((v) => `<option value="${escapeHtml(v)}"></option>`).join(""); };
+  const sorted = (set) => [...set].sort((a, b) => a.localeCompare(b, "ja"));
+  fill("companyNameSuggestions", sorted(names));
+  // 工種: 現場の一覧（並び順）を先に、その後に過去の日報の工種（一覧と同じ工種は出さない）
+  const masterTrades = listMaster(rowSite, "trades").map((t) => t.name);
+  fill("occupationSuggestions", [...masterTrades, ...sorted(trades).filter((t) => !matchTrade(rowSite, t))]);
+  refreshBuildingSelects();
+  companiesContainer.querySelectorAll(".company-row").forEach(updateTradeAddButton);
 }
 
 async function loadPreviousProgress(siteId, date, excludeId) {
@@ -703,6 +819,7 @@ function resetForm() {
   form.reset();
   weatherSelect.querySelectorAll("option[data-extra]").forEach((o) => o.remove());
   companiesContainer.innerHTML = "";
+  rowSite = null; // 棟・工種の一覧は、日報の現場を読んだとき（loadCompanySuggestions）に読み直す
   addCompanyRow();
   siteSupervisorsContainer.innerHTML = "";
   loadFlowAndDeliveries({});
@@ -1076,7 +1193,7 @@ function applyCopyFrom(src) {
   companiesContainer.innerHTML = "";
   const cs = (src.companies || []).filter((c) => (c.companyName || "").trim() || (c.occupation || "").trim());
   for (const c of cs) {
-    const row = addCompanyRow({ companyName: String(c.companyName || ""), occupation: String(c.occupation || ""), workContent: String(c.workContent || ""), safetyNotes: String(c.safetyNotes || ""), machinery: String(c.machinery || "") });
+    const row = addCompanyRow({ buildingId: String(c.buildingId || ""), buildingName: String(c.buildingName || ""), companyName: String(c.companyName || ""), occupation: String(c.occupation || ""), workContent: String(c.workContent || ""), safetyNotes: String(c.safetyNotes || ""), machinery: String(c.machinery || "") });
     row.classList.add("is-copied");
   }
   if (!cs.length) addCompanyRow();
@@ -1316,8 +1433,12 @@ async function refreshOutputPanel() {
 reportExcelBtn.addEventListener("click", async () => {
   reportExcelBtn.disabled = true;
   try {
-    const r = await exportReportExcel(editingReportId);
-    showMessage(`Excelを出力しました（${r.filename}）${r.usedCompanyTemplate ? "" : " ／ 注意: 会社指定様式が見つからないため汎用フォーマットで出力しました（テンプレート管理で標準テンプレートを登録してください）"}`, !r.usedCompanyTemplate);
+    // 帳票に書けない内容（入りきらない作業行など）があれば、ダウンロードの前に確認する（2026-11-01）
+    const r = await exportReportExcel(editingReportId, { beforeDownload: (w) => confirmOutputWarnings(w, "Excelを出力") });
+    if (r.cancelled) { showMessage("Excelの出力をやめました（帳票に書けない内容があるため）。", true); return; }
+    // 出力後の注意（累計だけの業種・搬入の「ほか n件」など、ダウンロード前には確認しないものも含めて全部）。長めに表示する
+    const warn = r.warnings.length ? ` ／ 注意: ${r.warnings.join(" ")}` : "";
+    showMessage(`Excelを出力しました（${r.filename}）${r.usedCompanyTemplate ? "" : " ／ 注意: 会社指定様式が見つからないため汎用フォーマットで出力しました（テンプレート管理で標準テンプレートを登録してください）"}${warn}`, !r.usedCompanyTemplate || !!warn, warn ? 12000 : 3000);
     await refreshOutputPanel();
   } catch (err) {
     showMessage(`Excel出力に失敗しました: ${err.message}`, true);
@@ -1341,6 +1462,7 @@ async function openPrint(mode) {
     mode,
     title: `${mode === "pdf" ? "PDF出力" : mode === "reprint" ? "再印刷" : "印刷"}（${report.date || "日付未設定"}）`,
     note: built.usedCompanyTemplate ? `会社指定様式「${built.company.templateName}」のレイアウトで出力します。` : "会社指定様式が見つからないため、アプリ独自のレイアウトで出力します。",
+    warnings: built.warnings, // 帳票に書けない内容（入りきらない作業行など）をダイアログの上に出す
     // 会社指定様式のときは、1日報1ページのPDF（A3）も作れる（iPadの印刷画面で2ページになる場合のため）
     onePagePdfName: built.usedCompanyTemplate ? `工事日報_${(await getSite(report.siteId).catch(() => null))?.name || "現場"}_${report.date || "日付未設定"}` : null,
     onPrinted: async () => {
@@ -1403,10 +1525,16 @@ function collectCompanies() {
     if (plannedWorkerCount !== "" && Number(plannedWorkerCount) < 0) plannedWorkerCount = "";
     let actualWorkerCount = row.querySelector(".actualWorkerCount").value.trim();
     if (actualWorkerCount !== "" && Number(actualWorkerCount) < 0) actualWorkerCount = "";
+    const occupation = row.querySelector(".occupation").value.trim();
     companies.push({
       companyId: row.dataset.companyId,
+      // 棟（2026-11-01。任意）: 現場の一覧の id と、保存した時点の名前。未設定は ""（推測で入れない）
+      buildingId: row.dataset.buildingId || "",
+      buildingName: row.dataset.buildingId ? row.dataset.buildingName || "" : "",
       companyName: row.querySelector(".companyName").value.trim(),
-      occupation: row.querySelector(".occupation").value.trim(),
+      occupation,
+      // 工種の一覧の id（参考。表記ゆれをそろえて一致したときだけ）。集計・帳票は従来どおり工種の名前（occupation）で行う
+      tradeId: matchTrade(rowSite, occupation)?.id || "",
       plannedWorkerCount,
       actualWorkerCount,
       machinery: row.querySelector(".machinery").value.trim(),

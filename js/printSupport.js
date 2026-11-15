@@ -117,5 +117,31 @@ export function downloadPrintHtml(html, title) {
 }
 
 // 「開けなかった」とは断定しない（Safariは印刷画面を開いても合図を送らないことがある）
+/**
+ * 印刷用HTMLの用紙（@page の size）から、ブラウザの印刷画面で選ぶ用紙・向きの案内を作る（2026-11-01）。
+ * ブラウザの印刷はアプリから用紙を強制できない（iPad・プリンターの設定で A4 などになることがある）ので、利用者に選んでもらう。
+ * 用紙が分からない印刷用HTMLでは "" を返す。
+ * @returns {{paper: string, orientation: "横"|"縦", text: string} | null}
+ */
+export function paperGuideOf(html) {
+  const m = /@page\s*\{[^}]*?size:\s*([^;}]+)/i.exec(String(html || ""));
+  if (!m) return null;
+  const v = m[1].trim();
+  let paper = "", orientation = "";
+  const mm = /^([\d.]+)mm\s+([\d.]+)mm$/i.exec(v);
+  if (mm) {
+    const w = Number(mm[1]), h = Number(mm[2]);
+    const near = (a, b) => Math.abs(a - b) <= 2;
+    const long = Math.max(w, h), short = Math.min(w, h);
+    paper = near(long, 420) && near(short, 297) ? "A3" : near(long, 297) && near(short, 210) ? "A4" : near(long, 364) && near(short, 257) ? "B4" : "";
+    orientation = w > h ? "横" : "縦";
+  } else {
+    const k = /^(A3|A4|B4|B5|A5)\b\s*(landscape|portrait)?/i.exec(v);
+    if (k) { paper = k[1].toUpperCase(); orientation = /landscape/i.test(k[2] || "") ? "横" : "縦"; }
+  }
+  if (!paper) return null;
+  return { paper, orientation, text: `印刷時は、用紙サイズを${paper}、印刷の向きを${orientation}に設定してください。` };
+}
+
 export const PRINT_NOT_OPENED_MESSAGE = "印刷画面を開けなかった可能性があります。印刷画面が表示されない場合は、共有メニューから印刷してください（「共有メニューから印刷」を押し、「プリント」を選びます）。";
 export const PRINT_NOT_OPENED_MESSAGE_NO_SHARE = "印刷画面を開けなかった可能性があります。印刷画面が表示されない場合は、「印刷用ファイルを保存」でファイルを保存し、開いたファイルから印刷してください。";

@@ -151,19 +151,23 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
     const ledTpl = await read((await getReportTemplate(t.templateId)).sourceFileBlob, "1～20"); // 原本の台帳シート
     return { ledTpl: Object.fromEntries(["L111", "A111", "B111"].map((r) => [r, ledTpl(r)])), tpl: Object.fromEntries(refs.map((r) => [r, tpl(r)])), day: Object.fromEntries(refs.map((r) => [r, day(r)])), led3: Object.fromEntries(["J111", "N111", "O111", "P155", "L111", "A111", "B111", "C111", "D111"].map((r) => [r, led(r)])), html };
   }, ids);
-  const centered = ["J7", "J39", "N7", "M11", "M26", "N35", "O7", "P7", "O51", "P51", "O52", "P52"];
-  check("Excel（1日分）: 点検項目・職種・人数・累計・計・延労働時間のセルが上下・左右とも中央", centered.every((r) => align.day[r].startsWith("center/center")), JSON.stringify(Object.fromEntries(centered.map((r) => [r, `${align.tpl[r]}→${align.day[r]}`]))));
-  // 2026-10-26: 巡回点検の ○×（L列）・協力会社欄の予定・実績（C・D列）も中央、協力会社欄の職種（B列）は右揃え（上下は中央）
-  check("Excel（1日分）: ○×（L列）・予定・実績（C・D列）は中央、職種（B列）は右揃え", ["L7", "C7", "D7"].every((r) => align.day[r].startsWith("center/center")) && align.day.B7.startsWith("right/center"), JSON.stringify(Object.fromEntries(["L7", "B7", "C7", "D7"].map((r) => [r, `${align.tpl[r]}→${align.day[r]}`]))));
+  const centered = ["J7", "J39", "O7", "P7", "O51", "P51", "O52", "P52"];
+  check("Excel（1日分）: 点検項目・人数・累計・計・延労働時間のセルが上下・左右とも中央", centered.every((r) => align.day[r].startsWith("center/center")), JSON.stringify(Object.fromEntries(centered.map((r) => [r, `${align.tpl[r]}→${align.day[r]}`]))));
+  // 2026-11-01: 稼動人数表の職種（M・N列）は中央にせず、様式どおり左揃え（空き行 M26 に書いた職種も）
+  const tradeCells = ["N7", "M11", "M26", "N35"];
+  //   様式の配置が「標準」（N35 など。文字は左に表示される）のセルも、様式のまま
+  check("Excel（1日分）: 稼動人数表の職種のセルは様式どおり左揃え（「標準」を含む）", tradeCells.every((r) => align.day[r] === align.tpl[r] && /^(left|-)\/center/.test(align.day[r])), JSON.stringify(Object.fromEntries(tradeCells.map((r) => [r, `${align.tpl[r]}→${align.day[r]}`]))));
+  // 2026-10-26: 巡回点検の ○×（L列）・協力会社欄の予定・実績（C・D列）も中央。協力会社欄の職種（B列）は 2026-11-01 から左揃え（上下は中央）
+  check("Excel（1日分）: ○×（L列）・予定・実績（C・D列）は中央、職種（B列）は左揃え", ["L7", "C7", "D7"].every((r) => align.day[r].startsWith("center/center")) && align.day.B7.startsWith("left/center"), JSON.stringify(Object.fromEntries(["L7", "B7", "C7", "D7"].map((r) => [r, `${align.tpl[r]}→${align.day[r]}`]))));
   check("Excel（1日分）: 協力会社名（A列）・分類の縦書き・見出しの配置は様式のまま", ["A7", "I7", "I6", "M6", "O6"].every((r) => align.day[r] === align.tpl[r]), JSON.stringify(Object.fromEntries(["A7", "I7", "M7"].map((r) => [r, `${align.tpl[r]}→${align.day[r]}`]))));
-  check("Excel（台帳・3日目の頁）も同じ位置が中央・職種は右揃え、協力会社名は変えない", ["J111", "N111", "O111", "P155", "L111", "C111", "D111"].every((r) => align.led3[r].startsWith("center/center")) && align.led3.B111.startsWith("right/center") && align.led3.A111 === align.ledTpl.A111, JSON.stringify({ out: align.led3, 原本: align.ledTpl }));
-  const tdCenter = (label) => new RegExp(`text-align:center;vertical-align:middle[^>]*>(<div[^>]*>)?<span>${label}</span>`).test(align.html.replace(/&quot;/g, '"'));
-  check("PDF（印刷用HTML）: 点検項目・職種のセルが中央揃え", tdCenter("安全朝礼・ＫＹ活動") && tdCenter("鳶工事") && tdCenter("土工事"));
+  check("Excel（台帳・3日目の頁）も同じ位置が中央・協力会社欄の職種は左揃え、稼動人数表の職種（N111）は左揃え、協力会社名は変えない", ["J111", "O111", "P155", "L111", "C111", "D111"].every((r) => align.led3[r].startsWith("center/center")) && align.led3.B111.startsWith("left/center") && align.led3.N111.startsWith("left/center") && align.led3.A111 === align.ledTpl.A111, JSON.stringify({ out: align.led3, 原本: align.ledTpl }));
+  const tdAlign = (h, label) => new RegExp(`text-align:${h};vertical-align:middle[^>]*>(<div[^>]*>)?<span>${label}</span>`).test(align.html.replace(/&quot;/g, '"'));
+  check("PDF（印刷用HTML）: 点検項目のセルは中央揃え、稼動人数表の職種のセルは左揃え", tdAlign("center", "安全朝礼・ＫＹ活動") && tdAlign("left", "鳶工事") && tdAlign("left", "土工事"));
   // Excel の書式を PDF でも同じにする（2026-10-25）: 均等割付（表題・稼動人数・配置図）、下線（工事名・打合日・作業日・気温・天候）、配置「標準」の数値は右寄せ（予定・実績）
   const h = align.html.replace(/&quot;/g, '"');
   check("PDF: 均等割付のセル（表題・稼動人数・配置図）は文字を枠の幅いっぱいに並べる", ["安全衛生作業打合せ日誌", "稼動人数", "配置図"].every((t) => new RegExp(`text-align:justify;text-align-last:justify[^>]*>(<div[^>]*>)<span style="display:block;text-align:justify;text-align-last:justify[^"]*">${t}`).test(h)));
   check("PDF: 下線のセル（工事名・気温）は文字に下線", /<span style="text-decoration:underline">工事名：/.test(h) && /<span style="text-decoration:underline">気温：/.test(h));
-  check("PDF: 協力会社欄の予定・実績は中央、職種は右揃え、作業内容は左寄せのまま", /justify-content:center;align-items:center"><span>3<\/span>/.test(h) && /justify-content:center;align-items:flex-end"><span>外壁下地補修<\/span>/.test(h) && /align-items:flex-start"><span>TA号棟/.test(h));
+  check("PDF: 協力会社欄の予定・実績は中央、職種は左揃え、作業内容は左寄せのまま", /justify-content:center;align-items:center"><span>3<\/span>/.test(h) && /justify-content:center;align-items:flex-start"><span>外壁下地補修<\/span>/.test(h) && /align-items:flex-start"><span>TA号棟/.test(h));
 
   // 画面: ダッシュボードの職種別の人数に業者ごとの内訳
   await page.goto(`${BASE}#/sites/${ids.site}`); await page.waitForSelector("#view-site-detail:not([hidden])");

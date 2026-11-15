@@ -21,6 +21,7 @@
      台帳Excel・日報のPDF・データは変えない。図形の大きさは変えず、広がった範囲の中央に置く。職長サインは該当の欄の箱に収める
    ========================================================== */
 
+import { SHEET_FIT_SCRIPT, jsonParamsScript } from "../../printScripts.js";
 import { loadZip, readZipEntryText } from "../../zipUtil.js";
 import { WorkbookPackage, parseDefinedNames, parseRelationships, resolvePartPath } from "./workbookPackage.js";
 import { parseXlsxStyles, parseSharedStrings, readSheetLayout } from "../xlsxSheetReader.js";
@@ -404,7 +405,7 @@ export async function buildLedgerPrintHtml({ ledgerBlob, templateBuffer = null, 
     .join("\n");
 
   // 安全策: 描画された表が計算より大きかったときだけ zoom で縮める（計算どおりなら zoom=1 のまま）。紙面の幅は「高さ÷0.63」以上
-  const fitScript = `<script>(function(){var AW=${availW.toFixed(1)},AH=${availH.toFixed(1)},RATIO=${PRINT_HEIGHT_RATIO};function fit(){var ws=document.querySelectorAll(".ledger-page");for(var i=0;i<ws.length;i++){var w=ws[i];var t=w.querySelector("table.xlsx-sheet");if(!t)continue;w.style.zoom="1";w.style.width="";var r=t.getBoundingClientRect();if(!r.width||!r.height)continue;var WW=Math.max(r.width,r.height/RATIO);w.style.width=WW+"px";var z=Math.min(1,AW/WW*0.995,AH/r.height*0.97);w.style.zoom=z<0.99?String(z):"1";}}fit();window.addEventListener("load",fit);window.addEventListener("beforeprint",fit);})();</script>`;
+  const fitScript = `${jsonParamsScript({ aw: Number(availW.toFixed(1)), ah: Number(availH.toFixed(1)), ratio: PRINT_HEIGHT_RATIO, sel: ".ledger-page" })}<script>${SHEET_FIT_SCRIPT}</script>`;
 
   const sections = pagesHtml
     .map(

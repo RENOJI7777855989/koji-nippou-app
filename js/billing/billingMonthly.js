@@ -46,8 +46,12 @@ export function billingValueOf(company) {
    ・業者は業者名（前後の空白を除く）で見分ける。どの業者にも同じ決まり（特定の業者名による例外は無い）。
    ・明細ごとに、根拠の日報（日付・日報id・その業者×職種の行の companyId・値）を持つ（元の日報を開くため）。
    ・業者の合計は明細の合計（請求人工は小数2桁で丸める）。
+   ・明細ごとに、棟ごとの内訳（buildings。2026-11-15。利用者の指定）を持つ。棟は作業行の棟の id で見分け、表示名は最後に出てきた
+     日報の名前（保存した時点の名前）。棟が未設定の行は「（棟未設定）」。棟を1つも使っていない明細は空（表示しない）。明細の単位
+     （業者×職種）・値・合計は変えない（棟ごとの値の合計＝明細の値）。
    ---------------------------------------------------------- */
 export const NO_TRADE_LINE = "（職種未入力）";
+export const NO_BUILDING_LINE = "（棟未設定）";
 const tradeNameOf = (c) => String(c?.occupation ?? "").trim() || NO_TRADE_LINE;
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -70,22 +74,38 @@ export function vendorTradeLines({ reports = [], include, valueOf }) {
       if (v == null) continue;
       const trade = tradeNameOf(c);
       const k = `${vendor}\u0000${trade}`;
-      const e = perReport.get(k) || { vendor, trade, value: 0, companyIds: [] };
+      const e = perReport.get(k) || { vendor, trade, value: 0, companyIds: [], buildings: new Map() };
       e.value += v;
       if (c.companyId) e.companyIds.push(c.companyId);
+      const bKey = String(c.buildingId || "").trim();
+      const b = e.buildings.get(bKey) || { key: bKey, label: bKey ? String(c.buildingName || "").trim() || "（名前なし）" : NO_BUILDING_LINE, value: 0 };
+      b.value += v;
+      if (bKey && String(c.buildingName || "").trim()) b.label = String(c.buildingName).trim();
+      e.buildings.set(bKey, b);
       perReport.set(k, e);
     }
     for (const e of perReport.values()) {
       if (!byVendor.has(e.vendor)) byVendor.set(e.vendor, new Map());
       const lines = byVendor.get(e.vendor);
-      if (!lines.has(e.trade)) lines.set(e.trade, { trade: e.trade, value: 0, entries: [] });
+      if (!lines.has(e.trade)) lines.set(e.trade, { trade: e.trade, value: 0, entries: [], buildingMap: new Map() });
       const line = lines.get(e.trade);
       line.value += e.value;
+      for (const b of e.buildings.values()) {
+        const t = line.buildingMap.get(b.key) || { key: b.key, label: b.label, value: 0 };
+        t.value += b.value;
+        t.label = b.label; // 最後に出てきた日報の名前
+        line.buildingMap.set(b.key, t);
+      }
       line.entries.push({ date: r.date, reportId: r.id, companyIds: e.companyIds, value: round2(e.value) });
     }
   }
   const out = new Map();
-  for (const [vendor, lines] of byVendor) out.set(vendor, [...lines.values()].map((l) => ({ ...l, value: round2(l.value) })).sort((a, b) => a.trade.localeCompare(b.trade, "ja")));
+  for (const [vendor, lines] of byVendor) out.set(vendor, [...lines.values()].map(({ buildingMap, ...l }) => {
+    const bs = [...buildingMap.values()];
+    // 棟を1つも使っていない明細は内訳を出さない。未設定は最後
+    const buildings = bs.some((b) => b.key) ? bs.sort((a, b) => (a.key ? 0 : 1) - (b.key ? 0 : 1)).map((b) => ({ ...b, value: round2(b.value) })) : [];
+    return { ...l, value: round2(l.value), buildings };
+  }).sort((a, b) => a.trade.localeCompare(b.trade, "ja")));
   return out;
 }
 
@@ -138,7 +158,7 @@ export function buildMonthlyBilling({ reports = [], site = null, month, today })
       days: v.days.size,
       trades: [...v.trades],
       // 職種ごとの明細（月間請求人工・入力日数・根拠の日報）。明細の合計＝月間請求人工
-      lines: (billingLines.get(v.vendor) || []).map((l) => ({ trade: l.trade, manDays: l.value, enteredDays: new Set(l.entries.map((e) => e.date)).size, entries: l.entries })),
+      lines: (billingLines.get(v.vendor) || []).map((l) => ({ trade: l.trade, manDays: l.value, enteredDays: new Set(l.entries.map((e) => e.date)).size, entries: l.entries, buildings: l.buildings })),
       lastDate: v.lastDate,
       status,
       statusLabel: labelOf(BILLING_STATUSES, status),
@@ -257,7 +277,8 @@ export function buildVendorActivity({ reports = [], month, today, startDate = nu
   const linesOf = (vendor) => (cumLines.get(vendor) || []).map((cl) => {
     const ml = (monthLines.get(vendor) || []).find((l) => l.trade === cl.trade);
     const mins = (minutesLines.get(vendor) || []).find((l) => l.trade === cl.trade);
-    return { trade: cl.trade, manDays: ml ? ml.value : 0, workers: ml ? ml.value : 0, days: ml ? new Set(ml.entries.map((e) => e.date)).size : 0, minutes: mins ? mins.value : 0, cumManDays: cl.value, entries: ml ? ml.entries : [], cumEntries: cl.entries };
+    // buildings: この月の実績人工の棟ごとの内訳（cumBuildings は累計の内訳）
+    return { trade: cl.trade, manDays: ml ? ml.value : 0, workers: ml ? ml.value : 0, days: ml ? new Set(ml.entries.map((e) => e.date)).size : 0, minutes: mins ? mins.value : 0, cumManDays: cl.value, entries: ml ? ml.entries : [], cumEntries: cl.entries, buildings: ml ? ml.buildings : [], cumBuildings: cl.buildings };
   });
   const rows = [...byVendor.values()].map((v) => ({ vendor: v.vendor, days: v.days, workers: v.workers, manDays: v.workers, minutes: v.minutes, hoursMissing: v.missingHours, trades: [...v.trades], cumManDays: v.cumManDays, lines: linesOf(v.vendor) })).sort((a, b) => a.vendor.localeCompare(b.vendor, "ja"));
   const active = rows.filter((r) => r.days > 0);
@@ -301,7 +322,7 @@ export function buildVendorPeriodActivity({ reports = [], fromMonth, toMonth, to
   }
   // 業者×職種の明細（期間合計・月ごと・稼働日数。vendorTradeLines）
   const periodLines = vendorTradeLines({ reports, include: (r) => r.date >= start && r.date <= cutoff && !(startDate && r.date < startDate) && isWorkDay(r), valueOf: (c) => (actualOf(c) > 0 ? actualOf(c) : null) });
-  const linesOf = (vendor) => (periodLines.get(vendor) || []).map((l) => ({ trade: l.trade, total: l.value, days: new Set(l.entries.map((e) => e.date)).size, byMonth: Object.fromEntries(months.map((m) => [m, l.entries.filter((e) => e.date.slice(0, 7) === m).reduce((s, e) => s + e.value, 0)])), entries: l.entries }));
+  const linesOf = (vendor) => (periodLines.get(vendor) || []).map((l) => ({ trade: l.trade, total: l.value, buildings: l.buildings, days: new Set(l.entries.map((e) => e.date)).size, byMonth: Object.fromEntries(months.map((m) => [m, l.entries.filter((e) => e.date.slice(0, 7) === m).reduce((s, e) => s + e.value, 0)])), entries: l.entries }));
   const rows = [...byVendor.values()].map((v) => ({ vendor: v.vendor, byMonth: v.byMonth, total: months.reduce((s, m) => s + v.byMonth[m], 0), days: v.days, workers: v.workers, minutes: v.minutes, hoursMissing: v.missingHours, trades: [...v.trades], lines: linesOf(v.vendor) })).sort((a, b) => a.vendor.localeCompare(b.vendor, "ja"));
   const monthTotals = Object.fromEntries(months.map((m) => [m, rows.reduce((s, r) => s + r.byMonth[m], 0)]));
   return { from: fromMonth, to: toMonth, cutoff, months, rows, monthTotals, totals: { vendors: rows.filter((r) => r.days > 0).length, listed: rows.length, total: months.reduce((s, m) => s + monthTotals[m], 0), days: rows.reduce((s, r) => s + r.days, 0), workers: rows.reduce((s, r) => s + r.workers, 0), minutes: rows.reduce((s, r) => s + r.minutes, 0) } };

@@ -1943,7 +1943,7 @@ dialog h3 {
 .chorei-note { font-size: 16px; line-height: 1.6; }
 .chorei-go { min-height: 52px; font-size: 17px; width: 100%; margin: 6px 0 12px; }
 .chorei-list { list-style: none; margin: 0; padding: 0; }
-.chorei-row { display: grid; grid-template-columns: 1fr auto auto; grid-template-areas: "who input next" "plan state next"; align-items: center; gap: 2px 12px; padding: 10px 0; border-bottom: 1px solid #e2e8f0; }
+.chorei-row { display: grid; grid-template-columns: 1fr auto auto auto; grid-template-areas: "who input billing next" "plan state bstate next"; align-items: center; gap: 2px 12px; padding: 10px 0; border-bottom: 1px solid #e2e8f0; }
 .chorei-who { grid-area: who; min-width: 0; }
 .chorei-vendor { display: block; font-size: 21px; font-weight: bold; overflow-wrap: anywhere; }
 .chorei-trade { display: inline-block; font-size: 15px; color: #2b6cb0; border: 1px solid #90cdf4; border-radius: 4px; padding: 0 6px; margin-top: 2px; }
@@ -1961,8 +1961,11 @@ dialog h3 {
 .chorei-progress { margin: 0 0 6px; font-size: 14px; color: #4a5568; }
 .chorei-actions { display: grid; grid-template-columns: 1fr 2fr; gap: 12px; }
 .chorei-actions button { min-height: 56px; font-size: 18px; margin: 0; }
+/* 業者別稼働・請求人工のPDF（2026-11-15）: 閉じる・保存の下に1行で */
+.chorei-actions #choreiPdfBtn { grid-column: 1 / -1; order: 3; min-height: 44px; font-size: 16px; }
+.board-pdf-dialog #boardPdfPrintBtn { min-height: 44px; }
 @media (max-width: 520px) {
-  .chorei-row { grid-template-columns: 1fr auto; grid-template-areas: "who who" "plan state" "input next"; }
+  .chorei-row { grid-template-columns: 1fr auto; grid-template-areas: "who who" "plan state" "input next" "billing bstate"; }
 }
 .dash-ky-delete { min-height: 40px; padding: 6px 12px; margin: 0; color: #b02b2b; background: #fff; border: 1px solid #b02b2b; border-radius: 6px; cursor: pointer; }
 .day-panel-dlv { margin: 0 0 10px; padding: 6px 10px; border: 1px solid #f0d9a8; border-radius: 8px; background: #fffaf0; font-size: 15px; }
@@ -2157,3 +2160,59 @@ body.has-restore-banner .report-quick-bar { top: 64px; }
 .vm-table tr.vm-line-dates .vm-line-report { margin: 3px 4px 3px 0; min-height: 36px; }
 .vm-total-label { color: #5b6573; }
 .company-row.is-line-highlight { outline: 3px solid #f0a020; outline-offset: 2px; background: #fff8e6; }
+
+/* 印刷ダイアログ: 帳票に書けない内容の警告（2026-11-01） */
+.print-warnings { border: 1px solid #e0a800; background: #fff8e1; color: #5a4300; border-radius: 8px; padding: 6px 12px; margin: 8px 0; max-height: 30vh; overflow-y: auto; }
+.print-warnings ul { margin: 4px 0; padding-left: 1.2em; }
+.print-warnings p { margin: 4px 0; }
+
+/* 日報の作業行（棟 → 工種 → 業者 → 人数 → 職長名 → 作業内容。2026-11-01） */
+.company-row .company-row-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; grid-column: 1 / -1; }
+.company-row .company-row-head h3 { margin: 0; }
+.company-row .row-move { display: inline-flex; gap: 6px; }
+.company-row .row-move button { min-width: 44px; min-height: 36px; padding: 4px 8px; }
+.company-row .trade-field { display: flex; flex-direction: column; }
+.company-row .trade-field .addTradeBtn { align-self: flex-start; font-size: 13px; padding: 2px 0; }
+.read-only-form .row-move,
+.read-only-form .addTradeBtn { display: none !important; }
+
+/* 現場の棟・工種の一覧（2026-11-01） */
+.site-masters { margin-top: 16px; border-top: 1px solid #ddd; padding-top: 8px; }
+.site-masters .site-master { margin: 8px 0 16px; }
+.site-masters .master-list { list-style: none; padding: 0; margin: 4px 0; }
+.site-masters .master-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid #eee; }
+.site-masters .master-list li.is-inactive .master-name { color: #888; text-decoration: line-through; }
+.site-masters .master-name { font-weight: bold; min-width: 6em; }
+.site-masters .master-ops { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.site-masters .master-ops button { min-height: 36px; padding: 4px 8px; }
+.site-masters .master-add-row input { flex: 1 1 12em; min-width: 0; }
+.site-masters .cand-item { display: block; padding: 4px 0; }
+
+/* 積算データに質問する: 送る内容と送り先の説明（2026-11-01） */
+.estimate-ask-send-note { border: 1px solid #e0a800; background: #fff8e1; border-radius: 8px; padding: 8px 12px; font-size: 14px; line-height: 1.6; }
+
+/* バックアップのパスワード暗号化（2026-11-01） */
+.backup-encrypt { border: 1px solid #c9d6e8; border-radius: 8px; padding: 8px 12px; margin: 8px 0; background: #f8fbff; }
+.backup-encrypt-fields { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 6px 0; }
+.backup-encrypt-fields label { display: flex; flex-direction: column; min-width: 12em; flex: 1 1 12em; }
+.backup-encrypt-fields[hidden] { display: none; }
+
+/* 日報一覧の年月の選択（2026-11-15） */
+.report-month-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; padding: 8px; border: 1px solid #c9d6e8; border-radius: 8px; background: #f8fbff; }
+.report-month-bar button { min-height: 44px; padding: 6px 12px; }
+.report-month-bar select { width: auto; margin: 0; min-height: 44px; height: 44px; font-size: 17px; font-weight: bold; padding: 4px 36px 4px 12px;
+  /* Safari は標準の見た目の選択欄の高さを変えられないので、見た目を自前にする（右に▼。data: の画像は CSP の img-src で許可） */
+  -webkit-appearance: none; appearance: none; background: #fff url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M0 0h12L6 8z' fill='%232b6cb0'/%3E%3C/svg%3E") no-repeat right 12px center; border: 1px solid #9fb6d4; border-radius: 6px; }
+.report-month-count { font-weight: bold; color: #2b6cb0; }
+.report-month-bar[hidden] { display: none; }
+
+/* 朝礼入力の請求人工（2026-11-15。人数とは別の欄。保存先は日報の billingManDays） */
+.chorei-input-billing { grid-area: billing; }
+.chorei-billing { width: 4.6em; min-height: 56px; font-size: 26px; font-weight: bold; text-align: center; padding: 4px; }
+.chorei-bstate { grid-area: bstate; text-align: right; font-size: 14px; font-weight: bold; }
+.chorei-row[data-billing-state="blank"] .chorei-bstate { color: #b45309; }
+.chorei-row[data-billing-state="done"] .chorei-bstate { color: #6b46c1; }
+.chorei-row[data-billing-state="error"] .chorei-bstate { color: #c53030; }
+.chorei-row[data-billing-state="blank"] .chorei-billing { background: #fffaf0; border-color: #f0b35a; }
+.chorei-row[data-billing-state="done"] .chorei-billing { background: #faf5ff; border-color: #b794f4; }
+.chorei-total { font-size: 17px; color: #1a365d; }

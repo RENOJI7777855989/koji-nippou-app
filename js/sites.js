@@ -104,6 +104,11 @@ export async function copySite(sourceSiteId, { newName, copyReports = false } = 
     memo: source.memo,
     reportTemplateId: source.reportTemplateId || null
   });
+  // 棟・工種の一覧（2026-11-01）も写す（コピーした日報の作業行の棟の id が、新しい現場の一覧を指すように。id は同じまま）
+  if ((source.buildings || []).length || (source.trades || []).length) {
+    const patched = await applyPatch(newSite.id, { buildings: (source.buildings || []).map((x) => ({ ...x })), trades: (source.trades || []).map((x) => ({ ...x })) });
+    Object.assign(newSite, { buildings: patched.buildings, trades: patched.trades });
+  }
 
   if (copyReports) {
     const reports = await listReportsBySite(sourceSiteId);

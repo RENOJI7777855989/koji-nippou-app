@@ -12,12 +12,17 @@
    ・人数は日報の実績人数（actualWorkerCount）だけ。数字でない・0以下・未入力は0人（推測で補わない）。
      工種が未入力の行の人数も全体の合計には入れる（工種の行には出せない）。業者名が未入力の行は「（業者名未入力）」。
    ・請求人工（billingManDays）は使わない。
+   ・棟別（2026-11-01）: 日報の作業行の棟（buildingId と保存した時点の名前 buildingName）で、棟×工種×業者に分けて数える（buildings）。
+     棟は id で見分け、表示名はその棟が最後に出てきた日報の名前。棟が未設定の行（以前の日報を含む）は「（棟未設定）」にまとめる
+     （作業内容の「TA号棟」などから推測して割り当てない）。棟別の合計＝全体の合計（行ごとに1回だけ数える）。
+   ・人数は行の実績人数の合計（延べ人数）。人を見分ける項目が無いので、実人数（同じ人を1回だけ数えた数）ではない。
    ========================================================== */
 
 import { normalizeTrade } from "../report-output/tradeAttendance.js";
 
 export const NO_VENDOR_LABEL = "（業者名未入力）";
 export const NO_TRADE_LABEL = "（工種未入力）";
+export const NO_BUILDING_LABEL = "（棟未設定）";
 
 /** 実績人数（数字で0より大きいときだけ。それ以外は0人） */
 export function workersOf(c) {
@@ -46,7 +51,8 @@ export function buildingsInText(text) {
  *   rows: {vendor:string, tradeKey:string, trade:string, today:number, cumulative:number, buildingsToday:string[]}[],
  *   trades: {tradeKey:string, label:string, today:number, cumulative:number, vendorsToday:{vendor:string, today:number, buildings:string[]}[]}[],
  *   totals: {today:number, cumulative:number},
- *   noTrade: {today:number, cumulative:number}
+ *   noTrade: {today:number, cumulative:number},
+ *   buildings: {key:string, label:string, today:number, cumulative:number, lines:{vendor:string, tradeKey:string, trade:string, today:number, cumulative:number}[]}[]
  * }}
  */
 export function attendanceBreakdown({ todayCompanies = [], historyReports = [] }) {
@@ -61,12 +67,26 @@ export function attendanceBreakdown({ todayCompanies = [], historyReports = [] }
     if (!rowMap.has(k)) rowMap.set(k, { vendor, tradeKey, trade: "", today: 0, cumulative: 0, buildingsToday: [] });
     return rowMap.get(k);
   };
+  // 棟×工種×業者（2026-11-01）。棟は id で見分ける（名前を変えても同じ棟）。未設定は key ""
+  const bMap = new Map();
+  const lineOf = (c) => {
+    const key = String(c?.buildingId ?? "").trim();
+    if (!bMap.has(key)) bMap.set(key, { key, label: key ? "" : NO_BUILDING_LABEL, today: 0, cumulative: 0, lineMap: new Map() });
+    const b = bMap.get(key);
+    if (key && String(c?.buildingName ?? "").trim()) b.label = String(c.buildingName).trim(); // 最後に出てきた日報の名前
+    const vendor = String(c?.companyName ?? c?.name ?? "").trim() || NO_VENDOR_LABEL;
+    const tradeKey = normalizeTrade(String(c?.occupation ?? "").trim());
+    const lk = `${vendor}\u0000${tradeKey}`;
+    if (!b.lineMap.has(lk)) b.lineMap.set(lk, { vendor, tradeKey, trade: "", today: 0, cumulative: 0 });
+    return { b, line: b.lineMap.get(lk) };
+  };
   const ordered = [...historyReports].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
-  for (const r of ordered) for (const c of r.companies || []) { const n = workersOf(c); const row = rowOf(c); row.cumulative += n; }
+  for (const r of ordered) for (const c of r.companies || []) { const n = workersOf(c); const row = rowOf(c); row.cumulative += n; const { b, line } = lineOf(c); b.cumulative += n; line.cumulative += n; }
   for (const c of todayCompanies || []) {
     const n = workersOf(c);
     const row = rowOf(c);
     row.today += n;
+    { const { b, line } = lineOf(c); b.today += n; line.today += n; }
     if (n) for (const b of buildingsInText(c.workContent)) if (!row.buildingsToday.includes(b)) row.buildingsToday.push(b);
   }
   const rows = [...rowMap.values()].filter((r) => r.today || r.cumulative);
@@ -82,10 +102,16 @@ export function attendanceBreakdown({ todayCompanies = [], historyReports = [] }
   }
   const sum = (arr, k) => arr.reduce((s, x) => s + x[k], 0);
   const noTradeRows = rows.filter((r) => !r.tradeKey);
+  const buildings = [...bMap.values()]
+    .map((b) => ({ key: b.key, label: b.label || "（名前なし）", today: b.today, cumulative: b.cumulative,
+      lines: [...b.lineMap.values()].filter((l) => l.today || l.cumulative).map((l) => ({ ...l, trade: l.tradeKey ? labelOf.get(l.tradeKey) : NO_TRADE_LABEL })) }))
+    .filter((b) => b.today || b.cumulative)
+    .sort((a, b) => (a.key ? 0 : 1) - (b.key ? 0 : 1)); // 棟未設定は最後
   return {
     rows,
     trades: [...tradeMap.values()],
     totals: { today: sum(rows, "today"), cumulative: sum(rows, "cumulative") },
-    noTrade: { today: sum(noTradeRows, "today"), cumulative: sum(noTradeRows, "cumulative") }
+    noTrade: { today: sum(noTradeRows, "today"), cumulative: sum(noTradeRows, "cumulative") },
+    buildings
   };
 }

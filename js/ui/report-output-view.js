@@ -12,8 +12,9 @@ import { listReportsBySite, getReport, recordReportOutput, getPrintStatus, PRINT
 import { listReportTemplates, listCompanyProfiles, generateReportOutput, resolveReportTemplateForSite } from "../report-output/index.js";
 import { escapeHtml } from "../utils.js";
 import { showView, showMessage } from "./common.js";
-import { waitFrameLoaded, printFrame, canSharePrintFile, sharePrintHtml, downloadPrintHtml, PRINT_NOT_OPENED_MESSAGE, PRINT_NOT_OPENED_MESSAGE_NO_SHARE } from "../printSupport.js";
+import { waitFrameLoaded, printFrame, canSharePrintFile, sharePrintHtml, downloadPrintHtml, paperGuideOf, PRINT_NOT_OPENED_MESSAGE, PRINT_NOT_OPENED_MESSAGE_NO_SHARE } from "../printSupport.js";
 import { navigate } from "../router.js";
+import { confirmOutputWarnings } from "./output-warnings.js";
 
 const siteSelect = document.getElementById("outputSiteSelect");
 const reportSelect = document.getElementById("outputReportSelect");
@@ -118,6 +119,7 @@ function resetPreview() {
   printShareBtn.hidden = true;
   previewHtml = "";
   printedRecordBtn.hidden = true;
+  document.getElementById("outputPrintGuide").hidden = true; // 用紙の案内も隠す（印刷しないとき）
 }
 
 function getSelectedPdfVariant() {
@@ -182,6 +184,11 @@ async function showPdfPreview(reportId) {
   previewHtml = html;
   printShareBtn.hidden = false;
   printShareBtn.textContent = canSharePrintFile() ? "共有メニューから印刷" : "印刷用ファイルを保存";
+  // ブラウザの印刷で選ぶ用紙・向きの案内（印刷用HTMLの用紙から。2026-11-01）
+  const guide = paperGuideOf(html);
+  const guideEl = document.getElementById("outputPrintGuide");
+  guideEl.hidden = !guide;
+  guideEl.textContent = guide ? `${guide.text}（［印刷する］のあと、ブラウザの印刷画面で選びます。アプリからは設定できません）` : "";
   return { html, warnings: warnings || [] };
 }
 
@@ -204,6 +211,7 @@ previewBtn.addEventListener("click", async () => {
       previewArea.hidden = false;
       printBtn.hidden = true;
       printShareBtn.hidden = true;
+      document.getElementById("outputPrintGuide").hidden = true;
     }
   } catch (err) {
     showMessage(`プレビューの生成に失敗しました: ${err.message}`, true);
@@ -223,6 +231,8 @@ generateBtn.addEventListener("click", async () => {
     if (format === "excel") {
       const templateId = templateSelect.value || null;
       const { blob, filename, warnings } = await generateReportOutput({ reportId, format: "excel", templateId });
+      // 帳票に書けない内容（入りきらない作業行など）があれば、ダウンロードの前に確認する（2026-11-01）
+      if (!confirmOutputWarnings(warnings, "Excelを出力")) { showMessage("Excelの出力をやめました（帳票に書けない内容があるため）。", true); return; }
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -233,7 +243,7 @@ generateBtn.addEventListener("click", async () => {
       URL.revokeObjectURL(url);
       await recordReportOutput(reportId, "excel");
       const warningSuffix = warnings?.length ? ` ／ 注意: ${warnings.join(" ")}` : "";
-      showMessage(`Excelを出力しました（${filename}）${warningSuffix}`, !!warningSuffix);
+      showMessage(`Excelを出力しました（${filename}）${warningSuffix}`, !!warningSuffix, warningSuffix ? 12000 : 3000);
     } else {
       const { warnings } = await showPdfPreview(reportId);
       const warningSuffix = warnings.length ? ` ／ 注意: ${warnings.join(" ")}` : "";

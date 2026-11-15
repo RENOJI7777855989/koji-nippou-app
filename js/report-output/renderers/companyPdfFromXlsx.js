@@ -19,6 +19,7 @@
    テーマ色などは簡略化している）。
    ========================================================== */
 
+import { SHEET_FIT_SCRIPT, CELL_FIT_SCRIPT, jsonParamsScript } from "../../printScripts.js";
 import { registerPdfRenderer } from "../rendererRegistry.js";
 import { loadZip, readZipEntryText, readZipEntryBytes } from "../../zipUtil.js";
 import { setCellInSheetXml, resolveSheetPartPath } from "../xlsxTemplateEngine.js";
@@ -35,9 +36,9 @@ import { findDirectorSealCell, sealPlacement, sealPngDataUrl } from "../director
 
 /**
  * 会社様式の印刷のレイアウトの版（印刷ダイアログに表示する。iPad で新しい版が読み込まれているかを、印刷の前に確かめるため）。
- * 印刷の縮小・紙面の大きさの決め方を変えたら上げる
+ * 印刷の縮小・紙面の大きさの決め方を変えたら上げる（v74: 職種を左揃えに。配置の変更でも、新しい版の確認のため上げた）
  */
-export const PRINT_LAYOUT_VERSION = "v72";
+export const PRINT_LAYOUT_VERSION = "v74";
 
 /**
  * 紙面の高さ÷幅の上限（iPad の Safari は内容を余白の内側の幅いっぱいに合わせて縮めるため、高さが 幅×この値 以下なら1ページに収まる。
@@ -435,23 +436,7 @@ function colIndexToLetters(n) {
  *    window.__xlsxCellsClipped に残す（検証用）
  * まとめて印刷（複数の日報を1文書に結合）でも各シートに効くよう、文書全体の .xc を対象にする。
  */
-export const PDF_CELL_FIT_SCRIPT = `(function(){
-  var MIN=5;
-  function fitCell(c){
-    var sp=c.firstElementChild; if(!sp) return true;
-    c.classList.remove("xc-fit"); c.style.fontSize="";
-    var own=+c.getAttribute("data-w"), spill=+c.getAttribute("data-spill"), wrap=c.getAttribute("data-wrap")==="1";
-    if(!wrap && sp.offsetWidth<=spill+0.5 && sp.offsetHeight<=c.clientHeight+1) return true;
-    c.classList.add("xc-fit");
-    var size=parseFloat(getComputedStyle(c).fontSize)||14;
-    function over(){return c.scrollHeight>c.clientHeight||c.scrollWidth>c.clientWidth;}
-    while(over()&&size>MIN){size-=0.5;c.style.fontSize=size+"px";}
-    return !over();
-  }
-  // 全体の縮小（下の fitScript）は、この後に計算し直す。縮小したまま測ると幅・高さを誤るので一度戻す
-  function fitAll(){var ws=document.querySelectorAll(".xlsx-sheet-wrap");for(var j=0;j<ws.length;j++)ws[j].style.zoom="1";var n=0,cs=document.querySelectorAll("table.xlsx-sheet .xc[data-w]");for(var i=0;i<cs.length;i++){if(!fitCell(cs[i]))n++;}window.__xlsxCellsClipped=n;}
-  fitAll();window.addEventListener("load",fitAll);window.addEventListener("beforeprint",fitAll);
-})();`;
+export const PDF_CELL_FIT_SCRIPT = CELL_FIT_SCRIPT; // 本文は js/printScripts.js（CSP の指紋で許可するため固定）
 
 async function render(model, mapping, companyProfile, template) {
   const cfg = mapping || getLayoutProfile(template?.layoutId)?.dailyMapping || ANZEN_EISEI_UCHIAWASE_NISSHI_MAPPING;
@@ -473,8 +458,8 @@ async function render(model, mapping, companyProfile, template) {
   let stylesXml = await readZipEntryText(zip, "xl/styles.xml");
   // 巡回点検の欄の斜線（Excel出力と同じ処理。休工日・作業なし・事務作業日で点検記録が無い日）
   if (plan.diagonalCells?.length) ({ sheetXml, stylesXml } = applyDiagonalBorders({ sheetXml, stylesXml, cells: plan.diagonalCells }));
-  // 中央揃え・右揃え（Excel出力と同じ処理）
-  if (plan.centerCells?.length || plan.rightCells?.length) ({ sheetXml, stylesXml } = applyAlignmentPlan({ sheetXml, stylesXml, center: plan.centerCells || [], right: plan.rightCells || [] }));
+  // 中央揃え・右揃え・左揃え（Excel出力と同じ処理）
+  if (plan.centerCells?.length || plan.rightCells?.length || plan.leftCells?.length) ({ sheetXml, stylesXml } = applyAlignmentPlan({ sheetXml, stylesXml, center: plan.centerCells || [], right: plan.rightCells || [], left: plan.leftCells || [] }));
   const sharedStringsXml = await readZipEntryText(zip, "xl/sharedStrings.xml");
   const styles = parseXlsxStyles(stylesXml);
   const sharedStrings = parseSharedStrings(sharedStringsXml);
@@ -571,7 +556,7 @@ async function render(model, mapping, companyProfile, template) {
   const tableHtml = buildTableHtml(scale === 1 ? layout : { ...layout, colWidthPx: layout.colWidthPx.map((w) => (w || 0) * scale), rowHeightPx: layout.rowHeightPx.map((h) => (h || 0) * scale) }, styles, scale);
 
   const fitScript = fitToPage
-    ? `<script>(function(){var AW=${availWpx.toFixed(1)},AH=${availHpx.toFixed(1)},RATIO=${PRINT_HEIGHT_RATIO};function fit(){var ws=document.querySelectorAll(".xlsx-sheet-wrap");for(var i=0;i<ws.length;i++){var w=ws[i];var t=w.querySelector("table.xlsx-sheet");if(!t)continue;w.style.zoom="1";w.style.width="";var r=t.getBoundingClientRect();if(!r.width||!r.height)continue;var WW=Math.max(r.width,r.height/RATIO);w.style.width=WW+"px";var z=Math.min(1,AW/WW*0.995,AH/r.height*0.97);w.style.zoom=z<0.99?String(z):"1";}}fit();window.addEventListener("load",fit);window.addEventListener("beforeprint",fit);})();</script>`
+    ? `${jsonParamsScript({ aw: Number(availWpx.toFixed(1)), ah: Number(availHpx.toFixed(1)), ratio: PRINT_HEIGHT_RATIO, sel: ".xlsx-sheet-wrap" })}<script>${SHEET_FIT_SCRIPT}</script>`
     : "";
 
   const imagesHtml = [...templateImages, ...signatureImages, ...sealImages].map(scaleBox).map(overlayImageHtml).join("");

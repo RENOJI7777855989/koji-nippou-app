@@ -112,6 +112,11 @@ const OTHER = "森川";
   const audit = await page.evaluate(async () => (await (await import("/js/db.js")).dbGetAll("auditLog")).map((e) => e.summary).filter((s) => s.includes("一括押印")));
   check("変更履歴に対象の日付と件数が残る", audit.some((s) => s === `所長印を一括押印（${NAME}・3件: 9/29・10/1・10/2）`), JSON.stringify(audit));
   await page.click('[data-sb="close"]'); await page.waitForTimeout(300);
+  // カレンダーは工期内なら今日の月を開く（テストを実行する日によって 2026-10 ではない）ので、10月まで戻す
+  for (let i = 0; i < 24 && !(await page.$('#reportCalendar .cal-cell[data-date="2026-10-01"]')); i++) {
+    const ym = await page.evaluate(() => document.querySelector("#reportCalendar .cal-cell[data-date]")?.dataset.date.slice(0, 7) || "");
+    await page.click(`#reportCalendar .cal-nav[data-shift="${ym > "2026-10" ? -1 : 1}"]`); await page.waitForTimeout(150);
+  }
   const marks = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll("#reportCalendar .cal-cell[data-date]")].filter((c) => c.querySelector(".cal-seal")).map((c) => [c.dataset.date, c.querySelector(".cal-seal").textContent])));
   check("カレンダーに押印済みの印（10/1・10/2は2件中1件・10/3）", marks["2026-10-01"] === "印" && marks["2026-10-02"] === "印 1/2" && marks["2026-10-03"] === "印" && Object.keys(marks).length === 3, JSON.stringify(marks));
 

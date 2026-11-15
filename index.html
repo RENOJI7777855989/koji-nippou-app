@@ -2,6 +2,10 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <!-- 読み込めるもの・通信先の制限（CSP。2026-11-01）。スクリプトは自分のサイトのファイルと、印刷用HTMLの中の決まったスクリプト
+       （js/printScripts.js の本文の SHA-256）だけ。印刷・プレビューの枠（srcdoc）もこの制限を引き継ぐ。通信先は自分のサイト（と端末の中の data:・blob:）と
+       積算の「質問する」の api.anthropic.com だけ。本文を変えたら指紋も変える（tests/csp.js が一致を確かめる） -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-bxtFS95VAXfe8TMAv9n2SBgKhw8FolJ3cw17dLVH8+g=' 'sha256-1Bm6lwyQi/s+VutHsa5bZFX4jounM1oW+zU0INc8Jmc=' 'sha256-t6c+ApGAxwkTlQnMcRgzDM0eUIiHGXeGPI/2LmH/v48=' 'sha256-l0HuGWKNoEzxRCu3PwHQ86fYdWlGSe7ycWCQLatSQ1A='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob: https://api.anthropic.com; worker-src 'self' blob:; child-src 'self' blob:; frame-src 'self' blob: data:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
   <meta name="format-detection" content="telephone=no">
   <meta name="theme-color" content="#2b6cb0">
@@ -132,6 +136,33 @@
           <button type="button" id="siteFormCancelBtn" class="secondary-btn">キャンセル</button>
         </div>
       </form>
+      <!-- 棟・工種の一覧（この現場だけ。js/siteMasters.js・js/ui/site-masters-panel.js。2026-11-01）。変更はその場で現場に保存する -->
+      <section id="siteMastersSection" class="site-masters" hidden>
+        <h3>棟・工種の一覧（この現場だけ）</h3>
+        <p class="app-subtitle">日報の作業行で、棟を選び、工種を候補から選びます。同じ名前（全角・半角や空白の違い、工種は「工事」の有無も）は二重に登録できません。使った棟・工種は削除せず「使用停止」にします。名前を変えても、保存済みの日報の棟の名前は変わりません。変更はすぐに保存されます。</p>
+        <p id="siteMastersNote" class="empty-message" hidden></p>
+        <div class="site-master" data-kind="buildings">
+          <h4>棟</h4>
+          <ul class="master-list"></ul>
+          <div class="toolbar master-add-row">
+            <input type="text" class="master-new" placeholder="例）A棟・共用部・全棟" aria-label="追加する棟の名前">
+            <button type="button" class="master-add">棟を追加</button>
+          </div>
+        </div>
+        <div class="site-master" data-kind="trades">
+          <h4>工種</h4>
+          <ul class="master-list"></ul>
+          <div class="toolbar master-add-row">
+            <input type="text" class="master-new" placeholder="例）塗装・足場・外壁補修" aria-label="追加する工種の名前">
+            <button type="button" class="master-add">工種を追加</button>
+          </div>
+          <details class="trade-candidates">
+            <summary>過去の日報の工種から登録（確認してから登録します）</summary>
+            <div class="cand-list"></div>
+            <button type="button" class="cand-add secondary-btn">選んだ工種を一覧に登録</button>
+          </details>
+        </div>
+      </section>
     </section>
 
     <!-- 現場詳細 -->
@@ -182,15 +213,22 @@
       </div>
       <p id="reportListSummary" class="app-subtitle"></p>
       <p id="reportListEmpty" class="empty-message">まだ日報がありません。</p>
+      <!-- 日報一覧の年月の選択（2026-11-15。表示だけを絞る。まとめて出力の対象は変えない。js/ui/site-detail-view.js） -->
+      <div id="reportMonthBar" class="report-month-bar" hidden>
+        <button type="button" id="reportMonthPrev" class="secondary-btn" aria-label="前の月">◀ 前の月</button>
+        <select id="reportMonthSelect" aria-label="表示する年月"></select>
+        <button type="button" id="reportMonthNext" class="secondary-btn" aria-label="次の月">次の月 ▶</button>
+        <span id="reportMonthCount" class="report-month-count" role="status"></span>
+      </div>
       <ul id="reportList" class="report-list"></ul>
       <ul id="reportMissingList" class="report-list" hidden></ul>
 
       <details class="report-bulk-panel" id="reportBulkPanel">
         <summary>まとめて出力・工事完了</summary>
-        <p class="app-subtitle">上の一覧に表示中の日報（絞り込み・検索の結果）をまとめて出力します。紙を紛失した場合も、保存されている日報データから同じ帳票を作り直せます。</p>
+        <p class="app-subtitle">上の一覧の絞り込み・検索に合う日報を、<strong>月の選択に関係なく、すべての月の分</strong>まとめて出力します（月の選択は一覧の表示だけを絞ります）。紙を紛失した場合も、保存されている日報データから同じ帳票を作り直せます。</p>
         <div class="toolbar">
           <button type="button" id="bulkExcelBtn" class="secondary-btn">Excel一括出力（ZIP）</button>
-          <button type="button" id="bulkPdfBtn" class="secondary-btn">PDF一括出力</button>
+          <button type="button" id="bulkPdfBtn" class="secondary-btn">工事日報PDFを一括出力</button>
           <button type="button" id="bulkPrintBtn" class="secondary-btn">まとめて印刷</button>
         </div>
         <h4>工事期間の台帳（1冊）</h4>
@@ -309,12 +347,13 @@
         </div>
 
         <div class="rf-sec" data-qsec="companies">
-        <h3 id="companiesHeading">業者ごとの作業内容・職長サイン</h3>
+        <h3 id="companiesHeading">作業行（棟・工種・業者ごと）の作業内容・職長サイン</h3>
+        <p class="app-subtitle">1行＝棟・工種・業者ごとの作業です。同じ業者・同じ職長でも、棟や工種が違えば行を分けます（職長サインも行ごと）。棟は現場の一覧から選びます（「＋ 棟を追加…」で追加できます）。人数は行ごとの実績人数で、合計は延べ人数です。</p>
         <div id="companiesContainer"></div>
         <!-- 業者名・工種の入力候補（業者と工種は別々。業者を選んでも工種は自動で入らない） -->
         <datalist id="companyNameSuggestions"></datalist>
         <datalist id="occupationSuggestions"></datalist>
-        <button type="button" id="addCompanyBtn">＋ 業者を追加</button>
+        <button type="button" id="addCompanyBtn">＋ 作業行を追加（棟・工種・業者ごと）</button>
         </div>
 
         <div class="rf-sec" data-qsec="timeline">
@@ -425,7 +464,7 @@
         <p id="reportOutputStatus" class="report-output-status"></p>
         <div class="toolbar">
           <button type="button" id="reportExcelBtn" class="secondary-btn">Excel出力</button>
-          <button type="button" id="reportPdfBtn" class="secondary-btn">PDF出力</button>
+          <button type="button" id="reportPdfBtn" class="secondary-btn">工事日報PDFを出力</button>
           <button type="button" id="reportPrintBtn">印刷</button>
           <button type="button" id="reportConfirmBtn" class="secondary-btn">内容を確認済みにする</button>
         </div>
@@ -486,6 +525,7 @@
         <button type="button" id="outputPrintShareBtn" class="secondary-btn print-share-btn" hidden>共有メニューから印刷</button>
         <button type="button" id="outputPrintedRecordBtn" class="secondary-btn" hidden>紙に印刷できた（印刷状態に記録）</button>
       </div>
+      <p id="outputPrintGuide" class="app-subtitle print-paper-guide" hidden></p>
 
       <div id="outputPreviewArea" hidden>
         <h3>プレビュー</h3>
@@ -780,6 +820,8 @@
 
       <div id="estimateAskMainSection" hidden>
         <button type="button" id="estimateAskChangeKeyBtn" class="link-btn">APIキーを変更／削除</button>
+        <!-- 送る内容と送り先（2026-11-01。js/estimate/estimateAssistant.js の buildItemsForPrompt と同じ項目） -->
+        <p id="estimateAskSendNote" class="estimate-ask-send-note"><strong>［質問する］を押すと、次の内容を Anthropic（Claude）の API（api.anthropic.com）へ送ります。</strong>この現場の積算項目のすべて（工種・項目・仕様・数量・単位・単価・金額・出典の資料名（ファイル名）・出典のシート／ページ・出典の行）と、質問の文章です。日報・写真・職長サイン・KY・業者見積は、この機能からは送りません。送るには、この端末に保存したご自身の API キーが必要です。</p>
         <form id="estimateAskForm" novalidate>
           <label class="full-width">質問
             <textarea id="estimateAskQuestionInput" rows="2" placeholder="例）タイル張替えの積算数量は？"></textarea>
@@ -1064,11 +1106,20 @@
       <div id="storageProtection" class="storage-protection"></div>
       <!-- 未完了の復元（書き込み後の確認待ち・復旧が必要・復旧失敗）。復旧は利用者が押したときだけ（js/ui/backup-view.js） -->
       <section id="restoreJournalSection" class="restore-journal" hidden></section>
+      <!-- バックアップのパスワード暗号化（js/backupCrypto.js。2026-11-01） -->
+      <fieldset class="backup-encrypt" id="backupEncryptBox">
+        <label class="checkbox-label"><input type="checkbox" id="backupEncryptToggle" checked> パスワードで暗号化する（推奨）</label>
+        <div id="backupEncryptFields" class="backup-encrypt-fields">
+          <label>パスワード（8文字以上）<input type="password" id="backupPassword" autocomplete="new-password"></label>
+          <label>パスワード（確認）<input type="password" id="backupPasswordConfirm" autocomplete="new-password"></label>
+        </div>
+        <p class="app-subtitle">バックアップには、日報・写真・職長サイン・KY・積算と見積・帳票テンプレート（03-2を含む）・変更履歴が入ります。暗号化すると、パスワードを知らない人は中を見られません（ファイルを落としたり、送り間違えたりした場合の備え）。<strong>パスワードを忘れると、誰にも復元できません。</strong>パスワードはアプリにもファイルにも保存しないので、紙などに控えて別に保管してください。暗号化したファイルは「…<code>.kbak</code>」、暗号化しないファイルは「…<code>.zip</code>」になります。</p>
+      </fieldset>
       <div class="toolbar">
         <button type="button" id="exportBackupBtn">フルバックアップを作成してダウンロード</button>
       </div>
-      <label class="full-width">バックアップから復元
-        <input type="file" id="restoreFileInput" accept=".zip">
+      <label class="full-width">バックアップから復元（暗号化したファイル（.kbak）・従来のファイル（.zip）のどちらも）
+        <input type="file" id="restoreFileInput" accept=".zip,.kbak">
       </label>
 
       <div id="folderHandleSection" hidden>
@@ -1103,6 +1154,11 @@
       <h4>① 復元前のバックアップ（必須）</h4>
       <p class="app-subtitle">復元を始める前に、今のこの端末のデータ（写真・署名・テンプレートのファイルを含む）を1つのファイルに保存します。作ったファイルはアプリが読み直して、件数と添付ファイルの指紋が今のデータと一致することを確かめます。復元の結果が思っていたものと違ったときは、このファイルから戻せます。</p>
       <p class="app-subtitle">iPad: 「ダウンロード」の確認が出たら［ダウンロード］を押し、ファイルアプリの「ダウンロード」に同じ名前のファイルがあることを確かめてください。共有フォルダを設定している場合は、そのフォルダに保存されます。保存できたかどうかはアプリからは確かめられないため、下の確認欄で確かめてください。</p>
+      <label class="checkbox-label"><input type="checkbox" id="restorePreEncrypt" checked> 復元前のバックアップもパスワードで暗号化する（推奨。忘れると戻せません）</label>
+      <div id="restorePreEncryptFields" class="backup-encrypt-fields">
+        <label>パスワード（8文字以上）<input type="password" id="restorePrePassword" autocomplete="new-password"></label>
+        <label>パスワード（確認）<input type="password" id="restorePrePasswordConfirm" autocomplete="new-password"></label>
+      </div>
       <button type="button" id="restorePreBackupBtn">今のデータのバックアップを作成して保存</button>
       <p id="restorePreBackupStatus" class="restore-prebackup-status"></p>
       <label class="checkbox-label" id="restorePreBackupConfirmLabel" hidden><input type="checkbox" id="restorePreBackupConfirm"> 上のファイルを保存したことを確認しました</label>
@@ -1114,27 +1170,43 @@
     </div>
   </dialog>
 
+  <!-- 暗号化したバックアップのパスワード（js/ui/backup-view.js。復号できるまで検査・書き込みには進まない） -->
+  <dialog id="backupDecryptDialog" class="backup-decrypt-dialog">
+    <h3>暗号化したバックアップを開く</h3>
+    <p id="backupDecryptFile" class="app-subtitle"></p>
+    <label class="full-width">パスワード<input type="password" id="backupDecryptPassword" autocomplete="current-password"></label>
+    <p id="backupDecryptStatus" class="restore-status" role="status"></p>
+    <div class="form-actions">
+      <button type="button" id="backupDecryptBtn">復号して検査する</button>
+      <button type="button" id="backupDecryptCancelBtn" class="secondary-btn">キャンセル</button>
+    </div>
+  </dialog>
+
   <!-- 現場コピー用モーダル -->
   <dialog id="reportPrintDialog">
     <h3 id="reportPrintTitle">印刷</h3>
     <p id="reportPrintNote" class="app-subtitle"></p>
-    <iframe id="reportPrintFrame" class="report-print-frame" title="印刷プレビュー"></iframe>
-    <div class="form-actions print-actions">
-      <button type="button" id="reportPrintOpenBtn">印刷画面を開く</button>
-      <button type="button" id="reportPrintShareBtn" class="secondary-btn print-share-btn">共有メニューから印刷</button>
-      <button type="button" id="reportPrintSaveBtn" class="secondary-btn print-save-btn">印刷用ファイルを保存</button>
-      <button type="button" id="reportPrintCloseBtn" class="secondary-btn">閉じる</button>
-    </div>
-    <p class="app-subtitle print-fallback-hint">印刷画面が開かない場合（iPadのホーム画面アプリなど）は「共有メニューから印刷」→「プリント」で印刷できます。</p>
-    <!-- 会社指定様式のとき: 1日報1ページのPDF（iPadで印刷画面から印刷すると2ページになることがあるため。js/ui/company-pdf.js） -->
+    <!-- 帳票に書けない内容の警告（入りきらない作業行・工種の行など。js/ui/output-warnings.js。2026-11-01） -->
+    <div id="reportPrintWarnings" class="print-warnings" role="alert" hidden></div>
+    <!-- 会社指定様式のとき: 日報1件＝A3横・1ページのPDFをアプリが直接作る（js/ui/company-pdf.js）。
+         「工事日報PDFを出力」では、これが通常の出力（ブラウザの印刷画面は用紙の選択で2ページになることがあるため。2026-11-01） -->
     <section id="reportOnePageArea" class="report-onepage" hidden>
-      <p class="app-subtitle"><strong>iPadで2ページになる場合は、こちら:</strong> 様式の用紙（A3横）・余白どおりに、日報1件を必ず1ページにしたPDFを作ります。共有メニューの「プリント」で印刷、または「ファイルに保存」できます（PDFの文字は画像なので、選択・検索はできません）。</p>
+      <p id="reportOnePageNote" class="app-subtitle"></p>
       <div class="form-actions print-actions">
         <button type="button" id="reportOnePageBtn">📄 1ページのPDFを作成（A3）</button>
         <button type="button" id="reportOnePageShareBtn" class="secondary-btn" hidden>PDFを共有（プリント・ファイルに保存）</button>
         <button type="button" id="reportOnePageSaveBtn" class="secondary-btn" hidden>PDFを保存</button>
       </div>
     </section>
+    <iframe id="reportPrintFrame" class="report-print-frame" title="印刷プレビュー"></iframe>
+    <button type="button" id="reportPrintBrowserToggle" class="link-btn" hidden>ブラウザの印刷画面からPDFにする（用紙は A3 横を選んでください）</button>
+    <div class="form-actions print-actions">
+      <button type="button" id="reportPrintOpenBtn">印刷画面を開く</button>
+      <button type="button" id="reportPrintShareBtn" class="secondary-btn print-share-btn">共有メニューから印刷</button>
+      <button type="button" id="reportPrintSaveBtn" class="secondary-btn print-save-btn">印刷用ファイルを保存</button>
+      <button type="button" id="reportPrintCloseBtn" class="secondary-btn">閉じる</button>
+    </div>
+    <p id="reportPrintFallbackHint" class="app-subtitle print-fallback-hint">印刷画面が開かない場合（iPadのホーム画面アプリなど）は「共有メニューから印刷」→「プリント」で印刷できます。</p>
     <p id="reportPrintStatus" class="print-status" role="status" hidden></p>
     <div id="reportPrintRecordArea" class="report-print-record" hidden>
       <p>紙に印刷できましたか？（「印刷できた」を押すと印刷状態に記録します）</p>
@@ -1212,6 +1284,7 @@
       <p id="choreiProgress" class="chorei-progress"></p>
       <div class="chorei-actions">
         <button type="button" id="choreiCloseBtn" class="secondary-btn">閉じる</button>
+        <button type="button" id="choreiPdfBtn" class="secondary-btn" hidden>📄 業者別稼働・請求人工 PDF出力</button>
         <button type="button" id="choreiSaveBtn">保存</button>
       </div>
     </div>
@@ -1276,15 +1349,16 @@
 
   <!-- 現場掲示のPDF保存・共有（A3横・1ページ。js/ui/board-pdf.js） -->
   <dialog id="boardPdfDialog" class="day-status-dialog board-pdf-dialog">
-    <h3>現場掲示のPDF（A3横・1ページ）</h3>
+    <h3 id="boardPdfHeading">現場掲示のPDF（A3横・1ページ）</h3>
     <p id="boardPdfStatus" class="board-pdf-status"></p>
     <img id="boardPdfPreview" class="board-pdf-preview" alt="PDFの内容（縮小表示）" hidden>
     <div class="day-panel-actions">
       <button type="button" id="boardPdfShareBtn">共有（LINE・ファイルに保存・メールなど）</button>
       <button type="button" id="boardPdfSaveBtn" class="secondary-btn">PDFを保存</button>
+      <button type="button" id="boardPdfPrintBtn" class="secondary-btn" hidden>🖨 印刷</button>
     </div>
     <p id="boardPdfNote" class="day-status-note"></p>
-    <p class="day-status-note">「🖨 現場掲示をA3印刷」と同じ内容です（請求人工・監督向けの情報は入りません）。PDFの文字は画像のため、選択・検索はできません。</p>
+    <p id="boardPdfSource" class="day-status-note">「🖨 現場掲示をA3印刷」と同じ内容です（請求人工・監督向けの情報は入りません）。PDFの文字は画像のため、選択・検索はできません。</p>
     <div class="form-actions">
       <button type="button" id="boardPdfCloseBtn" class="secondary-btn">閉じる</button>
     </div>

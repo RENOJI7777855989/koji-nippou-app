@@ -32,10 +32,39 @@ import { storageProtectionStatus } from "../storagePersist.js";
 import { showView, showMessage } from "./common.js";
 import { navigate } from "../router.js";
 import { refreshRestorePendingBanner } from "./restore-pending-banner.js";
+import { encryptBackupVerified, decryptBackupFile, isEncryptedBackupFile, encryptedBackupName, backupPasswordProblem, ENCRYPTED_BACKUP_EXT } from "../backupCrypto.js";
 
 const reminderEl = document.getElementById("backupReminder");
 const exportBtn = document.getElementById("exportBackupBtn");
 const restoreInput = document.getElementById("restoreFileInput");
+// パスワード暗号化（2026-11-01。js/backupCrypto.js）
+const encryptToggle = document.getElementById("backupEncryptToggle");
+const encryptFields = document.getElementById("backupEncryptFields");
+const passwordInput = document.getElementById("backupPassword");
+const passwordConfirmInput = document.getElementById("backupPasswordConfirm");
+const preEncryptToggle = document.getElementById("restorePreEncrypt");
+const preEncryptFields = document.getElementById("restorePreEncryptFields");
+const prePasswordInput = document.getElementById("restorePrePassword");
+const prePasswordConfirmInput = document.getElementById("restorePrePasswordConfirm");
+const decryptDialog = document.getElementById("backupDecryptDialog");
+const decryptFileEl = document.getElementById("backupDecryptFile");
+const decryptPasswordInput = document.getElementById("backupDecryptPassword");
+const decryptStatusEl = document.getElementById("backupDecryptStatus");
+const decryptBtn = document.getElementById("backupDecryptBtn");
+const decryptCancelBtn = document.getElementById("backupDecryptCancelBtn");
+let decryptTarget = null; // 復号を待っている暗号化バックアップのファイル
+
+encryptToggle.addEventListener("change", () => { encryptFields.hidden = !encryptToggle.checked; });
+preEncryptToggle.addEventListener("change", () => { preEncryptFields.hidden = !preEncryptToggle.checked; });
+
+/** 暗号化する設定なら、パスワードを検査して暗号化（読み直して確かめる）。しないなら元の ZIP のまま */
+async function maybeEncrypt(blob, filename, toggle, pw, pw2) {
+  if (!toggle.checked) return { blob, filename, encrypted: false };
+  const problem = backupPasswordProblem(pw.value, pw2.value);
+  if (problem) throw new Error(`${problem}（暗号化しない場合は「パスワードで暗号化する」のチェックを外してください）`);
+  const encrypted = await encryptBackupVerified(blob, pw.value);
+  return { blob: encrypted, filename: encryptedBackupName(filename), encrypted: true };
+}
 const historyListEl = document.getElementById("backupHistoryList");
 const historyEmptyEl = document.getElementById("backupHistoryEmpty");
 const backBtn = document.getElementById("backToSiteListFromBackupBtn");
@@ -130,18 +159,26 @@ function downloadBlob(blob, filename) {
 }
 
 exportBtn.addEventListener("click", async () => {
+  // パスワードの誤りは、バックアップを作る前に知らせる
+  if (encryptToggle.checked) {
+    const problem = backupPasswordProblem(passwordInput.value, passwordConfirmInput.value);
+    if (problem) { showMessage(`${problem}（暗号化しない場合は「パスワードで暗号化する」のチェックを外してください）`, true); return; }
+  }
   exportBtn.disabled = true;
   try {
-    const { blob, filename } = await exportFullBackup();
+    const made = await exportFullBackup();
+    if (encryptToggle.checked) showMessage("バックアップをパスワードで暗号化しています…");
+    const { blob, filename, encrypted } = await maybeEncrypt(made.blob, made.filename, encryptToggle, passwordInput, passwordConfirmInput);
 
     const dirHandle = await getSavedExportDirHandle();
     if (dirHandle && (await verifyDirHandlePermission(dirHandle, "readwrite"))) {
       await writeBackupToDirHandle(dirHandle, filename, blob);
-      showMessage(`フルバックアップを作成し、共有フォルダ「${dirHandle.name}」に保存しました。`);
+      showMessage(`フルバックアップを作成し、共有フォルダ「${dirHandle.name}」に保存しました（${encrypted ? "パスワードで暗号化済み" : "暗号化していません"}: ${filename}）。`);
     } else {
       downloadBlob(blob, filename);
-      showMessage("フルバックアップを作成しました。");
+      showMessage(`フルバックアップを作成しました（${encrypted ? "パスワードで暗号化済み" : "暗号化していません"}: ${filename}）。`);
     }
+    passwordInput.value = ""; passwordConfirmInput.value = ""; // パスワードを画面に残さない
     await renderReminder();
     await renderHistory();
   } catch (err) {
@@ -201,11 +238,24 @@ async function startRestoreFlow(file) {
   restoreDialog.showModal();
 }
 
+/** 選んだバックアップのファイルを開く。暗号化したものは、パスワードで復号できてから検査に進む（それまで何も書き込まない） */
+async function openBackupFile(file) {
+  if (await isEncryptedBackupFile(file)) {
+    decryptTarget = file;
+    decryptFileEl.textContent = `ファイル: ${file.name}（${formatSize(file.size)}）。作成したときのパスワードを入力してください。`;
+    decryptPasswordInput.value = "";
+    decryptStatusEl.textContent = "";
+    decryptDialog.showModal();
+    return;
+  }
+  await startRestoreFlow(file);
+}
+
 restoreInput.addEventListener("change", async () => {
   const file = restoreInput.files[0];
   if (!file) return;
   try {
-    await startRestoreFlow(file);
+    await openBackupFile(file);
   } catch (err) {
     showMessage(`復元に失敗しました: ${err.message}`, true);
   } finally {
@@ -227,7 +277,11 @@ restorePreBackupBtn.addEventListener("click", async () => {
   restorePreBackupStatusEl.textContent = "作成して確かめています…";
   updateRestoreApplyButton();
   try {
-    const pre = await createVerifiedBackup();
+    const verified = await createVerifiedBackup();
+    // 復元前のバックアップも暗号化できる（暗号化したら、読み直して元の内容と一致することを確かめてから保存する）
+    const packed = await maybeEncrypt(verified.blob, verified.filename, preEncryptToggle, prePasswordInput, prePasswordConfirmInput);
+    const pre = { ...verified, blob: packed.blob, filename: packed.filename, encrypted: packed.encrypted };
+    prePasswordInput.value = ""; prePasswordConfirmInput.value = "";
     const dirHandle = await getSavedExportDirHandle();
     let where;
     if (dirHandle && (await verifyDirHandlePermission(dirHandle, "readwrite"))) {
@@ -238,7 +292,7 @@ restorePreBackupBtn.addEventListener("click", async () => {
       where = "この端末のダウンロード（iPadはファイルアプリの「ダウンロード」）";
     }
     restoreState.preBackup = pre;
-    restorePreBackupStatusEl.textContent = `作成しました: ${pre.filename}（${formatSize(pre.blob.size)}）。読み直して確かめました（${pre.check.records}件・添付ファイル ${pre.check.attachments}件が今のデータと一致）。保存先: ${where}`;
+    restorePreBackupStatusEl.textContent = `作成しました: ${pre.filename}（${formatSize(pre.blob.size)}・${pre.encrypted ? "パスワードで暗号化済み" : "暗号化していません"}）。読み直して確かめました（${pre.check.records}件・添付ファイル ${pre.check.attachments}件が今のデータと一致）。保存先: ${where}`;
     restorePreBackupConfirmLabel.hidden = false;
     await renderHistory();
   } catch (err) {
@@ -401,11 +455,11 @@ restoreFromFolderBtn.addEventListener("click", async () => {
     }
     const latest = await findLatestBackupInDirHandle(handle);
     if (!latest) {
-      showMessage("共有フォルダにバックアップファイル（backup_*.zip）が見つかりません。", true);
+      showMessage("共有フォルダにバックアップファイル（backup_*.zip・backup_*.kbak）が見つかりません。", true);
       return;
     }
     const file = new File([latest.file], latest.filename, { type: latest.file.type });
-    await startRestoreFlow(file);
+    await openBackupFile(file);
   } catch (err) {
     showMessage(`共有フォルダからの復元に失敗しました: ${err.message}`, true);
   }
@@ -440,3 +494,28 @@ export async function initBackupView() {
   await renderHistory();
   await renderFolderStatus();
 }
+
+decryptBtn.addEventListener("click", async () => {
+  if (!decryptTarget) return;
+  if (!decryptPasswordInput.value) { decryptStatusEl.textContent = "パスワードを入力してください。"; return; }
+  decryptBtn.disabled = true;
+  decryptStatusEl.textContent = "復号しています…";
+  try {
+    const { blob } = await decryptBackupFile(decryptTarget, decryptPasswordInput.value);
+    const name = decryptTarget.name.endsWith(ENCRYPTED_BACKUP_EXT) ? decryptTarget.name.slice(0, -ENCRYPTED_BACKUP_EXT.length) + ".zip" : `${decryptTarget.name}.zip`;
+    decryptPasswordInput.value = "";
+    decryptTarget = null;
+    decryptDialog.close();
+    await startRestoreFlow(new File([blob], name, { type: "application/zip" })); // 以後は従来の検査・計画・書き込みと同じ
+  } catch (err) {
+    decryptStatusEl.textContent = `${err.message}（何も書き込んでいません）`;
+  } finally {
+    decryptBtn.disabled = false;
+  }
+});
+
+decryptCancelBtn.addEventListener("click", () => {
+  decryptTarget = null;
+  decryptPasswordInput.value = "";
+  decryptDialog.close();
+});

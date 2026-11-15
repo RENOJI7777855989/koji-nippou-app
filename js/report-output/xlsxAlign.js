@@ -1,7 +1,7 @@
 /* ==========================================================
    出力用の複製のセルの配置を変える（DOM非依存・文字列処理。2026-10-25）
    中央揃え（上下・左右とも中央）: 03-2の稼動人数表（職種・人数・累計・計・延労働時間）、巡回点検の点検項目と ○×（2026-10-26）、
-   協力会社欄の予定・実績の人数（2026-10-26）。右揃え（上下は中央）: 協力会社欄の職種（2026-10-26）。
+   協力会社欄の予定・実績の人数（2026-10-26）。左揃え（上下は中央）: 協力会社欄の職種（2026-11-01。10-26〜10-31 は右揃え）。
    ・セルの今の書式（xf: フォント・塗り・罫線・配置）をそのまま複製し、配置だけ「横・縦とも中央」にしたものを styles.xml の
      末尾に足して、そのセルの s 属性を付け替える（xlsxDiagonal.js の斜線と同じ方式）。縦書き・折り返しなどの他の配置はそのまま。
    ・セルの値・結合・行・列・罫線・文字の大きさ・数式には触れない。原本テンプレートは変更しない（出力の複製だけ）。
@@ -9,7 +9,7 @@
 
 import { sectionOf, childElements } from "./xlsxDiagonal.js";
 
-/** xf の配置を、横は horizontal（center／right）・縦は中央にする（字下げは外す） */
+/** xf の配置を、横は horizontal（center／right／left）・縦は中央にする（字下げは外す） */
 export function alignXf(xf, horizontal = "center") {
   const align = (attrs) => {
     let a = attrs.replace(/\s(horizontal|vertical|indent)="[^"]*"/g, "");
@@ -29,7 +29,7 @@ export const centerXf = (xf) => alignXf(xf, "center");
 
 /**
  * 指定したセルの配置を、横は horizontal・縦は中央にする。
- * @param {{sheetXml: string, stylesXml: string, cells: string[], horizontal?: "center"|"right", cache?: Map<string, number>}} p
+ * @param {{sheetXml: string, stylesXml: string, cells: string[], horizontal?: "center"|"right"|"left", cache?: Map<string, number>}} p
  *   cache: 「横の配置:元の書式番号」→ 付け替えた書式番号（同じブックの複数シートで使い回す）
  * @returns {{sheetXml: string, stylesXml: string, applied: string[], missing: string[], cache: Map<string, number>}}
  */
@@ -65,10 +65,10 @@ export function applyCellAlignment({ sheetXml, stylesXml, cells, horizontal = "c
 /** 指定したセルを中央揃えにする（上下・左右とも中央） */
 export const applyCenterAlignment = (p) => applyCellAlignment({ ...p, horizontal: "center" });
 
-/** 中央揃えのセル（center）と右揃えのセル（right）をまとめて付け替える（出力の各経路で同じ処理を使う） */
-export function applyAlignmentPlan({ sheetXml, stylesXml, center = [], right = [], cache = new Map() }) {
+/** 中央揃え（center）・右揃え（right）・左揃え（left）のセルをまとめて付け替える（出力の各経路で同じ処理を使う） */
+export function applyAlignmentPlan({ sheetXml, stylesXml, center = [], right = [], left = [], cache = new Map() }) {
   const missing = [];
-  for (const [cells, horizontal] of [[center, "center"], [right, "right"]]) {
+  for (const [cells, horizontal] of [[center, "center"], [right, "right"], [left, "left"]]) {
     if (!cells.length) continue;
     const r = applyCellAlignment({ sheetXml, stylesXml, cells, horizontal, cache });
     sheetXml = r.sheetXml; stylesXml = r.stylesXml; missing.push(...r.missing);

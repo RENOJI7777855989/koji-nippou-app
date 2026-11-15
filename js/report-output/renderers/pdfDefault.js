@@ -16,6 +16,7 @@
    ときほど写真は大きく、内容が多いときは縮小されて1枚に収まる。
    ========================================================== */
 
+import { ORIGINAL_PDF_FIT_SCRIPT, jsonParamsScript } from "../../printScripts.js";
 import { registerPdfRenderer } from "../rendererRegistry.js";
 import { blobToDataUrl } from "../imageUtils.js";
 import { escapeHtml } from "../../utils.js";
@@ -41,7 +42,7 @@ async function companyCardHtml(c) {
   return `
     <div class="company-card">
       <div class="company-card-head">
-        <span class="company-name">${escapeHtml(c.name) || "（業者名未入力）"}</span>
+        ${c.buildingName ? `<span class="company-building">【${escapeHtml(c.buildingName)}】</span>` : ""}<span class="company-name">${escapeHtml(c.name) || "（業者名未入力）"}</span>
         <span class="company-occupation">${escapeHtml(c.occupation)}</span>
       </div>
       <div class="company-card-body">
@@ -185,31 +186,8 @@ async function render(model, mapping, companyProfile) {
   ${hankoDataUrl ? `<div class="signature-area"><img src="${hankoDataUrl}" alt="印影"></div>` : ""}
   </div>
   </div>
-  <script>
-  (function () {
-    // A4縦・余白12mmでの印刷可能領域（96dpi換算px）。@pageの設定と対応させている。
-    var TARGET_WIDTH_PX = ${A4_CONTENT_WIDTH_PX};
-    var TARGET_HEIGHT_PX = ${A4_CONTENT_HEIGHT_PX};
-
-    function fitToOnePage() {
-      var content = document.getElementById("page-content");
-      var outer = document.getElementById("page-outer");
-      if (!content || !outer) return;
-      content.style.transform = "none";
-      content.style.width = TARGET_WIDTH_PX + "px";
-      var naturalHeight = content.scrollHeight;
-      var scale = Math.min(1, TARGET_HEIGHT_PX / naturalHeight);
-      content.style.transform = "scale(" + scale + ")";
-      outer.style.width = TARGET_WIDTH_PX + "px";
-      outer.style.height = Math.ceil(naturalHeight * scale) + "px";
-    }
-
-    window.addEventListener("load", fitToOnePage);
-    window.addEventListener("beforeprint", fitToOnePage);
-    window.addEventListener("resize", fitToOnePage);
-    if (document.readyState === "complete") fitToOnePage();
-  })();
-  </script>
+  ${jsonParamsScript({ w: A4_CONTENT_WIDTH_PX, h: A4_CONTENT_HEIGHT_PX }, "print-fit-params")}
+  <script>${ORIGINAL_PDF_FIT_SCRIPT}</script>
 </body>
 </html>`;
 

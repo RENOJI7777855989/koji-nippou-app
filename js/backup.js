@@ -942,7 +942,7 @@ export async function writeBackupToDirHandle(dirHandle, filename, blob) {
 export async function findLatestBackupInDirHandle(dirHandle) {
   let latestName = null;
   for await (const [name, handle] of dirHandle.entries()) {
-    if (handle.kind === "file" && /^backup_.*\.zip$/i.test(name)) {
+    if (handle.kind === "file" && /^backup_.*\.(zip|kbak)$/i.test(name)) { // .kbak はパスワードで暗号化したもの（2026-11-01）
       if (!latestName || name > latestName) latestName = name;
     }
   }

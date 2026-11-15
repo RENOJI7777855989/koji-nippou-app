@@ -59,11 +59,14 @@ const D = "2026-09-15";
   check("朝礼入力画面を開ける（表示している日の日報の業者の行がすべて出る）", rs.length === 6 && (await page.textContent("#choreiTitle")).includes("9月15日"), JSON.stringify(rs.map((r) => r.vendor)));
   check("業者と工種は日報の行のまま（アオバ塗装工業は外壁下地補修・塗装・防水の3行、足場はイズミ足場工業・ウエノ建設の2行）", rs.map((r) => `${r.vendor}/${r.trade}`).join() === "アオバ塗装工業/外壁下地補修,アオバ塗装工業/塗装,アオバ塗装工業/防水,エノキ建装工業/塗装,イズミ足場工業/足場,ウエノ建設/足場");
   check("予定人数と実績人数を分けて表示（予定3人・予定 未入力、既存の実績2は入っている）", rs[0].plan === "予定 3人" && rs[2].plan === "予定 未入力" && rs[1].value === "2" && rs[0].value === "");
-  check("未入力の行は「未入力」、入力済みは人数（入力済み／未入力が分かる）", rs[0].label === "未入力" && rs[0].state === "blank" && rs[1].label === "2人" && rs[1].state === "done" && (await page.textContent("#choreiProgress")).includes("入力済み 1／6"));
+  check("未入力の行は「未入力」、入力済みは人数（入力済み／未入力が分かる）", rs[0].label === "人数 未入力" && rs[0].state === "blank" && rs[1].label === "2人" && rs[1].state === "done" && (await page.textContent("#choreiProgress")).includes("人数 入力済み 1／6"));
 
   // ===== 連続入力（Enterで次へ・「次へ」ボタン）・0人と未入力 =====
   await page.locator(".chorei-count").nth(0).focus();
   await page.keyboard.type("4"); await page.keyboard.press("Enter");
+  // 2026-11-15: 人数の次は同じ業者の請求人工の欄（請求人工は変えずに Enter で次の業者の人数へ）
+  const onBilling = await page.evaluate(() => document.activeElement === document.querySelectorAll(".chorei-billing")[0]);
+  await page.keyboard.press("Enter");
   const afterEnter = await page.evaluate(() => [...document.querySelectorAll(".chorei-count")].indexOf(document.activeElement));
   await page.waitForTimeout(50); await page.keyboard.type("3"); // アオバ塗装工業 塗装 2→3（移った欄は中身が選択されているので打ち直せる）
   await page.click(".chorei-next >> nth=1");
@@ -73,8 +76,8 @@ const D = "2026-09-15";
   await page.locator(".chorei-count").nth(4).fill("5"); // イズミ足場工業 足場 5
   // ウエノ建設 足場は聞いていない → 空欄のまま（未入力）
   rs = await rows();
-  check("複数の業者を続けて入力できる（Enterで次の業者の欄・「次へ」でその次の欄へ移る。移った欄は中身が選択され、2→3と打ち直せる）", afterEnter === 1 && afterNext === 2);
-  check("0人と未入力を区別して表示（防水＝0人、ウエノ建設＝未入力）", rs[2].label === "0人" && rs[2].state === "done" && rs[5].label === "未入力" && rs[5].state === "blank" && (await page.textContent("#choreiProgress")).includes("入力済み 5／6"), rs.map((r) => r.label).join(","));
+  check("複数の業者を続けて入力できる（Enterで同じ業者の請求人工→次の業者の人数の欄・「次へ」で次の業者の欄へ移る。移った欄は中身が選択され、2→3と打ち直せる）", onBilling && afterEnter === 1 && afterNext === 2);
+  check("0人と未入力を区別して表示（防水＝0人、ウエノ建設＝未入力）", rs[2].label === "0人" && rs[2].state === "done" && rs[5].label === "人数 未入力" && rs[5].state === "blank" && (await page.textContent("#choreiProgress")).includes("人数 入力済み 5／6"), rs.map((r) => r.label).join(","));
   // 誤った値は保存しない
   await page.locator(".chorei-count").nth(5).fill("-1"); await page.click("#choreiSaveBtn"); await page.waitForTimeout(300);
   const stillOpen = await page.evaluate(() => document.getElementById("choreiDialog").open);

@@ -9,9 +9,15 @@
    状態にしない）。iPadのホーム画面アプリ等で印刷画面が開かない場合のために、
    「印刷画面を開く」の隣に「共有メニューから印刷」（使えない環境では「印刷用ファイルを保存」）を常に表示する。
    共通の処理は js/printSupport.js。
+
+   会社指定様式の「工事日報PDFを出力」（mode: "pdf"）では、アプリが A3 横・日報1件＝1ページのPDFを直接作る
+   （company-pdf.js）のを通常の出力にする（2026-11-01）。ブラウザの印刷画面で「PDFに保存」すると、iPad の印刷画面で選ばれた
+   用紙（A4 など）に A3 の紙面が収まらず2ページになることがある（利用者の実物の PDF: A4 横・約0.76倍で、右の列が切れ、
+   下の3行が2ページ目）。ブラウザの印刷画面からのPDFは［ブラウザの印刷画面からPDFにする］の奥に残す。
    ========================================================== */
 
 import {
+  paperGuideOf,
   printFrame,
   canSharePrintFile,
   sharePrintHtml,
@@ -21,6 +27,7 @@ import {
 } from "../printSupport.js";
 import { buildCompanyOnePagePdf, isCompanySheetHtml } from "./company-pdf.js";
 import { canSharePdf } from "./board-pdf.js";
+import { escapeHtml } from "../utils.js";
 
 const dialog = document.getElementById("reportPrintDialog");
 const titleEl = document.getElementById("reportPrintTitle");
@@ -38,6 +45,10 @@ const onePageArea = document.getElementById("reportOnePageArea");
 const onePageBtn = document.getElementById("reportOnePageBtn");
 const onePageShareBtn = document.getElementById("reportOnePageShareBtn");
 const onePageSaveBtn = document.getElementById("reportOnePageSaveBtn");
+const onePageNoteEl = document.getElementById("reportOnePageNote");
+const browserToggleBtn = document.getElementById("reportPrintBrowserToggle");
+const fallbackHintEl = document.getElementById("reportPrintFallbackHint");
+const warningsEl = document.getElementById("reportPrintWarnings");
 let onePageFile = null; // 作った1ページのPDF（このダイアログを開いている間だけ）
 
 let current = null;
@@ -76,6 +87,7 @@ async function afterPrintAttempt(opts) {
  * @param {string} [opts.note] 補足（使った様式など）
  * @param {() => Promise<void>} [opts.onPrinted] 「紙に印刷できた」を押したとき
  * @param {() => Promise<void>} [opts.onPdfOpened] PDF用に印刷画面を開いたとき
+ * @param {string[]} [opts.warnings] 帳票に書けない内容の警告（入りきらない作業行など）。ダイアログの上に出す
  * @param {string} [opts.onePagePdfName] 会社指定様式のとき、1日報1ページのPDFのファイル名（拡張子なし）。
  *   指定があり、印刷用HTMLが会社指定様式の紙面なら「1ページのPDFを作成（A3）」を出す（台帳の印刷には指定しない）
  */
@@ -83,21 +95,39 @@ export function openReportPrintDialog(opts) {
   current = opts;
   titleEl.textContent = opts.title;
   const isPdf = opts.mode === "pdf";
+  const onePage = !!(opts.onePagePdfName && isCompanySheetHtml(opts.html));
+  const guide = paperGuideOf(opts.html); // 印刷用HTMLの用紙（@page）から作る案内
+  const directPdf = isPdf && onePage; // 会社指定様式のPDF出力: アプリが1ページのPDFを作るのを通常の出力にする
   noteEl.textContent = [
-    isPdf
-      ? "「印刷画面を開く」を押し、印刷先で「PDFに保存」を選んでください。用紙サイズ・向きは帳票の設定（会社指定様式ならその様式の設定）に従います。"
-      : "「印刷画面を開く」で印刷してください。印刷後、紙に印刷できたかを下のボタンで記録します（ブラウザからは印刷できたかどうかが分からないため）。",
+    directPdf
+      ? "［📄 工事日報PDFを作成］を押してください。"
+      : isPdf
+        ? "「印刷画面を開く」を押し、印刷先で「PDFに保存」を選んでください。"
+        : "「印刷画面を開く」で印刷してください。印刷後、紙に印刷できたかを下のボタンで記録します（ブラウザからは印刷できたかどうかが分からないため）。",
+    // ブラウザの印刷を使うとき（印刷・PDF出力でブラウザの印刷が先の場合）は、用紙・向きの案内を出す（用紙はアプリから強制できない）
+    !directPdf && guide ? `${guide.text}（ブラウザの印刷画面で選びます。アプリからは設定できません）` : "",
+    // 紙の印刷とPDFの違い（会社指定様式のとき）
+    onePage && !isPdf ? "PDFが必要なときは［工事日報PDFを出力］を使ってください（印刷画面の用紙の設定に関係なく、A3横・1ページのPDFをアプリが作ります）。" : "",
     opts.note || "",
     // 会社様式の印刷のレイアウトの版（iPad で新しい版が読み込まれているかを確かめるため。印刷用HTMLの meta から読む）
     (/<meta name="print-layout-version" content="([^"]+)">/.exec(opts.html || "") || [])[1] ? `（印刷レイアウト ${(/<meta name="print-layout-version" content="([^"]+)">/.exec(opts.html) || [])[1]}）` : ""
   ].filter(Boolean).join(" ");
   openBtn.textContent = isPdf ? "印刷画面を開く（PDFに保存）" : opts.mode === "reprint" ? "印刷画面を開く（再印刷）" : "印刷画面を開く";
-  const share = canSharePrintFile();
-  shareBtn.hidden = !share;
-  saveBtn.hidden = share;
+  const warnings = (opts.warnings || []).filter(Boolean);
+  warningsEl.hidden = warnings.length === 0;
+  warningsEl.innerHTML = warnings.length
+    ? `<p><strong>⚠ 帳票に書けない内容があります（日報のデータは消えていません）</strong></p><ul>${warnings.slice(0, 30).map((w) => `<li>${escapeHtml(w)}</li>`).join("")}${warnings.length > 30 ? `<li>ほか${warnings.length - 30}件</li>` : ""}</ul>`
+    : "";
+  showBrowserPrint(!directPdf);
   recordArea.hidden = true;
   onePageFile = null;
-  onePageArea.hidden = !(opts.onePagePdfName && isCompanySheetHtml(opts.html));
+  onePageArea.hidden = !onePage;
+  onePageNoteEl.textContent = directPdf
+    ? "様式の用紙（A3横）・余白どおりに、日報1件を1ページにしたPDFを作ります（iPad の印刷画面の用紙の設定に関係なく1ページ）。作成後、［PDFを共有］で「ファイルに保存」・LINE・メール、または「プリント」で印刷できます。PDFの文字は画像のため、選択・検索はできません。"
+    : "iPadで2ページになる場合は、こちら: 様式の用紙（A3横）・余白どおりに、日報1件を必ず1ページにしたPDFを作ります。共有メニューの「プリント」で印刷、または「ファイルに保存」できます（PDFの文字は画像なので、選択・検索はできません）。";
+  onePageBtn.textContent = directPdf ? "📄 工事日報PDFを作成（A3・1ページ）" : "📄 1ページのPDFを作成（A3）";
+  browserToggleBtn.textContent = `ブラウザの印刷画面からPDFにする${guide ? `（${guide.text}）` : ""}`;
+  onePageBtn.classList.toggle("secondary-btn", !directPdf);
   onePageBtn.disabled = false;
   onePageShareBtn.hidden = true;
   onePageSaveBtn.hidden = true;
@@ -106,6 +136,18 @@ export function openReportPrintDialog(opts) {
   frame.srcdoc = opts.html;
   dialog.showModal();
 }
+
+/** ブラウザの印刷画面を使うボタン（印刷画面を開く・共有メニューから印刷・印刷用ファイルを保存）を出す／［ブラウザの印刷画面からPDFにする］の奥に隠す */
+function showBrowserPrint(show) {
+  const share = canSharePrintFile();
+  openBtn.hidden = !show;
+  shareBtn.hidden = !show || !share;
+  saveBtn.hidden = !show || share;
+  fallbackHintEl.hidden = !show;
+  browserToggleBtn.hidden = show;
+}
+
+browserToggleBtn.addEventListener("click", () => showBrowserPrint(true));
 
 openBtn.addEventListener("click", async () => {
   if (!current) return;

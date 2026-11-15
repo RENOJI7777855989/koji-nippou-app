@@ -176,7 +176,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
 
   // ---- バックアップ・復元に含まれる ----
   await page.goto(`${BASE}#/backup`); await page.waitForSelector("#exportBackupBtn");
-  const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#exportBackupBtn")]);
+  const [dl] = await Promise.all([page.waitForEvent("download"), page.uncheck("#backupEncryptToggle").then(() => page.click("#exportBackupBtn"))]);
   const zipPath = path.join(dir, "backup.zip"); await dl.saveAs(zipPath);
   const zipHasKy = await page.evaluate(async (b64) => {
     const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
