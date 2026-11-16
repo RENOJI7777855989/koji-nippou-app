@@ -9,6 +9,8 @@
    ・業者×職種の明細（2026-10-25）: 業者の行の下に、日報に保存された職種の名前ごとの明細（似た名前はまとめない。
      billingMonthly.js の vendorTradeLines）と業者合計。明細の［日報］で根拠の日付を並べ、押すとその日の日報を開いて
      該当の業者の行を目立たせる（?hl=業者の行の companyId）。保存・キャンセルするとこの画面に戻り、集計し直す（?from=vendors）。
+   ・照合・PDF／業者名の確認（2026-11-16。js/ui/vendor-reconcile-panel.js）: 請求人工と実稼働人日の照合・業者ごとのPDF、
+     表記の違う業者名の確認（利用者が確認した名前だけをまとめる）。上の2つのタブの表は従来どおり業者名ごと。
    ========================================================== */
 
 import { getSite } from "../sites.js";
@@ -20,6 +22,9 @@ import { showView, showMessage } from "./common.js";
 import { buildVendorActivity, buildVendorPeriodActivity, buildVendorPeriodDetail, buildMonthlyBilling, buildVendorMonthDetail, setBillingStatus, setBillingClose, BILLING_STATUSES, BILLING_CLOSE_STATUSES } from "../billing/billingMonthly.js";
 import { durationLabel } from "../dashboard/dailyFlow.js";
 import { openBillingDialog } from "./billing-input-dialog.js";
+import { reconcileHtml, namesHtml, handlePanelClick, handlePanelChange } from "./vendor-reconcile-panel.js";
+import { listKySubmissionsBySite } from "../ky/kySubmissions.js";
+import { listVendorQuoteBatchesBySite } from "../vendorQuote/vendorQuoteBatches.js";
 
 const siteNameEl = document.getElementById("vendorMgmtSiteName");
 const monthSelect = document.getElementById("vendorMgmtMonth");
@@ -28,7 +33,7 @@ const viewEl = document.getElementById("view-vendor-management");
 
 // period: 期間を指定した集計の開始・終了年月（利用者が選ぶまでは表示している月の1か月）。periodTouched: 利用者が期間を選んだか。
 // vendorPeriod: 期間の日別の詳細を表示しているか
-let state = { site: null, reports: [], month: "", tab: "activity", vendor: null, period: null, periodTouched: false, vendorPeriod: false, openLine: null };
+let state = { site: null, reports: [], month: "", tab: "activity", vendor: null, period: null, periodTouched: false, vendorPeriod: false, openLine: null, rc: null, ky: [], quoteBatches: [] };
 
 const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const monthLabel = (m) => { const [y, mm] = m.split("-").map(Number); return `${y}年${mm}月`; };
@@ -55,7 +60,8 @@ function renderMonthSelect() {
 
 function render() {
   viewEl.querySelectorAll("[data-vm-tab]").forEach((b) => { const on = b.dataset.vmTab === state.tab; b.classList.toggle("is-active", on); b.setAttribute("aria-selected", String(on)); });
-  bodyEl.innerHTML = state.vendor ? (state.vendorPeriod ? periodDetailHtml() : detailHtml()) : state.tab === "activity" ? activityHtml() + periodHtml() : billingHtml();
+  bodyEl.innerHTML = state.tab === "reconcile" ? reconcileHtml(state) : state.tab === "names" ? namesHtml(state)
+    : state.vendor ? (state.vendorPeriod ? periodDetailHtml() : detailHtml()) : state.tab === "activity" ? activityHtml() + periodHtml() : billingHtml();
 }
 
 /**
@@ -175,9 +181,17 @@ function detailHtml() {
     <p class="empty-message">${billingTab ? "「稼働」は実際に働いた人数（通常作業の日）、「請求」は請求人工欄に入力した値です（別のものです）。" : "通常作業の日報で稼働人数が1人以上の日を表示しています。"}日付を押すと、その日の日報を開きます。</p>`;
 }
 
+/** 業者名の確認で使う、日報以外の業者名（KY・業者見積）。読めなくても画面は出す */
+async function loadNameSources(siteId) {
+  const [ky, quoteBatches] = await Promise.all([listKySubmissionsBySite(siteId).catch(() => []), listVendorQuoteBatchesBySite(siteId).catch(() => [])]);
+  state.ky = ky;
+  state.quoteBatches = quoteBatches;
+}
+
 async function reload() {
   state.site = await getSite(state.site.id);
   state.reports = (await listReportsBySite(state.site.id)).filter((r) => !r.isDeleted);
+  await loadNameSources(state.site.id);
   render();
 }
 
@@ -186,7 +200,8 @@ export async function initVendorManagementView(params) {
   if (!site) { showMessage("現場が見つかりませんでした。", true); navigate("/sites"); return; }
   if (!canAccessSite(site)) { showMessage("この現場を閲覧する権限がありません。", true); navigate("/sites"); return; }
   const sameSite = state.site?.id === site.id;
-  state = { site, reports: (await listReportsBySite(site.id)).filter((r) => !r.isDeleted), month: sameSite && state.month ? state.month : todayIso().slice(0, 7), tab: sameSite ? state.tab : "activity", vendor: sameSite ? state.vendor : null, period: sameSite ? state.period : null, periodTouched: sameSite ? state.periodTouched : false, vendorPeriod: sameSite ? state.vendorPeriod : false, openLine: sameSite ? state.openLine : null };
+  state = { site, reports: (await listReportsBySite(site.id)).filter((r) => !r.isDeleted), month: sameSite && state.month ? state.month : todayIso().slice(0, 7), tab: sameSite ? state.tab : "activity", vendor: sameSite ? state.vendor : null, period: sameSite ? state.period : null, periodTouched: sameSite ? state.periodTouched : false, vendorPeriod: sameSite ? state.vendorPeriod : false, openLine: sameSite ? state.openLine : null, rc: sameSite ? state.rc : null, ky: [], quoteBatches: [] };
+  await loadNameSources(site.id);
   siteNameEl.textContent = `（${site.name}）`;
   document.getElementById("vendorMgmtBillingInputBtn").hidden = !hasPermission("editReports");
   renderMonthSelect();
@@ -205,6 +220,7 @@ document.getElementById("vendorMgmtBillingInputBtn")?.addEventListener("click", 
 // 月・タブを切り替えるたびに、現場（請求状況）と日報を読み直してから表示する
 monthSelect?.addEventListener("change", async () => { state.month = monthSelect.value; await reload(); });
 viewEl?.addEventListener("click", async (e) => {
+  if ((state.tab === "reconcile" || state.tab === "names") && !e.target.closest("[data-vm-tab], .vm-month-nav") && await handlePanelClick(e, state, { render, reload })) return;
   const nav = e.target.closest(".vm-month-nav");
   if (nav) { state.month = shiftMonth(state.month, Number(nav.dataset.shift)); renderMonthSelect(); await reload(); return; }
   const tab = e.target.closest("[data-vm-tab]");
@@ -223,6 +239,7 @@ viewEl?.addEventListener("click", async (e) => {
   if (rep) navigate(`/sites/${state.site.id}/report/${rep.dataset.reportId}`);
 });
 viewEl?.addEventListener("change", async (e) => {
+  if ((state.tab === "reconcile" || state.tab === "names") && await handlePanelChange(e, state, { render, reload })) return;
   // 期間を指定した集計の開始・終了年月
   const pf = e.target.closest(".vm-period-from, .vm-period-to");
   if (pf) { state.period = { ...(state.period || {}), [pf.classList.contains("vm-period-from") ? "from" : "to"]: pf.value }; state.periodTouched = true; await reload(); return; }

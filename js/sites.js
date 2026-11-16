@@ -109,6 +109,13 @@ export async function copySite(sourceSiteId, { newName, copyReports = false } = 
     const patched = await applyPatch(newSite.id, { buildings: (source.buildings || []).map((x) => ({ ...x })), trades: (source.trades || []).map((x) => ({ ...x })) });
     Object.assign(newSite, { buildings: patched.buildings, trades: patched.trades });
   }
+  // 棟の使用設定・業者名の確認結果（2026-11-16）も写す（同じ業者を続けて使う現場で確認をやり直さない）。日報の値ではない
+  if (source.useBuildings !== undefined || source.vendorDirectory) {
+    const patch = {};
+    if (source.useBuildings !== undefined) patch.useBuildings = !!source.useBuildings;
+    if (source.vendorDirectory) patch.vendorDirectory = JSON.parse(JSON.stringify(source.vendorDirectory));
+    Object.assign(newSite, await applyPatch(newSite.id, patch));
+  }
 
   if (copyReports) {
     const reports = await listReportsBySite(sourceSiteId);

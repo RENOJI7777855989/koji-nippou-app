@@ -143,6 +143,8 @@
         <p id="siteMastersNote" class="empty-message" hidden></p>
         <div class="site-master" data-kind="buildings">
           <h4>棟</h4>
+          <label class="use-buildings"><input type="checkbox" class="use-buildings-cb"> この現場で棟を使用する</label>
+          <p class="use-buildings-note empty-message"></p>
           <ul class="master-list"></ul>
           <div class="toolbar master-add-row">
             <input type="text" class="master-new" placeholder="例）A棟・共用部・全棟" aria-label="追加する棟の名前">
@@ -715,6 +717,8 @@
       <div class="dash-tabs vm-tabs" role="tablist">
         <button type="button" role="tab" class="dash-tab" data-vm-tab="activity">業者別稼働</button>
         <button type="button" role="tab" class="dash-tab" data-vm-tab="billing">請求人工管理</button>
+        <button type="button" role="tab" class="dash-tab" data-vm-tab="reconcile">照合・PDF</button>
+        <button type="button" role="tab" class="dash-tab" data-vm-tab="names">業者名の確認</button>
       </div>
       <button type="button" id="vendorMgmtBillingInputBtn" class="vm-billing-input-btn">💴 請求人工入力</button>
       <div id="vendorMgmtBody"></div>

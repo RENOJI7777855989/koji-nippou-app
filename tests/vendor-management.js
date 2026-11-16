@@ -58,7 +58,7 @@ const check = (name, pass, detail = "") => { results.push(pass); console.log(`[$
   check("23 現場ダッシュボード（現場詳細）には請求人工・請求状況を出さない", !dashText.includes("請求"));
   await page.click("#vendorMgmtBtn"); await page.waitForSelector("#view-vendor-management:not([hidden])");
   const head = await page.evaluate(() => ({ month: document.getElementById("vendorMgmtMonth").value, tabs: [...document.querySelectorAll("[data-vm-tab]")].map((b) => b.textContent.trim()), active: document.querySelector("[data-vm-tab].is-active")?.dataset.vmTab }));
-  check("1 業者管理: 対象年月（今月）と［業者別稼働］［請求人工管理］、最初は業者別稼働", head.month === today.slice(0, 7) && head.tabs.join() === "業者別稼働,請求人工管理" && head.active === "activity", JSON.stringify(head));
+  check("1 業者管理: 対象年月（今月）と［業者別稼働］［請求人工管理］［照合・PDF］［業者名の確認］、最初は業者別稼働", head.month === today.slice(0, 7) && head.tabs.join() === "業者別稼働,請求人工管理,照合・PDF,業者名の確認" && head.active === "activity", JSON.stringify(head));
 
   const selectMonth = async (m) => { await page.selectOption("#vendorMgmtMonth", m); await page.waitForTimeout(200); };
   const tab = async (t) => { await page.click(`[data-vm-tab="${t}"]`); await page.waitForTimeout(200); };

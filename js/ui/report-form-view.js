@@ -13,6 +13,7 @@ import { confirmOutputWarnings } from "./output-warnings.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
 import { getSite } from "../sites.js";
 import { listMaster, addMasterItem, matchTrade } from "../siteMasters.js";
+import { siteUsesBuildings } from "../billing/vendorNames.js";
 import { addPhoto, listPhotosByReport, deletePhoto } from "../photos.js";
 import { saveSignature, listSignaturesByReport, deleteSignature } from "../signatures.js";
 import { createId, escapeHtml } from "../utils.js";
@@ -210,6 +211,9 @@ function renderBuildingSelect(row) {
   if (rowSite && !rowSite.completedAt) opts.push(`<option value="__add__">＋ 棟を追加…</option>`);
   sel.innerHTML = opts.join("");
   sel.value = selectedId;
+  // 棟を使わない現場（2026-11-16。現場情報の編集の「この現場で棟を使用する」）では欄を出さない。保存済みの棟がある行は出す（消さない）
+  const field = sel.closest("label");
+  if (field) field.hidden = !!rowSite && !siteUsesBuildings(rowSite) && !selectedId;
 }
 
 function refreshBuildingSelects() {

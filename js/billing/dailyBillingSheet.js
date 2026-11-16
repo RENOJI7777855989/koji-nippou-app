@@ -35,14 +35,14 @@ export function billingRawOf(c) {
   return "";
 }
 
-function readCount(v) {
+export function readCount(v) {
   if (isBlank(v)) return { state: "blank", value: null };
   const s = String(v).trim().replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0));
   if (!/^\d+$/.test(s)) return { state: "invalid", value: null, raw: String(v) };
   return { state: "ok", value: Number(s) };
 }
 
-function readBilling(c) {
+export function readBilling(c) {
   const raw = billingRawOf(c);
   if (isBlank(raw)) return { state: "blank", value: null, cents: 0 };
   const b = parseBillingInput(raw);
@@ -50,7 +50,7 @@ function readBilling(c) {
   return { state: "ok", value: b.value, cents: Math.round(Number(b.value) * 100) };
 }
 
-const centsText = (cents) => {
+export const centsText = (cents) => {
   const s = (cents / 100).toFixed(2);
   return s.replace(/\.?0+$/, "") || "0";
 };

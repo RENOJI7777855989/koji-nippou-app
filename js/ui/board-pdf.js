@@ -11,10 +11,13 @@
    2026-11-15: 同じ方式を「業者別稼働・請求人工一覧」（A4横・複数ページ。billing/dailyBillingSheet.js）にも使う。
      印刷用HTMLの紙面（.sheet）を1つずつ画像にして1ページずつ並べる（renderSheetsHtmlToJpegs・buildSheetsPdfFile）。
      現場掲示は従来どおり1つ目の紙面だけを A3横・余白8mm で作る（処理も結果も同じ）。
+   2026-11-16: 業者ごとの請求人工PDF・業者別稼働PDFを複数の業者分まとめて作る（items）。［共有］は全部のPDFを
+     共有メニューへ渡し、［保存］は1件ならそのPDF、2件以上ならPDFをまとめたZIPを保存する。1件の動きは従来どおり。
    ========================================================== */
 
 import { buildJpegPdf, buildJpegPdfPages } from "../report-output/imagePdf.js";
 import { printFileName } from "../printSupport.js";
+import { buildZip } from "../zipUtil.js";
 
 const PDF_TYPE = "application/pdf";
 const RENDER_SCALES = [2.5, 2, 1.5]; // キャンバスを作れない端末では小さくしてやり直す
@@ -113,6 +116,15 @@ export async function buildBoardPdfFile(html, { siteName, date } = {}) {
   return { file: new File([pdf], name, { type: PDF_TYPE }), jpeg };
 }
 
+/** 複数のファイルを共有メニューへ渡せる環境か */
+export function canShareFiles(files) {
+  try {
+    return typeof navigator !== "undefined" && typeof navigator.share === "function" && typeof navigator.canShare === "function" && navigator.canShare({ files });
+  } catch {
+    return false;
+  }
+}
+
 /** PDFファイルを共有メニューへ渡せる環境か */
 export function canSharePdf(file) {
   try {
@@ -137,18 +149,23 @@ const BOARD_HEADING = headingEl?.textContent || "";
 const BOARD_SOURCE = sourceEl?.textContent || "";
 let currentPrint = null;
 let currentFile = null;
+let currentFiles = null; // まとめて作ったとき（2件以上）のPDF。ZIP の名前は currentZipName
+let currentZipName = "";
+let currentZipBlob = null; // 保存はボタンを押した直後に行う（間に待ちを挟まない）ため、作成のときにZIPを作っておく
 let previewUrl = null;
 
-function setReady(file) {
+function setReady(file, files = null) {
   currentFile = file;
-  const sharable = !!file && canSharePdf(file);
+  currentFiles = files && files.length > 1 ? files : null;
+  const sharable = !!file && (currentFiles ? canShareFiles(currentFiles) : canSharePdf(file));
   shareBtn.hidden = !sharable;
   shareBtn.disabled = !file;
   saveBtn.disabled = !file;
   saveBtn.classList.toggle("secondary-btn", sharable);
+  saveBtn.textContent = currentFiles ? "ZIPで保存" : "PDFを保存";
   noteEl.textContent = !file ? "" : sharable
     ? "［共有］でiPadの共有メニューが開きます。LINE・ファイルに保存・AirDrop・メールなどを選べます。"
-    : "この端末・ブラウザはファイルの共有に対応していないため、［PDFを保存］で保存してから送ってください。";
+    : `この端末・ブラウザはファイルの共有に対応していないため、［${currentFiles ? "ZIPで保存" : "PDFを保存"}］で保存してから送ってください。`;
 }
 
 /**
@@ -156,7 +173,7 @@ function setReady(file) {
  *   ほかの帳票（2026-11-15）: fileName・paper（{label, widthMm, heightMm, marginMm}）を渡すと、紙面すべてを
  *   1ページずつのPDFにする。heading・source でダイアログの見出し・説明を、onPrint で［印刷］ボタンを出す。
  */
-export async function openBoardPdfDialog({ html, siteName, date, fileName, paper, heading, source, onPrint }) {
+export async function openBoardPdfDialog({ html, siteName, date, fileName, paper, heading, source, onPrint, items, zipName }) {
   if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
   if (headingEl) headingEl.textContent = heading || BOARD_HEADING;
   if (sourceEl) sourceEl.textContent = source || BOARD_SOURCE;
@@ -168,6 +185,7 @@ export async function openBoardPdfDialog({ html, siteName, date, fileName, paper
   shareBtn.hidden = false;
   statusEl.textContent = "PDFを作成しています…（数秒かかります）";
   if (!dialog.open) dialog.showModal();
+  if (items && items.length) { await buildItems(items, paper, zipName); return; }
   try {
     const made = paper && fileName
       ? await buildSheetsPdfFile(html, { fileName, paper })
@@ -186,8 +204,54 @@ export async function openBoardPdfDialog({ html, siteName, date, fileName, paper
   }
 }
 
+/** 複数のPDFを1件ずつ作る（items: [{html, fileName}]。紙面すべてを1ページずつ） */
+async function buildItems(items, paper, zipName) {
+  const files = [];
+  let firstJpeg = null;
+  let pages = 0;
+  try {
+    for (let i = 0; i < items.length; i++) {
+      statusEl.textContent = `PDFを作成しています…（${i + 1}／${items.length}件: ${items[i].fileName}）`;
+      const made = await buildSheetsPdfFile(items[i].html, { fileName: items[i].fileName, paper });
+      files.push(made.file);
+      pages += made.pages;
+      if (!firstJpeg) firstJpeg = made.jpeg;
+    }
+  } catch (err) {
+    statusEl.textContent = `PDFを作成できませんでした（${files.length}／${items.length}件まで作成）: ${err.message}`;
+    setReady(null);
+    shareBtn.hidden = true;
+    return;
+  }
+  currentZipName = zipName || "PDF.zip";
+  currentZipBlob = null;
+  if (files.length > 1) {
+    const mods = new Map();
+    for (const f of files) mods.set(f.name, new Uint8Array(await f.arrayBuffer()));
+    currentZipBlob = buildZip({ buffer: new Uint8Array(0), entries: new Map() }, mods, "application/zip");
+  }
+  previewUrl = URL.createObjectURL(new Blob([firstJpeg], { type: "image/jpeg" }));
+  previewEl.src = previewUrl;
+  previewEl.hidden = false;
+  const size = files.reduce((s, f) => s + f.size, 0);
+  statusEl.textContent = files.length > 1
+    ? `作成しました: ${files.length}件（${paper?.label || ""}・計${pages}ページ、${Math.max(1, Math.round(size / 1024))}KB）: ${files.map((f) => f.name).join("、")}。見本は1件目の1ページ目です`
+    : `作成しました: ${files[0].name}（${paper?.label || ""}・${pages}ページ、${Math.max(1, Math.round(size / 1024))}KB）${pages > 1 ? "。見本は1ページ目です" : ""}`;
+  setReady(files[0], files);
+}
+
 shareBtn?.addEventListener("click", async () => {
   if (!currentFile) return;
+  if (currentFiles) {
+    try {
+      await navigator.share({ files: currentFiles, title: currentZipName.replace(/\.zip$/, "") });
+      statusEl.textContent = `共有しました: ${currentFiles.length}件`;
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+      statusEl.textContent = `共有できませんでした（${err?.name || "エラー"}）。［ZIPで保存］で保存してから送ってください。`;
+    }
+    return;
+  }
   try {
     // ボタンを押した直後に呼ぶ（間に待ちを挟むと共有が許可されない）
     await navigator.share({ files: [currentFile], title: currentFile.name.replace(/\.pdf$/, "") });
@@ -200,15 +264,17 @@ shareBtn?.addEventListener("click", async () => {
 
 saveBtn?.addEventListener("click", () => {
   if (!currentFile) return;
-  const url = URL.createObjectURL(currentFile);
+  const blob = currentFiles && currentZipBlob ? currentZipBlob : currentFile;
+  const name = currentFiles && currentZipBlob ? currentZipName : currentFile.name;
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = currentFile.name;
+  a.download = name;
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
-  statusEl.textContent = `保存しました: ${currentFile.name}`;
+  statusEl.textContent = `保存しました: ${name}`;
 });
 
 document.getElementById("boardPdfCloseBtn")?.addEventListener("click", () => dialog.close());

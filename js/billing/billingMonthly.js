@@ -222,6 +222,8 @@ export async function setBillingClose(siteId, month, closeStatus) {
    ・基準日（今日）より後の日報は入れない。月をまたいで足さない
    ---------------------------------------------------------- */
 const actualOf = (c) => { const n = Number(String(c?.actualWorkerCount ?? "").trim()); return Number.isFinite(n) && n > 0 ? n : 0; };
+/** 業者の行の稼働人数（業者別稼働と同じ読み方。数字で0より大きい実績人数だけ。照合・業者ごとのPDFでも使う） */
+export const actualWorkersOf = actualOf;
 const minutesOf = (c) => { const p = parseWorkHours(c?.workHours); return p && p.end ? workMinutes(p.start, p.end) : null; };
 const inMonth = (r, month, cutoff) => !r.isDeleted && r.date && r.date.slice(0, 7) === month && r.date <= cutoff;
 const cutoffOf = (month, today) => { const end = monthEnd(month); return today && today < end ? today : end; };

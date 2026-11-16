@@ -2216,3 +2216,43 @@ body.has-restore-banner .report-quick-bar { top: 64px; }
 .chorei-row[data-billing-state="blank"] .chorei-billing { background: #fffaf0; border-color: #f0b35a; }
 .chorei-row[data-billing-state="done"] .chorei-billing { background: #faf5ff; border-color: #b794f4; }
 .chorei-total { font-size: 17px; color: #1a365d; }
+
+/* 棟を使わない現場（2026-11-16）: 日報の作業行の棟の欄を出さない */
+.company-row label[hidden] { display: none !important; }
+.use-buildings { display: flex; align-items: center; gap: 8px; min-height: 44px; font-weight: bold; }
+.use-buildings input { width: 22px; height: 22px; }
+
+/* 業者管理: 照合・PDF／業者名の確認（js/ui/vendor-reconcile-panel.js） */
+.vm-tabs { flex-wrap: wrap; }
+.vm-rc-views { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.vm-rc-views button { min-height: 44px; margin: 0; }
+.vm-rc-bytrade { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+.vm-rc-bytrade input { width: 22px; height: 22px; }
+.vm-rc-counts { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.vm-rc-count { padding: 2px 8px; border-radius: 10px; background: #edf2f7; font-size: 14px; }
+.vm-rc-count.st-match { background: #e6f4ea; color: #276749; }
+.vm-rc-count.st-diff, .vm-rc-count.st-missing, .vm-rc-count.st-nameReview, .vm-rc-count.st-noBuilding, .vm-rc-count.st-unbilled { background: #fdecea; color: #b42318; }
+.vm-rc-table tr.st-match .vm-rc-state { color: #276749; font-weight: bold; }
+.vm-rc-table tr.st-diff .vm-rc-state, .vm-rc-table tr.st-missing .vm-rc-state, .vm-rc-table tr.st-nameReview .vm-rc-state, .vm-rc-table tr.st-noBuilding .vm-rc-state, .vm-rc-table tr.st-unbilled .vm-rc-state { color: #b42318; font-weight: bold; }
+.vm-rc-table .vm-rc-row { font-weight: bold; min-height: 40px; text-align: left; }
+.vm-rc-detail > td { background: #f7fafc; }
+.vm-rc-days tr.vm-rc-gap td { background: #fff5f5; }
+.vm-rc-detail-title { margin: 4px 0; font-weight: bold; }
+.vm-rc-pending button { margin-left: 8px; min-height: 40px; }
+.vm-pdf { margin-top: 18px; padding-top: 12px; border-top: 2px solid #e2e8f0; }
+.vm-pdf h3 { margin: 0 0 8px; }
+.vm-pdf-vendor { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.vm-pdf-vendor select { min-height: 44px; font-size: 16px; flex: 1 1 14em; max-width: 100%; }
+.vm-pdf-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.vm-pdf-actions button { min-height: 52px; margin: 0; flex: 1 1 15em; font-weight: bold; }
+.vm-name-pair, .vm-name-group { border: 1px solid #d9dee5; border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+.vm-name-level { margin: 0 0 4px; font-weight: bold; }
+.vm-name-level.lv-high { color: #b42318; }
+.vm-name-level.lv-medium { color: #b45309; }
+.vm-name-list { margin: 4px 0; padding-left: 18px; }
+.vm-name-list li { margin: 4px 0; }
+.vm-name-list button { min-height: 40px; margin: 4px 0 0 6px; }
+.vm-name-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.vm-name-actions select, .vm-name-group select { min-height: 44px; }
+.vm-name-actions button, .vm-merge-picked { min-height: 48px; margin: 0; }
+.vm-names-table input { width: 22px; height: 22px; }

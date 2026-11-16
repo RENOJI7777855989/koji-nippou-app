@@ -8,6 +8,7 @@ import { getSite } from "../sites.js";
 import { listReportsBySite } from "../reports.js";
 import { listMaster, addMasterItem, renameMasterItem, setMasterItemActive, moveMasterItem, tradeCandidatesFromReports, MASTER_COMPLETED_MESSAGE } from "../siteMasters.js";
 import { escapeHtml } from "../utils.js";
+import { siteUsesBuildings, setSiteUseBuildings } from "../billing/vendorNames.js";
 import { showMessage } from "./common.js";
 
 const section = document.getElementById("siteMastersSection");
@@ -52,6 +53,15 @@ function draw() {
       : `<li class="empty-message">まだ登録されていません。</li>`;
     box.querySelector(".master-add-row").hidden = locked;
   }
+  // 棟の使用設定（2026-11-16）。未設定の現場は、棟の一覧に棟があれば「使う」
+  const use = siteUsesBuildings(site);
+  const cb = section.querySelector(".use-buildings-cb");
+  cb.checked = use;
+  cb.disabled = locked;
+  section.querySelector(".use-buildings-note").textContent = use
+    ? "日報の作業行で棟を選びます。棟を選んでいない作業行は、照合・業者ごとのPDFで「棟未設定」になります。"
+    : "棟の無い現場（道路・河川・外構など）として扱います。日報の作業行に棟の欄を出さず、照合・業者ごとのPDFも棟で分けません（保存済みの日報の棟は消しません）。";
+  section.querySelector('.site-master[data-kind="buildings"] .master-list').hidden = !use && !listMaster(site, "buildings", { includeInactive: true }).length;
   const cand = section.querySelector(".trade-candidates");
   cand.hidden = locked || candidates.length === 0;
   cand.querySelector(".cand-list").innerHTML = candidates.map((c, i) => `<label class="cand-item"><input type="checkbox" value="${i}"> ${escapeHtml(c.name)}${c.variants.length > 1 ? `<span class="dash-sub">（同じ工種として扱う書き方: ${c.variants.map(escapeHtml).join("・")}）</span>` : ""} <span class="dash-sub">日報の${c.rows}行</span></label>`).join("");
@@ -68,6 +78,12 @@ async function run(fn, okText) {
   candidates = tradeCandidatesFromReports(site, await listReportsBySite(site.id));
   draw();
 }
+
+section.addEventListener("change", async (e) => {
+  const cb = e.target.closest(".use-buildings-cb");
+  if (!cb || !site) return;
+  await run(() => setSiteUseBuildings(site.id, cb.checked).then((s) => ({ site: s })), cb.checked ? "この現場で棟を使用します。" : "この現場は棟を使用しない設定にしました（保存済みの日報の棟は消していません）。");
+});
 
 section.addEventListener("click", async (e) => {
   if (!site) return;
