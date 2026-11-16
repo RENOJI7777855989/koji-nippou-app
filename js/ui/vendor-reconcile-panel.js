@@ -13,7 +13,7 @@ import { showMessage } from "./common.js";
 import { hasPermission } from "../auth.js";
 import { buildReconciliation, RECONCILE_VIEWS, RECONCILE_STATES, signedText, NO_BUILDING } from "../billing/billingReconcile.js";
 import { collectVendorNames, vendorNameCandidates, pendingNameSet, mergeVendorNames, unmergeVendorName, setVendorDisplayName, markVendorsDistinct, clearVendorsDistinct, siteUsesBuildings } from "../billing/vendorNames.js";
-import { monthVendors, buildVendorBillingSheet, buildVendorActivitySheet, buildReconcileSheetHtml, reconcileFileName, VENDOR_SHEET_PAPER, BILLING_SHEET_TITLE, ACTIVITY_SHEET_TITLE, RECONCILE_SHEET_TITLE, monthText } from "../billing/vendorMonthSheets.js";
+import { monthVendors, buildVendorBillingSheet, buildVendorActivitySheet, buildReconcileSheetHtml, reconcileFileName, VENDOR_SHEET_PAPER, BILLING_SHEET_PAPER, BILLING_SHEET_TITLE, ACTIVITY_SHEET_TITLE, RECONCILE_SHEET_TITLE, monthText } from "../billing/vendorMonthSheets.js";
 import { openBoardPdfDialog } from "./board-pdf.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
 
@@ -87,7 +87,7 @@ function pdfSectionHtml(state) {
       <button type="button" class="vm-pdf-btn" data-pdf="activity">📄 業者別稼働PDF（業者別）</button>
       <button type="button" class="secondary-btn vm-pdf-btn" data-pdf="reconcile">📄 照合表をPDF出力（表示中の単位）</button>
     </div>
-    <p class="empty-message">請求人工PDFと業者別稼働PDFは別々のファイルです（請求人工PDFに稼働人数、業者別稼働PDFに請求人工は載せません）。全業者のときは業者ごとに1ファイルずつ作り、［共有］でまとめて渡すか、［ZIPで保存］で保存します。A4横です。</p>
+    <p class="empty-message">請求人工PDFと業者別稼働PDFは別々のファイルです（請求人工PDFに稼働人数、業者別稼働PDFに請求人工は載せません）。全業者のときは業者ごとに1ファイルずつ作り、［共有］でまとめて渡すか、［ZIPで保存］で保存します。請求人工PDFは A4 縦（行数が多い月は2ページ以上）、業者別稼働PDF・照合表は A4 横です。</p>
   </section>`;
 }
 
@@ -110,15 +110,16 @@ async function makePdf(kind, state) {
   const items = targets.map((v) => { const s = build({ ...base, vendorId: v.vendorId }); return { html: s.html, fileName: s.fileName }; });
   const title = kind === "billing" ? BILLING_SHEET_TITLE : ACTIVITY_SHEET_TITLE;
   const kindName = kind === "billing" ? "請求人工" : "業者別稼働";
+  const paper = kind === "billing" ? BILLING_SHEET_PAPER : VENDOR_SHEET_PAPER;
   await openBoardPdfDialog({
     items,
     zipName: `${kindName}_${monthText(state.month)}_${items.length}社.zip`,
-    paper: VENDOR_SHEET_PAPER,
-    heading: `${title}のPDF（A4横・${items.length}業者）`,
+    paper,
+    heading: `${title}のPDF（${paper.label}・${items.length}業者）`,
     source: kind === "billing"
       ? "保存済みの日報の請求人工欄の値だけです（稼働人数は載せません。未入力は「未入力」と表示し、合計に含めません）。PDFの文字は画像のため、選択・検索はできません。"
       : "保存済みの日報の稼働人数（実績人数）です（請求人工は載せません。1人＝1人日）。PDFの文字は画像のため、選択・検索はできません。",
-    onPrint: items.length === 1 ? () => openReportPrintDialog({ html: items[0].html, mode: "print", title: `${title}（${monthText(state.month)}）A4横`, note: "03-2の日報とは別の帳票で、日報の印刷記録には残りません。" }) : null
+    onPrint: items.length === 1 ? () => openReportPrintDialog({ html: items[0].html, mode: "print", title: `${title}（${monthText(state.month)}）${paper.label}`, note: "03-2の日報とは別の帳票で、日報の印刷記録には残りません。" }) : null
   });
 }
 

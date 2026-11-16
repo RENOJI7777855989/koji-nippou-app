@@ -168,7 +168,7 @@ const sheetText = (page, html) => page.evaluate(async (h) => {
   await page.click("#boardPdfShareBtn"); await page.waitForFunction(() => window.__shared.length === 1);
   const sh1 = await page.evaluate(() => window.__shared[0].map((f) => ({ name: f.name, type: f.type, b64: f.b64 })));
   const p1 = await pdfInfo(page, sh1[0].b64);
-  check("20. 請求人工PDF（1業者）: ファイル名「株式会社イズミ足場_2026年10月_請求人工.pdf」・A4横（842×595）", sh1.length === 1 && sh1[0].name === "株式会社イズミ足場_2026年10月_請求人工.pdf" && sh1[0].type === "application/pdf" && p1.every(([w, h]) => w === 842 && h === 595), `${st1} ${JSON.stringify(p1)}`);
+  check("20. 請求人工PDF（1業者）: ファイル名「株式会社イズミ足場_2026年10月_請求人工.pdf」・A4縦（595×842）", sh1.length === 1 && sh1[0].name === "株式会社イズミ足場_2026年10月_請求人工.pdf" && sh1[0].type === "application/pdf" && p1.every(([w, h]) => w === 595 && h === 842) && /A4縦/.test(st1), `${st1} ${JSON.stringify(p1)}`);
   fs.writeFileSync(path.join(OUT, sh1[0].name), Buffer.from(sh1[0].b64, "base64"));
   await page.click("#boardPdfCloseBtn");
   const sheets = await page.evaluate(async ([s, m]) => {
@@ -191,7 +191,7 @@ const sheetText = (page, html) => page.evaluate(async (h) => {
   await page.click("#boardPdfShareBtn"); await page.waitForFunction(() => window.__shared.length === 2);
   const sh2 = await page.evaluate(() => window.__shared[1].map((f) => ({ name: f.name, type: f.type, b64: f.b64 })));
   const allA4 = (await Promise.all(sh2.map((f) => pdfInfo(page, f.b64)))).every((ps) => ps.length >= 1 && ps.every(([w, h]) => w === 842 && h === 595));
-  check("24. 業者別稼働PDF（全業者）: 業者ごとに1ファイル（4社: アオバ・イズミ・ウエノ・キタノ）を共有にまとめて渡す・すべて A4横", sh2.length === 4 && sh2.every((f) => f.name.endsWith("_2026年10月_業者別稼働.pdf")) && allA4 && /4件/.test(st2), `${st2} ${sh2.map((f) => f.name).join(",")}`);
+  check("24. 業者別稼働PDF（全業者）: 業者ごとに1ファイル（4社: アオバ・イズミ・ウエノ・キタノ）を共有にまとめて渡す・すべて A4横（業者別稼働は横のまま）", sh2.length === 4 && sh2.every((f) => f.name.endsWith("_2026年10月_業者別稼働.pdf")) && allA4 && /4件/.test(st2), `${st2} ${sh2.map((f) => f.name).join(",")}`);
   const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#boardPdfSaveBtn")]);
   const zp = path.join(OUT, dl.suggestedFilename()); await dl.saveAs(zp);
   const zipEntries = await page.evaluate(async (b64) => { const { loadZip, readZipEntryBytes } = await import("/js/zipUtil.js"); const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const z = loadZip(u.buffer); const out = {}; for (const name of z.entries.keys()) { const b = await readZipEntryBytes(z, name); let t = ""; for (let i = 0; i < b.length; i++) t += String.fromCharCode(b[i]); out[name] = btoa(t); } return out; }, fs.readFileSync(zp).toString("base64"));
@@ -231,7 +231,7 @@ const sheetText = (page, html) => page.evaluate(async (h) => {
   const bs = await sheetText(page, big.b), as = await sheetText(page, big.a);
   const pageOk = (ss) => ss.length > 1 && ss.every((s, i) => s.text.includes("複数ページの確認現場") && s.thead >= 1 && s.text.includes(`${i + 1}／${ss.length}ページ`) && s.outside === 0 && s.over.length === 0);
   const lastFrag = big.pages[big.pages.length - 1].find((f) => f[1]);
-  check("28. 複数ページ: どのページにも工事名・帳票名・表の見出し・n／総ページ数、紙面からはみ出さない（請求人工 " + bs.length + "ページ・業者別稼働 " + as.length + "ページ）", pageOk(bs) && pageOk(as) && bs.every((s) => s.text.includes("請求人工 月間明細")), JSON.stringify(bs.map((s) => s.over).concat(as.map((s) => s.over))));
+  check("28. 複数ページ: どのページにも工事名・帳票名・表の見出し・n／総ページ数、紙面からはみ出さない（請求人工 " + bs.length + "ページ（A4縦・56行）・業者別稼働 " + as.length + "ページ（A4横））", pageOk(bs) && pageOk(as) && bs.every((s) => s.text.includes("請求人工 月間明細")) && bs.length >= 2 && big.b.includes("size: A4 portrait") && big.a.includes("size: A4 landscape"), JSON.stringify(bs.map((s) => s.over).concat(as.map((s) => s.over))));
   check("29. 合計の行は、その表の最後の行と同じページ（合計だけが次のページに離れない）・請求人工の合計 82（2×25＋1.25×28）・未入力3件", lastFrag && lastFrag[0] >= 1 && bs.some((s) => s.total >= 1 && s.rowsBeforeTotal >= 1) && big.bTotal === "85" && big.bBlank === 3, JSON.stringify({ pages: big.pages, t: big.bTotal, b: big.bBlank }));
 
   // ===== 確認結果の解除・別の業者 =====

@@ -1,6 +1,6 @@
 /* ==========================================================
    業者ごとの月の帳票（A4横。2026-11-16。DOM・DB に触れない純粋関数 → 印刷用HTML）
-   ・請求人工PDF（業者ごと・月）、業者別稼働PDF（業者ごと・月）、請求人工と実稼働の照合表PDF の3つ。
+   ・請求人工PDF（業者ごと・月。A4 縦）、業者別稼働PDF（業者ごと・月。A4 横）、請求人工と実稼働の照合表PDF（A4 横）の3つ。
      請求人工PDF には稼働人数を、業者別稼働PDF には請求人工を載せない（別々の帳票）。
    ・元のデータは billingReconcile.js の monthLineItems / buildReconciliation（日報の業者の行を読むだけ。何も保存しない）。
    ・PDF は既存の方式（board-pdf.js の buildSheetsPdfFile。紙面 .sheet を1ページずつ画像にする）。印刷も同じHTML。
@@ -14,7 +14,9 @@ import { centsText } from "./dailyBillingSheet.js";
 import { monthLineItems, signedText, NO_BUILDING } from "./billingReconcile.js";
 import { siteUsesBuildings } from "./vendorNames.js";
 
-export const VENDOR_SHEET_PAPER = { label: "A4横", widthMm: 297, heightMm: 210, marginMm: 10 };
+/** 用紙。capacity は1ページに入る高さ（業者の行の高さを1とした単位）。請求人工PDFは A4 縦（2026-11-17。利用者の指定。行数が多い月は2ページ以上） */
+export const VENDOR_SHEET_PAPER = { label: "A4横", widthMm: 297, heightMm: 210, marginMm: 10, capacity: 19 };
+export const BILLING_SHEET_PAPER = { label: "A4縦", widthMm: 210, heightMm: 297, marginMm: 10, capacity: 30 };
 export const BILLING_SHEET_TITLE = "請求人工 月間明細";
 export const ACTIVITY_SHEET_TITLE = "業者別稼働 月間明細";
 export const RECONCILE_SHEET_TITLE = "請求人工・実稼働 照合表";
@@ -82,17 +84,21 @@ function tableHtml(frag) {
  * 帳票の印刷用HTML（A4横。1ページ＝1つの .sheet）
  * @param {{title: string, info: {label: string, html: string, w?: number}[], blocks: object[], notes: string[], generatedAt: Date, docTitle: string}} p
  */
-export function renderVendorSheetsHtml({ title, info, blocks, notes = [], generatedAt = new Date(), docTitle }) {
-  const P = VENDOR_SHEET_PAPER;
-  const pages = paginateBlocks(blocks, notes.length);
+export function renderVendorSheetsHtml({ title, info, blocks, notes = [], generatedAt = new Date(), docTitle, paper = VENDOR_SHEET_PAPER }) {
+  const P = paper;
+  const landscape = P.widthMm > P.heightMm;
+  const pages = paginateBlocks(blocks, notes.length, P.capacity || PAGE_CAPACITY);
   const n = pages.length;
-  const infoCols = info.map((c) => `<col style="width:${c.lw || 18}mm"><col${c.w ? ` style="width:${c.w}mm"` : ""}>`).join("");
-  const infoRow = info.map((c) => `<th>${escapeHtml(c.label)}</th><td>${c.html}</td>`).join("");
+  // 見出しの欄: 横は1行、縦は2つずつの行に分ける（幅が足りないため）
+  const perRow = landscape ? info.length : 2;
+  const infoRows = []; for (let i = 0; i < info.length; i += perRow) infoRows.push(info.slice(i, i + perRow));
+  const infoCols = infoRows[0].map((c) => `<col style="width:${c.lw || 18}mm"><col${c.w && landscape ? ` style="width:${c.w}mm"` : c.pw ? ` style="width:${c.pw}mm"` : ""}>`).join("");
+  const infoRow = infoRows.map((row) => `<tr>${row.map((c) => `<th>${escapeHtml(c.label)}</th><td>${c.html}</td>`).join("")}</tr>`).join("");
   const sheets = pages.map((frags, pi) => {
     const last = pi === n - 1;
     return `<section class="sheet">
       <header class="hd"><h1>${escapeHtml(title)}</h1><div class="page">${pi + 1}／${n}ページ</div></header>
-      <table class="info"><colgroup>${infoCols}</colgroup><tr>${infoRow}</tr></table>
+      <table class="info"><colgroup>${infoCols}</colgroup>${infoRow}</table>
       ${frags.map(tableHtml).join("")}
       ${last ? (notes.length ? `<ul class="notes">${notes.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : "") : `<p class="cont">次のページへ続きます</p>`}
       <footer class="ft"><span>作成 ${escapeHtml(stampLabel(generatedAt))}（保存済みの日報から作成）</span><span>${pi + 1}／${n}</span></footer>
@@ -103,7 +109,7 @@ export function renderVendorSheetsHtml({ title, info, blocks, notes = [], genera
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(docTitle || title)}</title>
 <style>
-@page { size: A4 landscape; margin: ${P.marginMm}mm; }
+@page { size: A4 ${landscape ? "landscape" : "portrait"}; margin: ${P.marginMm}mm; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: #fff; color: #111; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", "YuGothic", Meiryo, "Noto Sans JP", sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -143,10 +149,10 @@ table { border-collapse: collapse; width: 100%; table-layout: fixed; }
 function infoCells(site, month, vendorName) {
   const cells = [
     { label: "工事名", html: escapeHtml(site?.name || "（工事名なし）") },
-    { label: "工事番号", html: (site?.constructionNumber || "").trim() ? escapeHtml(site.constructionNumber.trim()) : na("未登録"), w: 30 },
+    { label: "工事番号", html: (site?.constructionNumber || "").trim() ? escapeHtml(site.constructionNumber.trim()) : na("未登録"), w: 30, pw: 44 },
     { label: "対象年月", html: escapeHtml(monthText(month)), w: 26 }
   ];
-  if (vendorName != null) cells.push({ label: "業者名", html: escapeHtml(vendorName), w: 62, lw: 16 });
+  if (vendorName != null) cells.push({ label: "業者名", html: escapeHtml(vendorName), w: 62, lw: 16, pw: 44 });
   return cells;
 }
 const namesNote = (names, display) => (names.length > 1 || (names[0] && names[0] !== display) ? `日報上の業者名の表記: ${names.join("・")}（同じ業者として確認済みの名前をまとめています）。` : "");
@@ -193,13 +199,14 @@ export function buildVendorBillingSheet({ site, reports, month, today, vendorId,
   const blank = items.filter((it) => it.billing.state === "blank").length;
   const invalid = items.filter((it) => it.billing.state === "invalid").length;
   const cell = (it) => it.billing.state === "ok" ? `${escapeHtml(centsText(it.billing.cents))}<span class="sub"> 人工</span>` : it.billing.state === "blank" ? na("未入力") : `<span class="bad">要確認（${escapeHtml(it.billing.raw)}）</span>`;
-  const cols = [{ label: "日付", w: 26, cls: "nw" }, { label: "日の状態", w: 26, cls: "c" }, ...(useB ? [{ label: "棟", w: 34 }] : []), { label: "職種" }, { label: "請求人工", w: 40, cls: "num" }, { label: "備考", w: 62 }];
-  const rows = items.map((it) => ({ cells: [escapeHtml(md(it.date)), escapeHtml(it.work ? "通常作業" : it.dayStatusLabel), ...(useB ? [txt(it.buildingLabel, 10)] : []), txt(it.trade, 22), cell(it), it.billing.state === "blank" ? "請求人工が未入力です（合計に含めていません）" : it.billing.state === "invalid" ? "値を確認してください（合計に含めていません）" : ""] }));
+  // A4 縦（幅 190mm）に合わせた列幅。備考は短い文言にして2行まで
+  const cols = [{ label: "日付", w: 25, cls: "nw" }, { label: "日の状態", w: 22, cls: "c" }, ...(useB ? [{ label: "棟", w: 26 }] : []), { label: "職種" }, { label: "請求人工", w: 30, cls: "num" }, { label: "備考", w: 41 }];
+  const rows = items.map((it) => ({ cells: [escapeHtml(md(it.date)), escapeHtml(it.work ? "通常作業" : it.dayStatusLabel), ...(useB ? [txt(it.buildingLabel, 8)] : []), txt(it.trade, useB ? 12 : 18), cell(it), it.billing.state === "blank" ? `<span class="long">請求人工が未入力です（合計に含めていません）</span>` : it.billing.state === "invalid" ? `<span class="long">値を確認してください（合計に含めていません）</span>` : ""] }));
   const span = useB ? 4 : 3;
   const blocks = [{ title: "日付別の請求人工", cols, rows, empty: "この月の請求人工の記録はありません。", total: { cells: [`月間請求人工 合計（入力済み ${entered}件）`, `${escapeHtml(centsText(total))}<span class="sub"> 人工</span>`, ""], spans: [span], cls: ["", "num", ""] } }];
   const sub = (keyOf, labelOf, title, label) => {
     const list = subtotals(items, keyOf, labelOf, cents);
-    return { title, cols: [{ label }, { label: "請求人工", w: 40, cls: "num" }, { label: "入力日数", w: 30, cls: "num" }], rows: list.map((e) => ({ cells: [txt(e.label, 30), e.rows ? `${escapeHtml(centsText(e.value))}<span class="sub"> 人工</span>${e.blank ? `<span class="sub">（未入力 ${e.blank}件）</span>` : ""}` : na(`未入力（${e.blank}件）`), `${e.days.size}日`] })) };
+    return { title, cols: [{ label }, { label: "請求人工", w: 36, cls: "num" }, { label: "入力日数", w: 28, cls: "num" }], rows: list.map((e) => ({ cells: [txt(e.label, 24), e.rows ? `${escapeHtml(centsText(e.value))}<span class="sub"> 人工</span>${e.blank ? `<span class="sub">（未入力 ${e.blank}件）</span>` : ""}` : na(`未入力（${e.blank}件）`), `${e.days.size}日`] })) };
   };
   if (useB) blocks.push(sub((it) => it.buildingKey, (it) => it.buildingLabel, "棟別の小計", "棟"));
   blocks.push(sub((it) => it.trade, (it) => it.trade, "職種別の小計", "職種"));
@@ -208,8 +215,8 @@ export function buildVendorBillingSheet({ site, reports, month, today, vendorId,
     `入力済み ${entered}件${blank ? `・未入力 ${blank}件` : ""}${invalid ? `・要確認 ${invalid}件` : ""}${blank + invalid ? "（未入力・要確認は合計に含めていません。0人工として扱っていません）" : ""}。`,
     namesNote(names, vendorName)
   ].filter(Boolean);
-  const html = renderVendorSheetsHtml({ title: BILLING_SHEET_TITLE, info: infoCells(site, month, vendorName), blocks, notes, generatedAt, docTitle: vendorSheetFileName(vendorName, month, "請求人工").replace(/\.pdf$/, "") });
-  return { vendorName, names, items, total: centsText(total), totalCents: total, entered, blank, invalid, html, fileName: vendorSheetFileName(vendorName, month, "請求人工") };
+  const html = renderVendorSheetsHtml({ title: BILLING_SHEET_TITLE, info: infoCells(site, month, vendorName), blocks, notes, generatedAt, docTitle: vendorSheetFileName(vendorName, month, "請求人工").replace(/\.pdf$/, ""), paper: BILLING_SHEET_PAPER });
+  return { vendorName, names, items, total: centsText(total), totalCents: total, entered, blank, invalid, html, fileName: vendorSheetFileName(vendorName, month, "請求人工"), paper: BILLING_SHEET_PAPER };
 }
 
 /* ---------- 業者別稼働PDF（業者ごと・月）---------- */
@@ -237,7 +244,7 @@ export function buildVendorActivitySheet({ site, reports, month, today, vendorId
     namesNote(names, vendorName)
   ].filter(Boolean);
   const html = renderVendorSheetsHtml({ title: ACTIVITY_SHEET_TITLE, info: infoCells(site, month, vendorName), blocks, notes, generatedAt, docTitle: vendorSheetFileName(vendorName, month, "業者別稼働").replace(/\.pdf$/, "") });
-  return { vendorName, names, items, workers, manDays: workers, days, html, fileName: vendorSheetFileName(vendorName, month, "業者別稼働") };
+  return { vendorName, names, items, workers, manDays: workers, days, html, fileName: vendorSheetFileName(vendorName, month, "業者別稼働"), paper: VENDOR_SHEET_PAPER };
 }
 
 /* ---------- 照合表PDF ---------- */
