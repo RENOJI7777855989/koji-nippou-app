@@ -67,8 +67,9 @@ export function buildTodaySheetHtml(model) {
 
   // 本日の危険予知活動表（紙のKY活動表が提出されたか）。提出時刻は載せない
   const ky = b.ky;
+  const kySpans = (rows) => rows.map((r) => `<span class="ky-${r.state}">${esc(r.vendorName)} ${esc(r.label)}</span>`).join("");
   const kyHtml = ky.rows.length
-    ? `<div class="ky">${ky.rows.map((r) => `<span class="ky-${r.state}">${esc(r.vendorName)} ${esc(r.label)}</span>`).join("")}</div><div class="ky-sum">対象 ${ky.targetCount}　提出済み ${ky.submittedCount}　未提出 ${ky.notSubmittedCount}${ky.excludedCount ? `　対象外 ${ky.excludedCount}` : ""}（業者）</div>`
+    ? `${ky.groups ? ky.groups.map((g) => `<div class="ky ky-group"><b class="ky-b">${esc(g.label)}</b>${kySpans(g.rows)}</div>`).join("") : `<div class="ky">${kySpans(ky.rows)}</div>`}<div class="ky-sum">対象 ${ky.targetCount}　提出済み ${ky.submittedCount}　未提出 ${ky.notSubmittedCount}${ky.excludedCount ? `　対象外 ${ky.excludedCount}` : ""}（業者）</div>`
     : `<p class="empty">（対象業者の登録なし）</p>`;
 
   // 本日の巡回点検（状況・件数・×の項目・是正指示。休工日等で記録が無い日は「未実施（…）」、日報が無い日は「記録なし」）
@@ -192,6 +193,9 @@ export function buildTodaySheetHtml(model) {
   .kv td { text-align: right; font-weight: bold; padding: 0.1em 0; }
   .ky { display: flex; flex-wrap: wrap; gap: 1mm 5mm; }
   .ky span { white-space: nowrap; }
+  .ky-group { align-items: baseline; }
+  .ky-group + .ky-group { margin-top: 0.6mm; }
+  .ky .ky-b { white-space: nowrap; padding: 0 1.2mm; border: 0.2mm solid #276749; color: #276749; border-radius: 0.8mm; }
   .ky .ky-not_submitted { color: #b42318; font-weight: bold; }
   .ky .ky-excluded { color: #888; }
   .ky-sum { margin-top: 1mm; font-size: 0.9em; color: #444; }

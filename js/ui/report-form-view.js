@@ -225,6 +225,38 @@ function updateTradeAddButton(row) {
   const btn = row.querySelector(".addTradeBtn");
   const v = row.querySelector(".occupation").value.trim();
   btn.hidden = !v || !rowSite || !!rowSite.completedAt || !!matchTrade(rowSite, v) || form.classList.contains("read-only-form");
+  syncTradePick(row);
+}
+
+/* ---------- 工種の選択欄（2026-11-17。棟の選択欄と同じように選べる）----------
+   保存する値は従来どおり入力欄（.occupation）の工種の名前。選択欄で選ぶと入力欄に入る（手で打つこともできる）。
+   選択肢: 現場の一覧（使用中・並び順）→ 一覧に無い、この現場の過去の日報の工種 →「＋ 工種を追加…」（現場の一覧に登録）。
+   入力欄の値が選択肢に無ければ「入力中: 名前」を出す（保存済みの名前を消さない・書き換えない） */
+let pastTrades = []; // この現場の過去の日報の工種（一覧に無いもの）
+function renderTradePick(row) {
+  const sel = row.querySelector(".tradePick");
+  if (!sel) return;
+  const v = row.querySelector(".occupation").value.trim();
+  const master = listMaster(rowSite, "trades").map((t) => t.name);
+  const opt = (name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`;
+  const groups = [`<option value="">— 一覧から選ぶ —</option>`];
+  if (master.length) groups.push(`<optgroup label="現場の工種の一覧">${master.map(opt).join("")}</optgroup>`);
+  if (pastTrades.length) groups.push(`<optgroup label="過去の日報の工種">${pastTrades.map(opt).join("")}</optgroup>`);
+  if (v && !master.includes(v) && !pastTrades.includes(v)) groups.push(`<option value="${escapeHtml(v)}">入力中: ${escapeHtml(v)}</option>`);
+  if (rowSite && !rowSite.completedAt) groups.push(`<option value="__add__">＋ 工種を追加…</option>`);
+  sel.innerHTML = groups.join("");
+  sel.value = v;
+  sel.disabled = form.classList.contains("read-only-form");
+}
+function syncTradePick(row) {
+  const sel = row.querySelector(".tradePick");
+  if (!sel) return;
+  const v = row.querySelector(".occupation").value.trim();
+  if ([...sel.options].some((o) => o.value === v && o.value !== "__add__")) sel.value = v;
+  else renderTradePick(row);
+}
+function refreshTradePicks() {
+  companiesContainer.querySelectorAll(".company-row").forEach(renderTradePick);
 }
 
 /** 作業人数（合計）は、各業者の実績人数の合計を自動算出する（手入力欄ではない） */
@@ -302,7 +334,8 @@ function addCompanyRow(data = {}) {
     </label>
     <div class="trade-field">
       <label>工種
-        <input type="text" class="occupation" list="occupationSuggestions" placeholder="例）塗装" autocomplete="off">
+        <select class="tradePick" aria-label="工種を一覧から選ぶ"></select>
+        <input type="text" class="occupation" list="occupationSuggestions" placeholder="一覧に無い工種は、ここに入力" autocomplete="off" aria-label="工種">
       </label>
       <button type="button" class="addTradeBtn link-btn" hidden>＋ この工種を現場の一覧に追加</button>
     </div>
@@ -357,6 +390,7 @@ function addCompanyRow(data = {}) {
   row.dataset.buildingName = data.buildingName || "";
   row.querySelector(".companyName").value = data.companyName || "";
   row.querySelector(".occupation").value = data.occupation || "";
+  renderTradePick(row);
   row.querySelector(".plannedWorkerCount").value = data.plannedWorkerCount || "";
   row.querySelector(".actualWorkerCount").value = data.actualWorkerCount || "";
   row.querySelector(".machinery").value = data.machinery || "";
@@ -390,6 +424,37 @@ async function loadSignatureIntoRow(row, signature) {
 companiesContainer.addEventListener("input", (e) => {
   if (e.target.classList.contains("actualWorkerCount")) recalcWorkerCountTotal();
   if (e.target.classList.contains("occupation")) updateTradeAddButton(e.target.closest(".company-row"));
+});
+
+// 工種の選択欄: 選ぶと入力欄に入れる。「＋ 工種を追加…」は名前を聞いて現場の一覧に登録し、その行で選ぶ
+companiesContainer.addEventListener("change", async (e) => {
+  const pick = e.target.closest(".tradePick");
+  if (!pick) return;
+  const row = pick.closest(".company-row");
+  const input = row.querySelector(".occupation");
+  if (pick.value === "__add__") {
+    const name = prompt("追加する工種の名前（例: 塗装・足場・外壁補修）", input.value.trim());
+    if (name && name.trim()) {
+      try {
+        const { site, item } = await addMasterItem(rowSite.id, "trades", name);
+        rowSite = site;
+        input.value = item.name;
+        showMessage(`工種「${item.name}」を現場の一覧に追加しました。`);
+      } catch (err) {
+        // 同じ工種（表記ゆれを含む）が一覧にあれば、その名前を選ぶ
+        const same = matchTrade(rowSite, name);
+        if (same) { input.value = same.name; showMessage(`「${same.name}」が一覧にあるので、それを選びました。`); }
+        else showMessage(err.message, true);
+      }
+      await loadCompanySuggestions(rowSite.id);
+    } else renderTradePick(row);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    return;
+  }
+  if (pick.value) {
+    input.value = pick.value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
 });
 
 // 棟の選択（「＋ 棟を追加…」で現場の一覧に足す。同じ名前（表記ゆれを含む）は登録しない）
@@ -736,7 +801,9 @@ async function loadCompanySuggestions(siteId) {
   // 工種: 現場の一覧（並び順）を先に、その後に過去の日報の工種（一覧と同じ工種は出さない）
   const masterTrades = listMaster(rowSite, "trades").map((t) => t.name);
   fill("occupationSuggestions", [...masterTrades, ...sorted(trades).filter((t) => !matchTrade(rowSite, t))]);
+  pastTrades = sorted(trades).filter((t) => !matchTrade(rowSite, t));
   refreshBuildingSelects();
+  refreshTradePicks();
   companiesContainer.querySelectorAll(".company-row").forEach(updateTradeAddButton);
 }
 

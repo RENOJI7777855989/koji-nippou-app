@@ -202,6 +202,33 @@ export async function setBillingStatus(siteId, month, vendor, status) {
   return updateSite(siteId, { billingMonths: months });
 }
 
+/* ----------------------------------------------------------
+   請求人工 月間明細の所長印（2026-11-17。利用者の指定）
+   site.billingMonths[月].seals[業者のキー] = { name, stampedAt }（押印した名前・日時）。業者のキーは照合・業者ごとのPDFの業者
+   （vendorNames.js の vendorResolver の id。名前をまとめていなければ "name:業者名"）。印影の画像は保存せず、PDFを作るたびに名前から描く。
+   請求人工・日報は変えない。DBの構造・版は変えない（現場のレコードの中）。
+   ---------------------------------------------------------- */
+export function billingSealOf(site, month, vendorKeys = []) {
+  const seals = site?.billingMonths?.[month]?.seals || {};
+  for (const k of vendorKeys) if (seals[k]?.name) return { ...seals[k], key: k };
+  return null;
+}
+
+/** 押印する（name）・取り消す（name が空） */
+export async function setBillingSeal(siteId, month, vendorKey, name) {
+  if (!/^\d{4}-\d{2}$/.test(month || "")) throw new Error("月の指定が不正です");
+  if (!vendorKey) throw new Error("業者を選んでください");
+  const n = [...String(name ?? "").replace(/\s+/g, "")].slice(0, 4).join("");
+  const site = await dbGet("sites", siteId);
+  if (!site) throw new Error("現場が見つかりません");
+  const months = { ...(site.billingMonths || {}) };
+  const m = { ...(months[month] || {}), vendors: { ...(months[month]?.vendors || {}) }, seals: { ...(months[month]?.seals || {}) } };
+  if (n) m.seals[vendorKey] = { name: n, stampedAt: new Date().toISOString() };
+  else delete m.seals[vendorKey];
+  months[month] = m;
+  return updateSite(siteId, { billingMonths: months });
+}
+
 /** その月の締め状態を保存する（未締め／締め確認中／締め済み） */
 export async function setBillingClose(siteId, month, closeStatus) {
   if (!/^\d{4}-\d{2}$/.test(month || "")) throw new Error("月の指定が不正です");

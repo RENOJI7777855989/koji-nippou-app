@@ -75,6 +75,23 @@ export function drawSealCanvas(name, sizePx = 240) {
   return canvas;
 }
 
+/**
+ * 印の SVG（文字列。2026-11-17）。紙面を画像にして作るPDF（board-pdf.js の方式）では、紙面の中の画像ファイルが
+ * 描かれない端末があるため、図形と文字だけの SVG で描く（見た目は drawSealCanvas と同じ: 赤い丸・縦書き）
+ */
+export function sealSvg(name, sizeMm = 14) {
+  const chars = [...normalizeSealName(name)];
+  const S = 100, c = 50, ring = 5.5;
+  const n = chars.length;
+  const inner = S - ring * 2 - 12;
+  const font = n ? Math.min(inner / n, S * (n === 1 ? 0.56 : 0.42)) : 0;
+  const lineH = font * (n === 1 ? 1 : 1.02);
+  const top = c - (lineH * (n - 1)) / 2;
+  const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const texts = chars.map((ch, i) => `<text x="${c}" y="${(top + lineH * i).toFixed(2)}" font-size="${font.toFixed(2)}" text-anchor="middle" dominant-baseline="central" font-weight="bold" fill="${SEAL_COLOR}" font-family="Hiragino Mincho ProN, Hiragino Mincho Pro, Yu Mincho, YuMincho, MS Mincho, serif">${esc(ch)}</text>`).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${S} ${S}" width="${sizeMm}mm" height="${sizeMm}mm" role="img" aria-label="所長印 ${esc(chars.join(""))}"><circle cx="${c}" cy="${c}" r="${c - ring / 2 - 1}" fill="none" stroke="${SEAL_COLOR}" stroke-width="${ring}"/>${texts}</svg>`;
+}
+
 /** 印の画像（PNG の data URL）。印刷用HTML・画面の見本に使う */
 export function sealPngDataUrl(name, sizePx = 240) {
   return drawSealCanvas(name, sizePx).toDataURL("image/png");

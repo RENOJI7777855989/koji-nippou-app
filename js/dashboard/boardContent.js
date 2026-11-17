@@ -129,6 +129,8 @@ export function buildBoardContent(model) {
     },
     ky: {
       rows: ky.rows.map((r) => ({ vendorName: r.vendorName, state: r.state, label: KY_BOARD_LABELS[r.state] })),
+      // 棟ごと（棟を使う現場だけ。null なら分けない）。同じ業者が複数の棟にあれば各棟に出る
+      groups: ky.groups ? ky.groups.map((g) => ({ label: g.label, rows: g.rows.map((r) => ({ vendorName: r.vendorName, state: r.state, label: KY_BOARD_LABELS[r.state] })) })) : null,
       targetCount: ky.targetCount,
       submittedCount: ky.submittedCount,
       notSubmittedCount: ky.notSubmittedCount,

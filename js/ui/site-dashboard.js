@@ -268,8 +268,10 @@ function render(model) {
   // 危険予知活動表（紙のKY活動表が提出されたか。日報とは別の提出物）。掲示は業者ごとの提出済み／未提出だけ（時刻は出さない）
   const ky = model.ky;
   const kyManageSummary = `<p class="dash-ky-summary">対象 <b>${ky.targetCount}</b>業者　提出済み <b>${ky.submittedCount}</b>業者　未提出 <b>${ky.notSubmittedCount}</b>業者　対象外 <b>${ky.excludedCount}</b>業者</p>`;
+  const kyItems = (rows) => rows.map((r) => `<li class="is-${r.state}"><b>${escapeHtml(r.vendorName)}</b>　${KY_BOARD_LABELS[r.state]}</li>`).join("");
+  // 棟を使う現場は棟ごと（同じ業者が複数の棟にあれば各棟に出す。件数は業者ごと）
   const kyBoardHtml = ky.rows.length
-    ? `<ul class="dash-ky-list">${ky.rows.map((r) => `<li class="is-${r.state}"><b>${escapeHtml(r.vendorName)}</b>　${KY_BOARD_LABELS[r.state]}</li>`).join("")}</ul><p class="dash-ky-summary">対象 <b>${ky.targetCount}</b>業者　提出済み <b>${ky.submittedCount}</b>業者　未提出 <b>${ky.notSubmittedCount}</b>業者${ky.excludedCount ? `　対象外 <b>${ky.excludedCount}</b>業者` : ""}</p>`
+    ? `${ky.groups ? ky.groups.map((g) => `<p class="dash-ky-group">${escapeHtml(g.label)}</p><ul class="dash-ky-list">${kyItems(g.rows)}</ul>`).join("") : `<ul class="dash-ky-list">${kyItems(ky.rows)}</ul>`}<p class="dash-ky-summary">対象 <b>${ky.targetCount}</b>業者　提出済み <b>${ky.submittedCount}</b>業者　未提出 <b>${ky.notSubmittedCount}</b>業者${ky.excludedCount ? `　対象外 <b>${ky.excludedCount}</b>業者` : ""}</p>`
     : empty("本日の危険予知活動表の対象業者は、まだありません。");
   const hhmm = (iso) => { if (!iso) return "—"; const t = new Date(iso); return Number.isNaN(t.getTime()) ? "—" : `${t.getHours()}:${String(t.getMinutes()).padStart(2, "0")}`; };
   const kyRowHtml = (r) => `<tr class="ky-${r.state}"><td><b>${escapeHtml(r.vendorName)}</b>${r.inReport ? "" : `<br><small class="dash-sub dash-ky-noreport">この日の日報に無い業者</small>`}</td>
@@ -284,7 +286,7 @@ function render(model) {
     ${kyManageSummary}
     ${ky.notSubmittedCount ? `<p class="dash-ky-missing">未提出: ${ky.notSubmittedNames.map((n) => escapeHtml(n)).join("・")}</p>` : ""}
     ${ky.rows.length
-      ? `<div class="dash-table-wrap"><table class="dash-table dash-ky-table"><thead><tr><th>業者</th><th>状態</th><th class="num">提出時刻</th><th>操作</th></tr></thead><tbody>${ky.rows.map(kyRowHtml).join("")}</tbody></table></div>`
+      ? `<div class="dash-table-wrap"><table class="dash-table dash-ky-table"><thead><tr><th>業者</th><th>状態</th><th class="num">提出時刻</th><th>操作</th></tr></thead><tbody>${ky.groups ? ky.groups.map((g) => `<tr class="dash-ky-group-row"><th colspan="4">${escapeHtml(g.label)}</th></tr>${g.rows.map(kyRowHtml).join("")}`).join("") : ky.rows.map(kyRowHtml).join("")}</tbody></table></div>`
       : `<p class="dash-sub">この日の日報の業者が、提出対象（未提出）に自動で入ります。日報がまだ無いときは、業者名を入れて登録できます。</p>`}
     ${canEdit
       ? `<div class="dash-ky-candidates">

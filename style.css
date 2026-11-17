@@ -2258,3 +2258,23 @@ body.has-restore-banner .report-quick-bar { top: 64px; }
 .vm-name-actions select, .vm-name-group select { min-height: 44px; }
 .vm-name-actions button, .vm-merge-picked { min-height: 48px; margin: 0; }
 .vm-names-table input { width: 22px; height: 22px; }
+
+/* 危険予知活動表の棟ごとの表示（2026-11-17） */
+.dash-ky-group { margin: 6px 0 2px; font-weight: bold; color: #276749; }
+.dash-ky-group-row th { background: #f0fff4; color: #276749; text-align: left; }
+/* 工種の選択欄（2026-11-17） */
+.trade-field .tradePick { width: 100%; min-height: 44px; height: 44px; font-size: 16px; margin-bottom: 4px; padding: 4px 32px 4px 10px;
+  /* Safari は標準の見た目の選択欄の高さを変えられないので、見た目を自前にする（日報一覧の年月の選択欄と同じ） */
+  -webkit-appearance: none; appearance: none; background: #fff url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M0 0h12L6 8z' fill='%232b6cb0'/%3E%3C/svg%3E") no-repeat right 12px center; border: 1px solid #9fb6d4; border-radius: 6px; }
+/* ［＋ この工種を現場の一覧に追加］: hidden のときは出さない（以前は display の指定で hidden でも表示されていた） */
+.company-row .trade-field .addTradeBtn[hidden] { display: none; }
+/* 請求人工 月間明細の所長印（2026-11-17） */
+.vm-seal { display: flex; gap: 12px; align-items: center; border: 1px solid #d9dee5; border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+.vm-seal-preview { flex: 0 0 64px; height: 64px; display: flex; align-items: center; justify-content: center; border: 1px dashed #c0c7d1; border-radius: 6px; }
+.vm-seal-empty { color: #888; font-size: 13px; }
+.vm-seal-state { margin: 0 0 6px; font-weight: bold; }
+.vm-seal-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.vm-seal-actions label { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+.vm-seal-name { width: 7em; min-height: 44px; font-size: 18px; }
+.vm-seal-actions button { min-height: 48px; margin: 0; }
+.vm-seal-sum { margin: 8px 0; color: #4a5568; }

@@ -13,6 +13,7 @@ import { escapeHtml } from "../utils.js";
 import { centsText } from "./dailyBillingSheet.js";
 import { monthLineItems, signedText, NO_BUILDING } from "./billingReconcile.js";
 import { siteUsesBuildings } from "./vendorNames.js";
+import { sealSvg } from "../report-output/directorSeal.js";
 
 /** 用紙。capacity は1ページに入る高さ（業者の行の高さを1とした単位）。請求人工PDFは A4 縦（2026-11-17。利用者の指定。行数が多い月は2ページ以上） */
 export const VENDOR_SHEET_PAPER = { label: "A4横", widthMm: 297, heightMm: 210, marginMm: 10, capacity: 19 };
@@ -84,7 +85,7 @@ function tableHtml(frag) {
  * 帳票の印刷用HTML（A4横。1ページ＝1つの .sheet）
  * @param {{title: string, info: {label: string, html: string, w?: number}[], blocks: object[], notes: string[], generatedAt: Date, docTitle: string}} p
  */
-export function renderVendorSheetsHtml({ title, info, blocks, notes = [], generatedAt = new Date(), docTitle, paper = VENDOR_SHEET_PAPER }) {
+export function renderVendorSheetsHtml({ title, info, blocks, notes = [], generatedAt = new Date(), docTitle, paper = VENDOR_SHEET_PAPER, sealBox = null }) {
   const P = paper;
   const landscape = P.widthMm > P.heightMm;
   const pages = paginateBlocks(blocks, notes.length, P.capacity || PAGE_CAPACITY);
@@ -98,7 +99,7 @@ export function renderVendorSheetsHtml({ title, info, blocks, notes = [], genera
     const last = pi === n - 1;
     return `<section class="sheet">
       <header class="hd"><h1>${escapeHtml(title)}</h1><div class="page">${pi + 1}／${n}ページ</div></header>
-      <table class="info"><colgroup>${infoCols}</colgroup>${infoRow}</table>
+      ${sealBox ? `<div class="info-wrap"><table class="info"><colgroup>${infoCols}</colgroup>${infoRow}</table>${pi === 0 ? sealBoxHtml(sealBox) : `<div class="sealbox sealbox-blank"></div>`}</div>` : `<table class="info"><colgroup>${infoCols}</colgroup>${infoRow}</table>`}
       ${frags.map(tableHtml).join("")}
       ${last ? (notes.length ? `<ul class="notes">${notes.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : "") : `<p class="cont">次のページへ続きます</p>`}
       <footer class="ft"><span>作成 ${escapeHtml(stampLabel(generatedAt))}（保存済みの日報から作成）</span><span>${pi + 1}／${n}</span></footer>
@@ -123,6 +124,13 @@ table { border-collapse: collapse; width: 100%; table-layout: fixed; }
 .info th, .info td { border: 0.25mm solid #555; padding: 0.8mm 1.6mm; height: 8mm; text-align: left; vertical-align: middle; overflow: hidden; }
 .info th { background: #eee; font-weight: bold; white-space: nowrap; }
 .info td { white-space: nowrap; text-overflow: ellipsis; }
+.info-wrap { display: flex; gap: 2mm; align-items: stretch; margin: 2mm 0 1mm; }
+.info-wrap .info { margin: 0; flex: 1 1 auto; }
+.sealbox { flex: 0 0 22mm; border: 0.25mm solid #555; display: flex; flex-direction: column; }
+.sealbox-blank { border-color: transparent; }
+.sealbox .sl { background: #eee; font-size: 8.5pt; font-weight: bold; text-align: center; border-bottom: 0.25mm solid #555; height: 4.6mm; line-height: 4.6mm; letter-spacing: 0.3em; }
+.sealbox .sv { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; }
+.sealbox .sd { font-size: 6pt; color: #555; text-align: center; height: 3mm; line-height: 3mm; }
 .bt { margin: 1.6mm 0 0.8mm; font-size: 10.5pt; height: 5.6mm; line-height: 5.6mm; }
 .list { font-size: 10pt; }
 .list th, .list td { border: 0.25mm solid #444; padding: 0 1.6mm; height: 7.6mm; vertical-align: middle; overflow: hidden; line-height: 1.15; }
@@ -186,7 +194,15 @@ export function monthVendors({ site, reports, month, today }) {
 }
 
 /* ---------- 請求人工PDF（業者ごと・月）---------- */
-export function buildVendorBillingSheet({ site, reports, month, today, vendorId, generatedAt = new Date() }) {
+/** 所長の欄（1ページ目の見出しの欄の右）。seal が無ければ空欄（手書き・押印用） */
+function sealBoxHtml(box) {
+  const s = box.seal;
+  const d = s?.stampedAt ? new Date(s.stampedAt) : null;
+  const dt = d && !Number.isNaN(d.getTime()) ? `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}` : "";
+  return `<div class="sealbox"><div class="sl">所長</div><div class="sv">${s?.name ? sealSvg(s.name, 11) : ""}</div><div class="sd">${escapeHtml(dt)}</div></div>`;
+}
+
+export function buildVendorBillingSheet({ site, reports, month, today, vendorId, generatedAt = new Date(), seal = null }) {
   const useB = siteUsesBuildings(site);
   const all = monthLineItems({ site, reports, month, today }).filter((it) => it.vendorId === vendorId);
   // 請求人工が入力された行と、稼働したのに請求人工が未入力・要確認の行（稼働人数は載せない）
@@ -215,7 +231,7 @@ export function buildVendorBillingSheet({ site, reports, month, today, vendorId,
     `入力済み ${entered}件${blank ? `・未入力 ${blank}件` : ""}${invalid ? `・要確認 ${invalid}件` : ""}${blank + invalid ? "（未入力・要確認は合計に含めていません。0人工として扱っていません）" : ""}。`,
     namesNote(names, vendorName)
   ].filter(Boolean);
-  const html = renderVendorSheetsHtml({ title: BILLING_SHEET_TITLE, info: infoCells(site, month, vendorName), blocks, notes, generatedAt, docTitle: vendorSheetFileName(vendorName, month, "請求人工").replace(/\.pdf$/, ""), paper: BILLING_SHEET_PAPER });
+  const html = renderVendorSheetsHtml({ title: BILLING_SHEET_TITLE, info: infoCells(site, month, vendorName), blocks, notes, generatedAt, docTitle: vendorSheetFileName(vendorName, month, "請求人工").replace(/\.pdf$/, ""), paper: BILLING_SHEET_PAPER, sealBox: { seal } });
   return { vendorName, names, items, total: centsText(total), totalCents: total, entered, blank, invalid, html, fileName: vendorSheetFileName(vendorName, month, "請求人工"), paper: BILLING_SHEET_PAPER };
 }
 

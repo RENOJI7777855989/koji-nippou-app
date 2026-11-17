@@ -16,6 +16,17 @@ import { collectVendorNames, vendorNameCandidates, pendingNameSet, mergeVendorNa
 import { monthVendors, buildVendorBillingSheet, buildVendorActivitySheet, buildReconcileSheetHtml, reconcileFileName, VENDOR_SHEET_PAPER, BILLING_SHEET_PAPER, BILLING_SHEET_TITLE, ACTIVITY_SHEET_TITLE, RECONCILE_SHEET_TITLE, monthText } from "../billing/vendorMonthSheets.js";
 import { openBoardPdfDialog } from "./board-pdf.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
+import { billingSealOf, setBillingSeal } from "../billing/billingMonthly.js";
+import { sealSvg } from "../report-output/directorSeal.js";
+
+/* 請求人工 月間明細の所長印（2026-11-17）。業者のキーは照合の業者（まとめた名前なら同じ業者）。以前の名前ごとの押印も読む */
+const SEAL_NAME_KEY = "kojiNippou.directorSealName"; // 日報の所長印と同じ（この端末で前に使った名前）
+const sealKeysOf = (v) => [v.vendorId, ...(v.names || []).map((n) => `name:${n}`)];
+function defaultSealName(site) {
+  try { const n = localStorage.getItem(SEAL_NAME_KEY); if (n) return n; } catch { /* 保存できない端末でも動く */ }
+  const all = Object.values(site?.billingMonths || {}).flatMap((m) => Object.values(m?.seals || {})).filter((x) => x?.name).sort((a, b) => String(b.stampedAt || "").localeCompare(String(a.stampedAt || "")));
+  return all[0]?.name || "";
+}
 
 const md = (iso) => { if (!iso) return ""; const [, m, d] = iso.split("-").map(Number); return `${m}/${d}`; };
 const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
@@ -79,9 +90,27 @@ function dayDetailHtml(r, label) {
 function pdfSectionHtml(state) {
   const vendors = monthVendors({ site: state.site, reports: state.reports, month: state.month, today: todayIso() });
   const sel = state.rc.pdfVendor && vendors.some((v) => v.vendorId === state.rc.pdfVendor) ? state.rc.pdfVendor : "";
+  const sealOf = (v) => billingSealOf(state.site, state.month, sealKeysOf(v));
+  const billingVendors = vendors.filter((v) => v.billingRows > 0 || v.workRows > 0);
+  const stamped = billingVendors.filter(sealOf).length;
+  const canSeal = hasPermission("editReports");
+  const cur = vendors.find((v) => v.vendorId === sel);
+  const s = cur ? sealOf(cur) : null;
+  const dt = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`; };
+  const sealHtml = !cur
+    ? `<p class="vm-seal-sum">所長印（請求人工 月間明細）: 押印済み <b>${stamped}</b>／${billingVendors.length}業者。押印するときは業者を選んでください。</p>`
+    : `<div class="vm-seal" data-seal-vendor="${escapeHtml(cur.vendorId)}">
+        <div class="vm-seal-preview">${s ? sealSvg(s.name, 16) : `<span class="vm-seal-empty">未押印</span>`}</div>
+        <div class="vm-seal-body">
+          <p class="vm-seal-state">${s ? `所長印 押印済み（${escapeHtml(s.name)}・${escapeHtml(dt(s.stampedAt))}）` : "所長印 未押印"}<br><small>請求人工 月間明細（${monthText(state.month)}・${escapeHtml(cur.vendorName)}）の1ページ目の「所長」欄に押します。</small></p>
+          ${canSeal ? `<div class="vm-seal-actions"><label>名前 <input type="text" class="vm-seal-name" maxlength="8" value="${escapeHtml(s?.name || defaultSealName(state.site))}" aria-label="所長印の名前（4文字まで）"></label>
+            <button type="button" class="vm-seal-stamp">${s ? "押し直す" : "押印する"}</button>
+            ${s ? `<button type="button" class="secondary-btn vm-seal-clear">押印を取り消す</button>` : ""}</div>` : ""}
+        </div></div>`;
   return `<section class="vm-pdf">
     <h3>PDF出力（${monthText(state.month)}）</h3>
-    <label class="vm-pdf-vendor">業者 <select class="vm-pdf-vendor-select" aria-label="PDFを作る業者"><option value="">全業者（業者ごとに別のファイル）</option>${vendors.map((v) => `<option value="${escapeHtml(v.vendorId)}"${v.vendorId === sel ? " selected" : ""}>${escapeHtml(v.vendorName)}</option>`).join("")}</select></label>
+    <label class="vm-pdf-vendor">業者 <select class="vm-pdf-vendor-select" aria-label="PDFを作る業者"><option value="">全業者（業者ごとに別のファイル）</option>${vendors.map((v) => `<option value="${escapeHtml(v.vendorId)}"${v.vendorId === sel ? " selected" : ""}>${escapeHtml(v.vendorName)}${sealOf(v) ? "（所長印 押印済み）" : ""}</option>`).join("")}</select></label>
+    ${sealHtml}
     <div class="vm-pdf-actions">
       <button type="button" class="vm-pdf-btn" data-pdf="billing">📄 請求人工PDF（業者別）</button>
       <button type="button" class="vm-pdf-btn" data-pdf="activity">📄 業者別稼働PDF（業者別）</button>
@@ -107,7 +136,7 @@ async function makePdf(kind, state) {
   const targets = state.rc.pdfVendor ? vendors.filter((v) => v.vendorId === state.rc.pdfVendor) : vendors;
   if (!targets.length) { showMessage(kind === "billing" ? `${monthText(state.month)}の請求人工の記録がある業者はありません。` : `${monthText(state.month)}に稼働した業者はありません。`, true); return; }
   const build = kind === "billing" ? buildVendorBillingSheet : buildVendorActivitySheet;
-  const items = targets.map((v) => { const s = build({ ...base, vendorId: v.vendorId }); return { html: s.html, fileName: s.fileName }; });
+  const items = targets.map((v) => { const s = build({ ...base, vendorId: v.vendorId, seal: kind === "billing" ? billingSealOf(state.site, state.month, sealKeysOf(v)) : null }); return { html: s.html, fileName: s.fileName }; });
   const title = kind === "billing" ? BILLING_SHEET_TITLE : ACTIVITY_SHEET_TITLE;
   const kindName = kind === "billing" ? "請求人工" : "業者別稼働";
   const paper = kind === "billing" ? BILLING_SHEET_PAPER : VENDOR_SHEET_PAPER;
@@ -180,6 +209,22 @@ export async function handlePanelClick(e, state, { render, reload }) {
   if (row) { state.rc.openKey = state.rc.openKey === row.dataset.rcKey ? null : row.dataset.rcKey; render(); return true; }
   const rep = e.target.closest(".vm-rc-report");
   if (rep) { navigate(`/sites/${state.site.id}/report/${rep.dataset.reportId}?from=vendors${rep.dataset.cids ? `&hl=${encodeURIComponent(rep.dataset.cids)}` : ""}`); return true; }
+  const stamp = e.target.closest(".vm-seal-stamp, .vm-seal-clear");
+  if (stamp) {
+    const box = stamp.closest(".vm-seal");
+    const key = box.dataset.sealVendor;
+    const clear = stamp.classList.contains("vm-seal-clear");
+    const name = clear ? "" : [...box.querySelector(".vm-seal-name").value.replace(/\s+/g, "")].slice(0, 4).join("");
+    if (!clear && !name) { showMessage("所長印の名前を入力してください（4文字まで）。", true); return true; }
+    if (clear && !confirm("所長印の押印を取り消しますか？（請求人工・日報は変わりません）")) return true;
+    try {
+      await setBillingSeal(state.site.id, state.month, key, name);
+      if (!clear) { try { localStorage.setItem(SEAL_NAME_KEY, name); } catch { /* 保存できない端末でも動く */ } }
+      await reload();
+      showMessage(clear ? "所長印の押印を取り消しました。" : `所長印（${name}）を押印しました。請求人工PDFに表示されます。`);
+    } catch (err) { showMessage(err.message, true); }
+    return true;
+  }
   if (e.target.closest(".vm-goto-names")) { state.tab = "names"; render(); window.scrollTo(0, 0); return true; }
   const pdf = e.target.closest(".vm-pdf-btn");
   if (pdf) {
@@ -219,7 +264,7 @@ export async function handlePanelChange(e, state, { render, reload }) {
   const tr = e.target.closest(".vm-rc-trade");
   if (tr) { state.rc.byTrade = tr.checked; state.rc.openKey = null; render(); return true; }
   const pv = e.target.closest(".vm-pdf-vendor-select");
-  if (pv) { state.rc.pdfVendor = pv.value; return true; }
+  if (pv) { state.rc.pdfVendor = pv.value; render(); return true; }
   const gd = e.target.closest(".vm-group-disp");
   if (gd) {
     try { await setVendorDisplayName(state.site.id, gd.dataset.groupId, gd.value); await reload(); showMessage(`表示名を「${gd.value}」にしました。`); } catch (err) { showMessage(err.message, true); }

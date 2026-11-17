@@ -136,7 +136,7 @@ function actualOf(report) {
  * 候補業者: 監督が提出対象から外した業者（removedNames。押すと戻す）、対象に無いこの日の日報の業者（工事完了の現場など自動で
  * 入れなかった場合）、前の作業日（通常作業）の日報の業者。候補は表示するだけ。各行の inReport＝この日の日報にその業者名があるか
  */
-export function buildKyModel({ records = [], reports = [], date, removedNames = [] }) {
+export function buildKyModel({ records = [], reports = [], date, removedNames = [], site = null }) {
   const key = (n) => String(n || "").trim();
   const rows = records
     .filter((r) => !r.isDeleted && r.date === date)
@@ -153,8 +153,30 @@ export function buildKyModel({ records = [], reports = [], date, removedNames = 
   const registered = new Set([...rows.map((r) => key(r.vendorName)), ...removed]);
   const todayReport = reportOfDate(live, date).report;
   const prevWork = live.filter((r) => (r.date || "") < date && isWorkDay(r) && namesOf(r).length).sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.updatedAt || "").localeCompare(a.updatedAt || ""))[0] || null;
+  // 棟ごとの分け方（2026-11-17。利用者の指定）: KY の記録は業者ごとに1件のまま、その日の日報の作業行の棟で業者を並べ直すだけ。
+  // 同じ業者が複数の棟で作業していれば各棟に出す（記録・件数は業者ごと）。棟の無い作業行の業者は「棟未設定」、日報に無い業者は「日報に無い業者」。
+  // 棟を使う現場（site.useBuildings、未設定なら棟の一覧の有無）か、その日の作業行に棟があるときだけ分ける。
+  const dayCompanies = live.filter((r) => r.date === date).flatMap((r) => r.companies || []);
+  const useB = site?.useBuildings === true || (site?.useBuildings !== false && ((site?.buildings || []).length > 0 || dayCompanies.some((c) => key(c.buildingId))));
+  let groups = null;
+  if (useB && rows.length) {
+    const order = new Map((site?.buildings || []).map((b, i) => [b.id, b.order ?? i]));
+    const byB = new Map();
+    const addTo = (k, label, sort, r) => { if (!byB.has(k)) byB.set(k, { key: k, label, sort, rows: [] }); const g = byB.get(k); if (!g.rows.includes(r)) g.rows.push(r); if (label && k.startsWith("b:")) g.label = label; };
+    for (const r of rows) {
+      const cs = dayCompanies.filter((c) => key(c.companyName) === key(r.vendorName));
+      if (!cs.length) { addTo("noreport", "日報に無い業者", [3, 0, ""], r); continue; }
+      for (const c of cs) {
+        const bid = key(c.buildingId);
+        if (bid) addTo(`b:${bid}`, key(c.buildingName) || (site?.buildings || []).find((b) => b.id === bid)?.name || "（棟の名前なし）", [1, order.has(bid) ? order.get(bid) : 9999, key(c.buildingName)], r);
+        else addTo("none", "棟未設定", [2, 0, ""], r);
+      }
+    }
+    groups = [...byB.values()].sort((a, b) => a.sort[0] - b.sort[0] || a.sort[1] - b.sort[1] || String(a.label).localeCompare(String(b.label), "ja")).map(({ key: k, label, rows: rs }) => ({ key: k, label, rows: rs }));
+  }
   return {
     rows,
+    groups,
     targetCount: targets.length,
     submittedCount: submitted.length,
     notSubmittedCount: notSubmitted.length,
@@ -475,7 +497,7 @@ export function buildDashboardModel({ site, reports = [], signatures = [], date,
     add("日報の確認", report.confirmedAt ? "確認済み" : "未確認", "info");
   }
   // 危険予知活動表（日報とは別の提出物。日報の有無・提出とは連動させない）
-  const ky = buildKyModel({ records: kySubmissions, reports: live, date, removedNames: kyRemovedNames });
+  const ky = buildKyModel({ records: kySubmissions, reports: live, date, removedNames: kyRemovedNames, site });
   if (ky.rows.length) {
     if (ky.notSubmittedCount) add("危険予知活動表", `未提出 ${ky.notSubmittedCount}業者（${ky.notSubmittedNames.join("・")}）・提出済み ${ky.submittedCount}／対象 ${ky.targetCount}業者`, "warn");
     else add("危険予知活動表", ky.targetCount ? `全業者 提出済み（${ky.targetCount}業者）` : "対象業者なし（すべて対象外）", ky.targetCount ? "ok" : "info");
