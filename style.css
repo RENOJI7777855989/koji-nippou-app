@@ -1946,6 +1946,8 @@ dialog h3 {
 .chorei-row { display: grid; grid-template-columns: 1fr auto auto auto; grid-template-areas: "who input billing next" "plan state bstate next"; align-items: center; gap: 2px 12px; padding: 10px 0; border-bottom: 1px solid #e2e8f0; }
 .chorei-who { grid-area: who; min-width: 0; }
 .chorei-vendor { display: block; font-size: 21px; font-weight: bold; overflow-wrap: anywhere; }
+.chorei-building { display: inline-block; font-size: 15px; font-weight: bold; color: #276749; border: 1px solid #9ae6b4; background: #f0fff4; border-radius: 4px; padding: 0 6px; margin: 2px 6px 0 0; }
+.chorei-building-none { color: #975a16; border-color: #f6e05e; background: #fffff0; font-weight: normal; }
 .chorei-trade { display: inline-block; font-size: 15px; color: #2b6cb0; border: 1px solid #90cdf4; border-radius: 4px; padding: 0 6px; margin-top: 2px; }
 .chorei-plan { grid-area: plan; font-size: 14px; color: #5b6573; }
 .chorei-input { grid-area: input; display: flex; align-items: center; gap: 6px; font-size: 17px; margin: 0; }

@@ -25,6 +25,7 @@ import { navigate } from "../router.js";
 import { showMessage } from "./common.js";
 import { parseBillingInput } from "../billing/billingValue.js";
 import { getSite } from "../sites.js";
+import { siteUsesBuildings } from "../billing/vendorNames.js";
 import { buildDailyBillingSheet, buildDailyBillingSheetHtml, DAILY_BILLING_PAPER, DAILY_BILLING_TITLE } from "../billing/dailyBillingSheet.js";
 import { openBoardPdfDialog } from "./board-pdf.js";
 import { openReportPrintDialog } from "./report-print-dialog.js";
@@ -96,16 +97,21 @@ export async function openChoreiDialog({ site, date, reportId, sameDayCount = 1,
     bodyEl.innerHTML = `<p class="chorei-note">工事完了により確定済みのため、人数は変更できません。</p>`;
   } else {
     const rows = (report.companies || []).map((c, i) => ({ c, key: rowKey(c, i) })).filter(({ c }) => (c.companyName || "").trim() || (c.occupation || "").trim());
+    // 棟（2026-11-17。利用者の指定）: 作業行に保存した棟の名前を出す。棟を使う現場で棟が無い行は「棟未設定」、棟を使わない現場は出さない
+    const useB = siteUsesBuildings(site) || rows.some(({ c }) => (c.buildingId || "").trim());
+    const bName = (c) => (c.buildingId || "").trim() ? (c.buildingName || "").trim() || (site.buildings || []).find((b) => b.id === c.buildingId)?.name || "（棟の名前なし）" : "";
+    const bTag = (c) => !useB ? "" : bName(c) ? `<span class="chorei-building">${escapeHtml(bName(c))}</span>` : `<span class="chorei-building chorei-building-none">棟未設定</span>`;
+    const bAria = (c) => (useB && bName(c) ? `${bName(c)} ` : "");
     if (!rows.length) {
       bodyEl.innerHTML = `<p class="chorei-note">この日の日報に業者が登録されていません。日報を開いて、業者名・工種を登録してください（業者名から工種を自動では決めません）。</p>${goForm("日報を開いて業者を登録する")}`;
     } else {
       bodyEl.innerHTML = `${sameDayCount > 1 ? `<p class="chorei-note">この日の日報が${sameDayCount}件あります。最後に更新した日報（ダッシュボードに表示している日報）に入力します。</p>` : ""}
         <ol class="chorei-list">${rows.map(({ c, key }, i) => `
           <li class="chorei-row" data-key="${escapeHtml(key)}">
-            <div class="chorei-who"><span class="chorei-vendor">${escapeHtml(c.companyName || "（業者名なし）")}</span><span class="chorei-trade">${escapeHtml(c.occupation || "工種なし")}</span></div>
+            <div class="chorei-who"><span class="chorei-vendor">${escapeHtml(c.companyName || "（業者名なし）")}</span>${bTag(c)}<span class="chorei-trade">${escapeHtml(c.occupation || "工種なし")}</span></div>
             <div class="chorei-plan">予定 ${isBlank(c.plannedWorkerCount) ? "未入力" : `${escapeHtml(c.plannedWorkerCount)}人`}</div>
-            <label class="chorei-input">今日の人数<input type="text" class="chorei-count" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" enterkeyhint="next" aria-label="${escapeHtml(`${c.companyName || ""} ${c.occupation || ""} の今日の実績人数`)}" value="${isBlank(c.actualWorkerCount) ? "" : escapeHtml(c.actualWorkerCount)}" data-orig="${isBlank(c.actualWorkerCount) ? "" : escapeHtml(String(c.actualWorkerCount).trim())}">人</label>
-            <label class="chorei-input chorei-input-billing">請求人工<input type="text" class="chorei-billing" inputmode="decimal" autocomplete="off" maxlength="7" enterkeyhint="${i === rows.length - 1 ? "done" : "next"}" aria-label="${escapeHtml(`${c.companyName || ""} ${c.occupation || ""} の請求人工`)}" value="${escapeHtml(billingOf(c))}" data-orig="${escapeHtml(billingOf(c))}">人工</label>
+            <label class="chorei-input">今日の人数<input type="text" class="chorei-count" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" enterkeyhint="next" aria-label="${escapeHtml(`${bAria(c)}${c.companyName || ""} ${c.occupation || ""} の今日の実績人数`)}" value="${isBlank(c.actualWorkerCount) ? "" : escapeHtml(c.actualWorkerCount)}" data-orig="${isBlank(c.actualWorkerCount) ? "" : escapeHtml(String(c.actualWorkerCount).trim())}">人</label>
+            <label class="chorei-input chorei-input-billing">請求人工<input type="text" class="chorei-billing" inputmode="decimal" autocomplete="off" maxlength="7" enterkeyhint="${i === rows.length - 1 ? "done" : "next"}" aria-label="${escapeHtml(`${bAria(c)}${c.companyName || ""} ${c.occupation || ""} の請求人工`)}" value="${escapeHtml(billingOf(c))}" data-orig="${escapeHtml(billingOf(c))}">人工</label>
             <span class="chorei-state"></span>
             <span class="chorei-bstate"></span>
             <button type="button" class="secondary-btn chorei-next" data-next="${i}">${i === rows.length - 1 ? "最後" : "次へ"}</button>
